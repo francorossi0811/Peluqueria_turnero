@@ -1,0 +1,126 @@
+// Traducción 1:1 de Docs/modelo-datos.md — no agregar reglas de negocio nuevas acá,
+// cualquier cambio de modelo pasa primero por ese documento.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EstadoTurno {
+  reservado
+  cancelado
+  reprogramado
+  realizado
+  ausente
+}
+
+enum OrigenTurno {
+  online
+  telefono
+  whatsapp
+}
+
+model Servicio {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre          String
+  duracionMinutos Int      @map("duracion_minutos")
+  activo          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  turnos Turno[]
+
+  @@map("servicios")
+}
+
+// Una fila por franja horaria (ej. martes tiene 2: mañana y tarde). Sin filas = cerrado.
+model HorarioLaboral {
+  id         Int      @id @default(autoincrement())
+  diaSemana  Int      @map("dia_semana") // 0=domingo … 6=sábado
+  horaInicio DateTime @map("hora_inicio") @db.Time()
+  horaFin    DateTime @map("hora_fin") @db.Time()
+
+  @@map("horario_laboral")
+}
+
+// Cubre tanto una franja puntual (una tarde) como un rango de varios días (vacaciones).
+model BloqueoHorario {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fechaInicio DateTime  @map("fecha_inicio") @db.Date
+  horaInicio  DateTime? @map("hora_inicio") @db.Time() // null = desde el inicio del horario laboral
+  fechaFin    DateTime  @map("fecha_fin") @db.Date
+  horaFin     DateTime? @map("hora_fin") @db.Time() // null = hasta el cierre del horario laboral
+  motivo      String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  turnosCancelados Turno[]
+
+  @@map("bloqueos_horario")
+}
+
+model Feriado {
+  id        Int      @id @default(autoincrement())
+  fecha     DateTime @unique @db.Date
+  nombre    String?
+  fuente    String? // de dónde se importó
+  bloquea   Boolean  @default(true) // false = Ariel decidió atender igual ese feriado
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("feriados")
+}
+
+model Administrador {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario      String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("administradores")
+}
+
+model Turno {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // ^ se usa directamente como token del link único del cliente — no hay campo aparte.
+
+  clienteNombre   String @map("cliente_nombre")
+  clienteTelefono String @map("cliente_telefono")
+
+  servicioId String   @map("servicio_id") @db.Uuid
+  servicio   Servicio @relation(fields: [servicioId], references: [id])
+
+  // "Foto" del servicio al momento de reservar — independiente de `servicio` de ahí en más.
+  servicioNombreSnapshot   String @map("servicio_nombre_snapshot")
+  servicioDuracionSnapshot Int    @map("servicio_duracion_snapshot")
+
+  fecha      DateTime @db.Date
+  horaInicio DateTime @map("hora_inicio") @db.Time()
+  horaFin    DateTime @map("hora_fin") @db.Time() // calculada; usada por el EXCLUDE constraint
+
+  estado            EstadoTurno @default(reservado)
+  origen            OrigenTurno @default(online)
+  motivoCancelacion String?     @map("motivo_cancelacion")
+
+  turnoOrigenId String? @map("turno_origen_id") @db.Uuid
+  turnoOrigen   Turno?  @relation("Reprogramacion", fields: [turnoOrigenId], references: [id])
+  turnosNuevos  Turno[] @relation("Reprogramacion")
+
+  bloqueoCancelacionId String?         @map("bloqueo_cancelacion_id") @db.Uuid
+  bloqueoCancelacion   BloqueoHorario? @relation(fields: [bloqueoCancelacionId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([fecha, horaInicio])
+  @@index([estado])
+  @@map("turnos")
+}
+
+// NOTA — pendiente de agregar a mano después del primer `prisma migrate dev --create-only`:
+// EXCLUDE USING gist (tsrange(fecha + hora_inicio, fecha + hora_fin) WITH &&)
+// WHERE (estado = 'reservado')
+// Prisma no puede expresar un EXCLUDE constraint en el schema; ver Docs/modelo-datos.md
+// sección "Reglas de integridad clave" y el plan de esta etapa.
