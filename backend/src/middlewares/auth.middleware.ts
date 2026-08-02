@@ -1,8 +1,14 @@
 import { NextFunction, Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 
-// Esqueleto: valida el JWT en rutas /api/admin/*. El login que emite el token (HU-15)
-// se implementa en la próxima etapa.
+interface TokenPayload {
+  sub: string
+  usuario: string
+}
+
+// Valida el JWT en rutas /api/admin/* y deja el payload en `req.admin` (ver
+// src/types/express.d.ts) para que la ruta sepa quién está logueado sin volver a
+// decodificar. El login que emite el token es HU-15 (src/services/auth.service.ts).
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null
@@ -18,7 +24,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 
   try {
-    jwt.verify(token, process.env.JWT_SECRET ?? '')
+    req.admin = jwt.verify(token, process.env.JWT_SECRET ?? '') as TokenPayload
     next()
   } catch {
     res.status(401).json({

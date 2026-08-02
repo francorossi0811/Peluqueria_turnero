@@ -1,4 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
+import bcrypt from 'bcrypt'
 import 'dotenv/config'
 import { PrismaClient } from '../generated/prisma/client.ts'
 
@@ -44,9 +45,25 @@ async function main() {
     await prisma.horarioLaboral.createMany({ data: HORARIO_LABORAL })
   }
 
+  const { ADMIN_USUARIO, ADMIN_PASSWORD } = process.env
+  if (ADMIN_USUARIO && ADMIN_PASSWORD) {
+    const yaExiste = await prisma.administrador.findUnique({ where: { usuario: ADMIN_USUARIO } })
+    if (!yaExiste) {
+      await prisma.administrador.create({
+        data: {
+          usuario: ADMIN_USUARIO,
+          passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 10),
+        },
+      })
+    }
+  } else {
+    console.log('Sin ADMIN_USUARIO/ADMIN_PASSWORD en .env — se omite el seed de administrador.')
+  }
+
   console.log('Seed listo:', {
     servicios: await prisma.servicio.count(),
     franjas: await prisma.horarioLaboral.count(),
+    administradores: await prisma.administrador.count(),
   })
 }
 
