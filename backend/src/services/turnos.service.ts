@@ -57,10 +57,12 @@ function esViolacionDeSolapamiento(err: unknown): boolean {
 export async function crearTurno(input: DatosNuevoTurno): Promise<Turno> {
   const servicio = await obtenerServicioActivo(input.servicioId)
 
+  // Sin origen = reserva pública (mantiene el margen); con origen = HU-08/admin (sin margen).
   const horariosDelDia = await obtenerHorariosDelDia(
     servicio,
     input.fecha,
     ahoraArgentina(),
+    { margenMinutos: input.origen ? 0 : undefined },
   )
   if (!horariosDelDia.includes(input.hora)) {
     throw new HorarioNoDisponibleError()
@@ -110,10 +112,20 @@ export function estaDentroDeVentanaDeCambio(
   return minutosRestantes >= VENTANA_MINIMA_MINUTOS
 }
 
-function validarModificable(turno: Turno, ahora: Date): void {
+function validarEsReservado(turno: Turno): void {
   if (turno.estado !== 'reservado') throw new TurnoNoModificableError()
+}
+
+function validarVentana(turno: Turno, ahora: Date): void {
   if (!estaDentroDeVentanaDeCambio(turno, ahora))
     throw new FueraDeVentanaError()
+}
+
+// CU-02 (cliente): estado + ventana de 60 min. Las acciones de admin (HU-09/HU-10/
+// HU-12, más abajo) solo validan `validarEsReservado` — Ariel no tiene ese límite.
+function validarModificable(turno: Turno, ahora: Date): void {
+  validarEsReservado(turno)
+  validarVentana(turno, ahora)
 }
 
 /** CU-02 — Cancelar turno vía link, con la ventana de 60 min (a diferencia de HU-10). */
@@ -202,4 +214,66 @@ export async function listarTurnosEnRango(
     },
     orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
   })
+}
+
+/** HU-10 — Cancelar como admin, sin la ventana de 60 min (a diferencia de CU-02). */
+export async function cancelarTurnoAdmin(id: string): Promise<Turno> {
+  const turno = await obtenerTurno(id)
+  validarEsReservado(turno)
+
+  return prisma.turno.update({
+    where: { id },
+    data: { estado: 'cancelado' },
+  })
+}
+
+/**
+ * HU-09 — Editar turno: mueve el mismo turno a otro horario (no crea uno nuevo como el
+ * reprogramar del cliente en CU-02), sin ventana de 60 min. Sigue validando
+ * disponibilidad real vía `obtenerHorariosDelDia` — no se pueden pisar turnos tampoco
+ * acá — excluyéndose a sí mismo para no chocar contra su propio horario viejo. La
+ * duración es la del snapshot: no cambia el servicio, solo cuándo.
+ */
+export async function editarTurno(
+  id: string,
+  input: { fecha: Date; hora: string },
+): Promise<Turno> {
+  const turno = await obtenerTurno(id)
+  validarEsReservado(turno)
+
+  const horariosDelDia = await obtenerHorariosDelDia(
+    { duracionMinutos: turno.servicioDuracionSnapshot },
+    input.fecha,
+    ahoraArgentina(),
+    { excluirTurnoId: turno.id, margenMinutos: 0 },
+  )
+  if (!horariosDelDia.includes(input.hora)) {
+    throw new HorarioNoDisponibleError()
+  }
+
+  const horaInicio = horaDesdeString(input.hora)
+  const horaFin = new Date(
+    horaInicio.getTime() + turno.servicioDuracionSnapshot * 60_000,
+  )
+
+  try {
+    return await prisma.turno.update({
+      where: { id },
+      data: { fecha: input.fecha, horaInicio, horaFin },
+    })
+  } catch (err) {
+    if (esViolacionDeSolapamiento(err)) throw new HorarioNoDisponibleError()
+    throw err
+  }
+}
+
+/** HU-12 — Marcar si el cliente vino o no. */
+export async function marcarTurno(
+  id: string,
+  estado: 'realizado' | 'ausente',
+): Promise<Turno> {
+  const turno = await obtenerTurno(id)
+  validarEsReservado(turno)
+
+  return prisma.turno.update({ where: { id }, data: { estado } })
 }

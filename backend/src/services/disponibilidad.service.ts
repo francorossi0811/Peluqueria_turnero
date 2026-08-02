@@ -98,10 +98,17 @@ export function calcularHorariosDelDia(params: ParametrosDia): string[] {
  * disponibilidad real — `calcularDisponibilidad` (rango) y `crearTurno` (un día) pasan
  * siempre por acá, tal como pide CU-04.
  */
+export interface OpcionesHorariosDelDia {
+  // Para HU-09 (mover un turno): no chocar contra sí mismo en la lista de ocupados.
+  excluirTurnoId?: string
+  margenMinutos?: number
+}
+
 export async function obtenerHorariosDelDia(
   servicio: Pick<Servicio, 'duracionMinutos'>,
   fecha: Date,
   ahora: Date,
+  opciones: OpcionesHorariosDelDia = {},
 ): Promise<string[]> {
   const diaSemana = fecha.getUTCDay()
 
@@ -111,7 +118,15 @@ export async function obtenerHorariosDelDia(
     prisma.bloqueoHorario.findMany({
       where: { fechaInicio: { lte: fecha }, fechaFin: { gte: fecha } },
     }),
-    prisma.turno.findMany({ where: { fecha, estado: 'reservado' } }),
+    prisma.turno.findMany({
+      where: {
+        fecha,
+        estado: 'reservado',
+        ...(opciones.excluirTurnoId
+          ? { id: { not: opciones.excluirTurnoId } }
+          : {}),
+      },
+    }),
   ])
 
   if (franjasDb.length === 0 || feriado?.bloquea) return []
@@ -158,6 +173,7 @@ export async function obtenerHorariosDelDia(
     feriadoBloquea: false,
     duracionMinutos: servicio.duracionMinutos,
     ahora,
+    margenMinutos: opciones.margenMinutos,
   })
 }
 

@@ -2,9 +2,12 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import {
   cancelarTurno,
+  cancelarTurnoAdmin,
   crearTurno,
+  editarTurno,
   estaDentroDeVentanaDeCambio,
   listarTurnosEnRango,
+  marcarTurno,
   obtenerTurno,
   reprogramarTurno,
 } from '../services/turnos.service'
@@ -44,6 +47,17 @@ const reprogramarSchema = z.object({
 // HU-08: 'online' es exclusivo del flujo público, nunca de la carga manual de Ariel.
 const bodyManualSchema = bodySchema.extend({
   origen: z.enum(['telefono', 'whatsapp']),
+})
+
+// HU-09: mismos fecha/hora que reprogramar, pero sin servicioId (no cambia el servicio).
+const editarSchema = z.object({
+  fecha: z.iso.date(),
+  hora: horaSchema,
+})
+
+// HU-12
+const estadoSchema = z.object({
+  estado: z.enum(['realizado', 'ausente']),
 })
 
 const idSchema = z.object({ id: z.uuid() })
@@ -294,4 +308,76 @@ export async function getAgenda(req: Request, res: Response) {
 
   const turnos = await listarTurnosEnRango(desdeFecha, hastaFecha)
   res.json({ turnos: turnos.map(turnoAdminDto) })
+}
+
+// HU-09 — Mover un turno a otro horario, sin la ventana de 60 min del cliente.
+export async function patchTurno(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = editarSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  try {
+    const turno = await editarTurno(idParsed.data.id, {
+      fecha: fechaDesdeIso(bodyParsed.data.fecha),
+      hora: bodyParsed.data.hora,
+    })
+    res.json(turnoAdminDto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+// HU-10 — Cancelar como admin, sin la ventana de 60 min del cliente.
+export async function postCancelarTurnoAdmin(req: Request, res: Response) {
+  const parsed = idSchema.safeParse(req.params)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  try {
+    const turno = await cancelarTurnoAdmin(parsed.data.id)
+    res.json(turnoAdminDto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+// HU-12 — Marcar Realizado o Ausente.
+export async function patchEstadoTurno(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = estadoSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  try {
+    const turno = await marcarTurno(idParsed.data.id, bodyParsed.data.estado)
+    res.json(turnoAdminDto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
 }

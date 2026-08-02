@@ -132,4 +132,32 @@ describe('calcularHorariosDelDia', () => {
     // 10:45 no existe en la grilla de 20 min desde las 10:00; el primero >= 10:45 es 11:00
     expect(horarios).toContain('11:00')
   })
+
+  it('con margenMinutos: 0 (acciones de admin) ofrece horarios inmediatos', () => {
+    const ahora = new Date(Date.UTC(2026, 7, 4, 10, 15)) // hoy a las 10:15
+    const horarios = calcularHorariosDelDia({
+      fecha: FECHA,
+      franjas: FRANJAS,
+      ocupados: [],
+      feriadoBloquea: false,
+      duracionMinutos: 20,
+      ahora,
+      margenMinutos: 0,
+    })
+    // Sin margen, 10:20 (5 min después de "ahora") ya es válido.
+    expect(horarios).toContain('10:20')
+  })
+
+  it('sin margenMinutos explícito, sigue aplicando el default de 30', () => {
+    const ahora = new Date(Date.UTC(2026, 7, 4, 10, 15))
+    const horarios = calcularHorariosDelDia({
+      fecha: FECHA,
+      franjas: FRANJAS,
+      ocupados: [],
+      feriadoBloquea: false,
+      duracionMinutos: 20,
+      ahora,
+    })
+    expect(horarios).not.toContain('10:20')
+  })
 })
