@@ -1,9 +1,8 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
-import {
-  calcularDisponibilidad,
-  ServicioNoDisponibleError,
-} from '../services/disponibilidad.service'
+import { calcularDisponibilidad } from '../services/disponibilidad.service'
+import { ServicioNoDisponibleError } from '../services/errores'
+import { fechaDesdeIso } from '../utils/fechaHora'
 
 const MAX_DIAS_RANGO = 31
 
@@ -18,11 +17,6 @@ const querySchema = z
     path: ['hasta'],
   })
 
-function aFechaUtc(iso: string): Date {
-  const [anio, mes, dia] = iso.split('-').map(Number)
-  return new Date(Date.UTC(anio, mes - 1, dia))
-}
-
 export async function getDisponibilidad(req: Request, res: Response) {
   const parsed = querySchema.safeParse(req.query)
   if (!parsed.success) {
@@ -36,8 +30,8 @@ export async function getDisponibilidad(req: Request, res: Response) {
   }
 
   const { servicioId, desde, hasta } = parsed.data
-  const desdeFecha = aFechaUtc(desde)
-  const hastaFecha = aFechaUtc(hasta)
+  const desdeFecha = fechaDesdeIso(desde)
+  const hastaFecha = fechaDesdeIso(hasta)
 
   const dias =
     Math.round((hastaFecha.getTime() - desdeFecha.getTime()) / 86_400_000) + 1
