@@ -14,7 +14,7 @@ import {
   combinarFechaHora,
   horaDesdeString,
 } from '../utils/fechaHora'
-import type { Turno } from '../../generated/prisma/client.ts'
+import type { OrigenTurno, Turno } from '../../generated/prisma/client.ts'
 
 export interface DatosNuevoTurno {
   servicioId: string
@@ -22,6 +22,7 @@ export interface DatosNuevoTurno {
   hora: string // "HH:mm"
   clienteNombre: string
   clienteTelefono: string
+  origen?: OrigenTurno // HU-08: admin manda 'telefono'/'whatsapp'; público no manda nada -> 'online'
 }
 
 export interface DatosReprogramacion {
@@ -81,6 +82,7 @@ export async function crearTurno(input: DatosNuevoTurno): Promise<Turno> {
         fecha: input.fecha,
         horaInicio,
         horaFin,
+        origen: input.origen ?? 'online',
       },
     })
   } catch (err) {

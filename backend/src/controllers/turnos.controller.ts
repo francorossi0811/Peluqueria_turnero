@@ -41,6 +41,11 @@ const reprogramarSchema = z.object({
   hora: horaSchema,
 })
 
+// HU-08: 'online' es exclusivo del flujo público, nunca de la carga manual de Ariel.
+const bodyManualSchema = bodySchema.extend({
+  origen: z.enum(['telefono', 'whatsapp']),
+})
+
 const idSchema = z.object({ id: z.uuid() })
 
 const MAX_DIAS_RANGO = 31
@@ -155,6 +160,37 @@ export async function postTurno(req: Request, res: Response) {
       clienteTelefono,
     })
     res.status(201).json(turnoADto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+// HU-08 — Carga manual: mismas reglas que reservar (CU-01/CU-04), sin reimplementar
+// nada; solo cambia quién la hace (Ariel, autenticado) y el origen guardado.
+export async function postTurnoManual(req: Request, res: Response) {
+  const parsed = bodyManualSchema.safeParse(req.body)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const { servicioId, fecha, hora, clienteNombre, clienteTelefono, origen } =
+    parsed.data
+
+  try {
+    const turno = await crearTurno({
+      servicioId,
+      fecha: fechaDesdeIso(fecha),
+      hora,
+      clienteNombre,
+      clienteTelefono,
+      origen,
+    })
+    res.status(201).json(turnoAdminDto(turno))
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
     throw err
