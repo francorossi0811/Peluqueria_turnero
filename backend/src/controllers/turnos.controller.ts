@@ -4,6 +4,7 @@ import {
   cancelarTurno,
   crearTurno,
   estaDentroDeVentanaDeCambio,
+  listarTurnosEnRango,
   obtenerTurno,
   reprogramarTurno,
 } from '../services/turnos.service'
@@ -42,6 +43,18 @@ const reprogramarSchema = z.object({
 
 const idSchema = z.object({ id: z.uuid() })
 
+const MAX_DIAS_RANGO = 31
+
+const rangoSchema = z
+  .object({
+    desde: z.iso.date(),
+    hasta: z.iso.date(),
+  })
+  .refine((q) => q.hasta >= q.desde, {
+    message: 'hasta debe ser posterior o igual a desde.',
+    path: ['hasta'],
+  })
+
 function turnoADto(turno: Turno) {
   return {
     id: turno.id,
@@ -52,6 +65,17 @@ function turnoADto(turno: Turno) {
       nombre: turno.servicioNombreSnapshot,
       duracionMinutos: turno.servicioDuracionSnapshot,
     },
+  }
+}
+
+// Vista de admin: además de lo público, Ariel necesita ver quién es y cómo contactarlo.
+function turnoAdminDto(turno: Turno) {
+  return {
+    ...turnoADto(turno),
+    horaFin: formatearHora(turno.horaFin),
+    clienteNombre: turno.clienteNombre,
+    clienteTelefono: turno.clienteTelefono,
+    origen: turno.origen,
   }
 }
 
@@ -203,4 +227,35 @@ export async function postReprogramarTurno(req: Request, res: Response) {
     if (manejarErroresComunes(err, res)) return
     throw err
   }
+}
+
+// HU-06 (desde === hasta) / HU-07 (rango de 7 días) — misma ruta, ver especificacion-api.md.
+export async function getAgenda(req: Request, res: Response) {
+  const parsed = rangoSchema.safeParse(req.query)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const { desde, hasta } = parsed.data
+  const desdeFecha = fechaDesdeIso(desde)
+  const hastaFecha = fechaDesdeIso(hasta)
+
+  const dias =
+    Math.round((hastaFecha.getTime() - desdeFecha.getTime()) / 86_400_000) + 1
+  if (dias > MAX_DIAS_RANGO) {
+    res.status(400).json({
+      error: {
+        codigo: 'RANGO_DEMASIADO_AMPLIO',
+        mensaje: `El rango no puede superar los ${MAX_DIAS_RANGO} días.`,
+      },
+    })
+    return
+  }
+
+  const turnos = await listarTurnosEnRango(desdeFecha, hastaFecha)
+  res.json({ turnos: turnos.map(turnoAdminDto) })
 }

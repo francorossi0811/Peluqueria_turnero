@@ -183,3 +183,21 @@ export async function reprogramarTurno(
     throw err
   }
 }
+
+/**
+ * HU-06/HU-07 — Agenda de Ariel. `desde === hasta` es la vista diaria, un rango de 7
+ * días es la semanal (mismo endpoint, ver Docs/especificacion-api.md). Solo turnos que
+ * todavía ocupan ese horario: `cancelado`/`reprogramado` ya lo liberaron.
+ */
+export async function listarTurnosEnRango(
+  desde: Date,
+  hasta: Date,
+): Promise<Turno[]> {
+  return prisma.turno.findMany({
+    where: {
+      fecha: { gte: desde, lte: hasta },
+      estado: { in: ['reservado', 'realizado', 'ausente'] },
+    },
+    orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
+  })
+}

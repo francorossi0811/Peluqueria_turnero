@@ -76,6 +76,7 @@ Como Ariel, quiero poder cambiar mis días y horarios de atención, para refleja
 
 **HU-15 — Iniciar sesión**
 Como Ariel, quiero acceder a mi panel con usuario y contraseña, para que nadie más pueda modificar mi agenda.
+- (v1: la contraseña se carga una sola vez, por variable de entorno, al desplegar/hacer el seed inicial — la elige Ariel, no queda en ningún archivo del repo. Un endpoint para que Ariel la cambie él mismo desde el panel queda para una versión futura, ver sección 5.)
 
 ---
 
@@ -146,7 +147,7 @@ Como Ariel, quiero acceder a mi panel con usuario y contraseña, para que nadie 
 
 ## 5. Fuera de alcance en v1 (recordatorio)
 
-Precios · Deudas por ausencia · Multi-peluquero · WhatsApp Business API real · Recuperación de link por teléfono/email
+Precios · Deudas por ausencia · Multi-peluquero · WhatsApp Business API real · Recuperación de link por teléfono/email · Que Ariel cambie su contraseña desde el panel (HU-15, v1 la carga por variable de entorno)
 
 ---
 

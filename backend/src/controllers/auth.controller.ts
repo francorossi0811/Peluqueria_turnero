@@ -12,7 +12,10 @@ export async function postLogin(req: Request, res: Response) {
   const parsed = bodySchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({
-      error: { codigo: 'PARAMETROS_INVALIDOS', mensaje: 'Falta usuario o contraseña.' },
+      error: {
+        codigo: 'PARAMETROS_INVALIDOS',
+        mensaje: 'Falta usuario o contraseña.',
+      },
     })
     return
   }
@@ -23,7 +26,10 @@ export async function postLogin(req: Request, res: Response) {
   } catch (err) {
     if (err instanceof CredencialesInvalidasError) {
       res.status(401).json({
-        error: { codigo: 'CREDENCIALES_INVALIDAS', mensaje: 'Usuario o contraseña incorrectos.' },
+        error: {
+          codigo: 'CREDENCIALES_INVALIDAS',
+          mensaje: 'Usuario o contraseña incorrectos.',
+        },
       })
       return
     }

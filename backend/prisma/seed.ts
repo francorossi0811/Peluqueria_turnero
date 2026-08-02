@@ -47,7 +47,9 @@ async function main() {
 
   const { ADMIN_USUARIO, ADMIN_PASSWORD } = process.env
   if (ADMIN_USUARIO && ADMIN_PASSWORD) {
-    const yaExiste = await prisma.administrador.findUnique({ where: { usuario: ADMIN_USUARIO } })
+    const yaExiste = await prisma.administrador.findUnique({
+      where: { usuario: ADMIN_USUARIO },
+    })
     if (!yaExiste) {
       await prisma.administrador.create({
         data: {
@@ -57,7 +59,9 @@ async function main() {
       })
     }
   } else {
-    console.log('Sin ADMIN_USUARIO/ADMIN_PASSWORD en .env — se omite el seed de administrador.')
+    console.log(
+      'Sin ADMIN_USUARIO/ADMIN_PASSWORD en .env — se omite el seed de administrador.',
+    )
   }
 
   console.log('Seed listo:', {
