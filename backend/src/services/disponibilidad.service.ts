@@ -4,6 +4,7 @@ import {
   formatearFecha,
   formatearHora,
   ahoraArgentina,
+  seSolapan,
 } from '../utils/fechaHora'
 import { ServicioNoDisponibleError } from './errores'
 import type { Servicio } from '../../generated/prisma/client.ts'
@@ -37,15 +38,6 @@ export interface ParametrosDia {
   // online (30 min). Las acciones de Ariel (carga manual, mover un turno) pasan 0 —
   // no tiene sentido protegerlo de sí mismo.
   margenMinutos?: number
-}
-
-function seSolapan(
-  aInicio: Date,
-  aFin: Date,
-  bInicio: Date,
-  bFin: Date,
-): boolean {
-  return aInicio < bFin && bInicio < aFin
 }
 
 /**

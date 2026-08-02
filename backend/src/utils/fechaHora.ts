@@ -48,3 +48,13 @@ export function horaDesdeString(hhmm: string): Date {
   const [horas, minutos] = hhmm.split(':').map(Number)
   return new Date(Date.UTC(1970, 0, 1, horas, minutos))
 }
+
+// Compartido por disponibilidad y bloqueos: ¿se solapan [aInicio,aFin) y [bInicio,bFin)?
+export function seSolapan(
+  aInicio: Date,
+  aFin: Date,
+  bInicio: Date,
+  bFin: Date,
+): boolean {
+  return aInicio < bFin && bInicio < aFin
+}
