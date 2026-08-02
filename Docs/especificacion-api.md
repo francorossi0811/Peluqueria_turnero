@@ -68,7 +68,7 @@ Response:
 ```
 Response `201`:
 ```json
-{ "id": "uuid-del-turno", "estado": "reservado", "fecha": "2026-08-04", "hora": "10:00", "servicio": { "nombre": "Corte", "duracionMinutos": 30 } }
+{ "id": "uuid-del-turno", "estado": "reservado", "fecha": "2026-08-04", "hora": "10:00", "servicio": { "id": "uuid-del-servicio", "nombre": "Corte", "duracionMinutos": 30 } }
 ```
 Response `409` (flujo alternativo CU-01, otro cliente reservó ese horario milisegundos
 antes — lo rechaza en última instancia el `EXCLUDE` constraint de la base):

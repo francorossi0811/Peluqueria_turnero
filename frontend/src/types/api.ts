@@ -14,7 +14,9 @@ export interface Turno {
   estado: EstadoTurno
   fecha: string // "YYYY-MM-DD"
   hora: string // "HH:mm"
-  servicio: Pick<Servicio, 'nombre' | 'duracionMinutos'>
+  servicio: Servicio
+  // Solo viene en GET /api/turnos/:id, no en la respuesta de creación.
+  puedeCancelar?: boolean
 }
 
 export interface DisponibilidadDia {
@@ -28,6 +30,11 @@ export interface NuevoTurno {
   hora: string // "HH:mm"
   clienteNombre: string
   clienteTelefono: string
+}
+
+export interface Reprogramacion {
+  fecha: string // "YYYY-MM-DD"
+  hora: string // "HH:mm"
 }
 
 export interface ErrorApi {

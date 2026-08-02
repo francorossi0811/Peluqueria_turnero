@@ -82,6 +82,10 @@ function turnoADto(turno: Turno) {
     fecha: formatearFecha(turno.fecha),
     hora: formatearHora(turno.horaInicio),
     servicio: {
+      // id del servicio (no del snapshot) — lo necesita el frontend para pedir
+      // disponibilidad real al reprogramar (CU-02). No es sensible: el token es el id
+      // del turno, no el del servicio.
+      id: turno.servicioId,
       nombre: turno.servicioNombreSnapshot,
       duracionMinutos: turno.servicioDuracionSnapshot,
     },
