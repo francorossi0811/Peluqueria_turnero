@@ -1,1 +1,53 @@
 @import 'tailwindcss';
+
+/* Paleta y tipografía tomadas 1:1 del wireframe aprobado (miel = cliente, vino = admin,
+   fondo cálido tostado). Los valores de dark mode se sobreescriben más abajo — Tailwind
+   genera las utilidades (bg-miel, text-tinta, etc.) a partir de estas variables, así que
+   overridearlas alcanza para que el modo oscuro funcione sin tocar los componentes. */
+@theme {
+  --color-fondo: #e8dcc0;
+  --color-superficie: #fbf6ea;
+  --color-superficie-2: #f1e7cf;
+  --color-tinta: #2b2016;
+  --color-tinta-suave: #79644a;
+  --color-tinta-tenue: #a5906f;
+  --color-borde: #d5c39d;
+  --color-borde-suave: #e6d8b8;
+  --color-miel: #a3721f;
+  --color-miel-suave: #f0e1bd;
+  --color-vino: #8c3b2e;
+  --color-vino-suave: #f2ddd3;
+  --color-bien: #3f7d4f;
+  --color-bien-suave: #e1ecdc;
+  --color-alerta: #a9761f;
+  --color-alerta-suave: #f3e4c0;
+
+  --font-display:
+    Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-fondo: #1d160e;
+    --color-superficie: #291f15;
+    --color-superficie-2: #33271a;
+    --color-tinta: #f3e8d2;
+    --color-tinta-suave: #c2a97f;
+    --color-tinta-tenue: #8e7856;
+    --color-borde: #4a3a24;
+    --color-borde-suave: #382c1b;
+    --color-miel: #dcab5c;
+    --color-miel-suave: #3c2f18;
+    --color-vino: #dd8a72;
+    --color-vino-suave: #3d2721;
+    --color-bien: #8fc49b;
+    --color-bien-suave: #243621;
+    --color-alerta: #e0b15c;
+    --color-alerta-suave: #3b2e14;
+  }
+}
+
+body {
+  background-color: var(--color-fondo);
+  color: var(--color-tinta);
+}

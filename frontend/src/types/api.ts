@@ -16,3 +16,20 @@ export interface Turno {
   hora: string // "HH:mm"
   servicio: Pick<Servicio, 'nombre' | 'duracionMinutos'>
 }
+
+export interface DisponibilidadDia {
+  fecha: string // "YYYY-MM-DD"
+  horarios: string[] // "HH:mm"
+}
+
+export interface NuevoTurno {
+  servicioId: string
+  fecha: string // "YYYY-MM-DD"
+  hora: string // "HH:mm"
+  clienteNombre: string
+  clienteTelefono: string
+}
+
+export interface ErrorApi {
+  error: { codigo: string; mensaje: string }
+}
