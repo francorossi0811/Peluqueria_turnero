@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { getMe } from '../controllers/admin.controller'
 import {
   getAgenda,
+  getBuscarTurnos,
   patchEstadoTurno,
   patchTurno,
   postCancelarTurnoAdmin,
@@ -17,12 +18,18 @@ import {
   putHorarioLaboral,
 } from '../controllers/horarioLaboral.controller'
 import { getFeriados, patchFeriado } from '../controllers/feriados.controller'
+import {
+  deleteBloqueo,
+  getBloqueos,
+  postBloqueo,
+} from '../controllers/bloqueos.controller'
 import { requireAuth } from '../middlewares/auth.middleware'
 
 export const adminRouter = Router()
 
 adminRouter.get('/admin/me', requireAuth, getMe)
 adminRouter.get('/admin/turnos', requireAuth, getAgenda)
+adminRouter.get('/admin/turnos/buscar', requireAuth, getBuscarTurnos)
 adminRouter.post('/admin/turnos', requireAuth, postTurnoManual)
 adminRouter.patch('/admin/turnos/:id', requireAuth, patchTurno)
 adminRouter.post(
@@ -41,3 +48,7 @@ adminRouter.put('/admin/horario-laboral', requireAuth, putHorarioLaboral)
 
 adminRouter.get('/admin/feriados', requireAuth, getFeriados)
 adminRouter.patch('/admin/feriados/:id', requireAuth, patchFeriado)
+
+adminRouter.get('/admin/bloqueos', requireAuth, getBloqueos)
+adminRouter.post('/admin/bloqueos', requireAuth, postBloqueo)
+adminRouter.delete('/admin/bloqueos/:id', requireAuth, deleteBloqueo)

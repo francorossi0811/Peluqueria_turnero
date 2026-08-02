@@ -38,14 +38,12 @@ export async function getFeriados(req: Request, res: Response) {
 export async function patchFeriado(req: Request, res: Response) {
   const idParsed = idSchema.safeParse(req.params)
   if (!idParsed.success) {
-    res
-      .status(400)
-      .json({
-        error: {
-          codigo: 'PARAMETROS_INVALIDOS',
-          mensaje: 'Id de feriado inválido.',
-        },
-      })
+    res.status(400).json({
+      error: {
+        codigo: 'PARAMETROS_INVALIDOS',
+        mensaje: 'Id de feriado inválido.',
+      },
+    })
     return
   }
 

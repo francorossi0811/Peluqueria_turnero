@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import {
+  buscarTurnos,
   cancelarTurno,
   cancelarTurnoAdmin,
   crearTurno,
@@ -380,4 +381,28 @@ export async function patchEstadoTurno(req: Request, res: Response) {
     if (manejarErroresComunes(err, res)) return
     throw err
   }
+}
+
+const buscarSchema = z
+  .object({
+    nombre: z.string().trim().min(1).optional(),
+    telefono: z.string().trim().min(1).optional(),
+  })
+  .refine((q) => q.nombre || q.telefono, {
+    message: 'Mandá al menos nombre o teléfono para buscar.',
+  })
+
+// Caso borde: cliente perdió su link único — Ariel busca el turno para reenviárselo.
+export async function getBuscarTurnos(req: Request, res: Response) {
+  const parsed = buscarSchema.safeParse(req.query)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const turnos = await buscarTurnos(parsed.data)
+  res.json({ turnos: turnos.map(turnoAdminDto) })
 }

@@ -277,3 +277,28 @@ export async function marcarTurno(
 
   return prisma.turno.update({ where: { id }, data: { estado } })
 }
+
+const MAX_RESULTADOS_BUSQUEDA = 50
+
+/**
+ * Caso borde de historias-de-usuario-casos-de-uso.md: "cliente pierde su link único" —
+ * Ariel busca por nombre y/o teléfono para reenviarlo. Sin filtro de estado a propósito
+ * (puede necesitar encontrar uno ya cancelado/pasado, no solo los activos).
+ */
+export async function buscarTurnos(filtros: {
+  nombre?: string
+  telefono?: string
+}): Promise<Turno[]> {
+  return prisma.turno.findMany({
+    where: {
+      ...(filtros.nombre
+        ? { clienteNombre: { contains: filtros.nombre, mode: 'insensitive' } }
+        : {}),
+      ...(filtros.telefono
+        ? { clienteTelefono: { contains: filtros.telefono } }
+        : {}),
+    },
+    orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }],
+    take: MAX_RESULTADOS_BUSQUEDA,
+  })
+}
