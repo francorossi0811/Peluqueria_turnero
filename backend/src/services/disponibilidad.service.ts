@@ -33,6 +33,10 @@ export interface ParametrosDia {
   feriadoBloquea: boolean
   duracionMinutos: number
   ahora: Date
+  // Margen mínimo antes de "ahora" para ofrecer un horario. Default: el de reserva
+  // online (30 min). Las acciones de Ariel (carga manual, mover un turno) pasan 0 —
+  // no tiene sentido protegerlo de sí mismo.
+  margenMinutos?: number
 }
 
 function seSolapan(
@@ -56,11 +60,12 @@ function seSolapan(
 export function calcularHorariosDelDia(params: ParametrosDia): string[] {
   const { fecha, franjas, ocupados, feriadoBloquea, duracionMinutos, ahora } =
     params
+  const margenMinutos = params.margenMinutos ?? MARGEN_MINIMO_MINUTOS
 
   if (feriadoBloquea) return []
 
   const duracionMs = duracionMinutos * MINUTO_MS
-  const limite = new Date(ahora.getTime() + MARGEN_MINIMO_MINUTOS * MINUTO_MS)
+  const limite = new Date(ahora.getTime() + margenMinutos * MINUTO_MS)
 
   const horarios: string[] = []
 
