@@ -1,31 +1,121 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
-import { crearTurno } from '../services/turnos.service'
 import {
+  cancelarTurno,
+  crearTurno,
+  estaDentroDeVentanaDeCambio,
+  obtenerTurno,
+  reprogramarTurno,
+} from '../services/turnos.service'
+import {
+  FueraDeVentanaError,
   HorarioNoDisponibleError,
   ServicioNoDisponibleError,
+  TurnoNoEncontradoError,
+  TurnoNoModificableError,
 } from '../services/errores'
-import { fechaDesdeIso } from '../utils/fechaHora'
+import {
+  ahoraArgentina,
+  fechaDesdeIso,
+  formatearFecha,
+  formatearHora,
+} from '../utils/fechaHora'
+import type { Turno } from '../../generated/prisma/client.ts'
+
+const horaSchema = z
+  .string()
+  .regex(/^\d{2}:\d{2}$/, 'Formato de hora inválido, esperado HH:mm.')
 
 const bodySchema = z.object({
   servicioId: z.uuid(),
   fecha: z.iso.date(),
-  hora: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/, 'Formato de hora inválido, esperado HH:mm.'),
+  hora: horaSchema,
   clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
   clienteTelefono: z.string().trim().min(6, 'Teléfono inválido.'),
 })
 
+const reprogramarSchema = z.object({
+  servicioId: z.uuid().optional(),
+  fecha: z.iso.date(),
+  hora: horaSchema,
+})
+
+const idSchema = z.object({ id: z.uuid() })
+
+function turnoADto(turno: Turno) {
+  return {
+    id: turno.id,
+    estado: turno.estado,
+    fecha: formatearFecha(turno.fecha),
+    hora: formatearHora(turno.horaInicio),
+    servicio: {
+      nombre: turno.servicioNombreSnapshot,
+      duracionMinutos: turno.servicioDuracionSnapshot,
+    },
+  }
+}
+
+function respondErrorParametrosInvalidos(res: Response, mensaje: string) {
+  res.status(400).json({ error: { codigo: 'PARAMETROS_INVALIDOS', mensaje } })
+}
+
+function manejarErroresComunes(err: unknown, res: Response): boolean {
+  if (err instanceof ServicioNoDisponibleError) {
+    res.status(404).json({
+      error: {
+        codigo: 'SERVICIO_NO_ENCONTRADO',
+        mensaje: 'El servicio no existe o no está activo.',
+      },
+    })
+    return true
+  }
+  if (err instanceof HorarioNoDisponibleError) {
+    res.status(409).json({
+      error: {
+        codigo: 'HORARIO_NO_DISPONIBLE',
+        mensaje: 'Ese horario se acaba de ocupar.',
+      },
+    })
+    return true
+  }
+  if (err instanceof TurnoNoEncontradoError) {
+    res.status(404).json({
+      error: {
+        codigo: 'TURNO_NO_ENCONTRADO',
+        mensaje: 'No encontramos ese turno.',
+      },
+    })
+    return true
+  }
+  if (err instanceof TurnoNoModificableError) {
+    res.status(409).json({
+      error: {
+        codigo: 'TURNO_NO_MODIFICABLE',
+        mensaje: 'Este turno ya no está activo.',
+      },
+    })
+    return true
+  }
+  if (err instanceof FueraDeVentanaError) {
+    res.status(409).json({
+      error: {
+        codigo: 'FUERA_DE_VENTANA_CANCELACION',
+        mensaje:
+          'Ya no podés cancelar ni reprogramar online. Contactá directamente a Ariel.',
+      },
+    })
+    return true
+  }
+  return false
+}
+
 export async function postTurno(req: Request, res: Response) {
   const parsed = bodySchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({
-      error: {
-        codigo: 'PARAMETROS_INVALIDOS',
-        mensaje: parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
-      },
-    })
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
     return
   }
 
@@ -40,36 +130,77 @@ export async function postTurno(req: Request, res: Response) {
       clienteNombre,
       clienteTelefono,
     })
+    res.status(201).json(turnoADto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
 
-    res.status(201).json({
-      id: turno.id,
-      estado: turno.estado,
-      fecha,
-      hora,
-      servicio: {
-        nombre: turno.servicioNombreSnapshot,
-        duracionMinutos: turno.servicioDuracionSnapshot,
-      },
+export async function getTurno(req: Request, res: Response) {
+  const parsed = idSchema.safeParse(req.params)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  try {
+    const turno = await obtenerTurno(parsed.data.id)
+    res.json({
+      ...turnoADto(turno),
+      puedeCancelar:
+        turno.estado === 'reservado' &&
+        estaDentroDeVentanaDeCambio(turno, ahoraArgentina()),
     })
   } catch (err) {
-    if (err instanceof ServicioNoDisponibleError) {
-      res.status(404).json({
-        error: {
-          codigo: 'SERVICIO_NO_ENCONTRADO',
-          mensaje: 'El servicio no existe o no está activo.',
-        },
-      })
-      return
-    }
-    if (err instanceof HorarioNoDisponibleError) {
-      res.status(409).json({
-        error: {
-          codigo: 'HORARIO_NO_DISPONIBLE',
-          mensaje: 'Ese horario se acaba de ocupar.',
-        },
-      })
-      return
-    }
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+export async function postCancelarTurno(req: Request, res: Response) {
+  const parsed = idSchema.safeParse(req.params)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  try {
+    const turno = await cancelarTurno(parsed.data.id)
+    res.json(turnoADto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+export async function postReprogramarTurno(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = reprogramarSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const { servicioId, fecha, hora } = bodyParsed.data
+
+  try {
+    const turno = await reprogramarTurno(idParsed.data.id, {
+      servicioId,
+      fecha: fechaDesdeIso(fecha),
+      hora,
+    })
+    res.status(201).json(turnoADto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
     throw err
   }
 }
