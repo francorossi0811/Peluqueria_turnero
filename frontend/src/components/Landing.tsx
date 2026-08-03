@@ -150,11 +150,11 @@ export function Landing({ query, onElegir }: LandingProps) {
             </button>
           </div>
         </div>
-        <div className="flex aspect-[141/101] items-center justify-center overflow-hidden rounded-lg bg-[#12100e] p-6">
+        <div className="aspect-[1004/708] overflow-hidden rounded-lg bg-[#12100e]">
           <img
-            src="/imagenes/presentacion.jpg"
+            src="/imagenes/presentacion.png"
             alt="La Peluquería de Ariel Enrique"
-            className="max-h-full max-w-full object-contain"
+            className="h-full w-full object-cover"
           />
         </div>
       </section>
