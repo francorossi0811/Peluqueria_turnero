@@ -5,6 +5,7 @@ import { LoginPage } from './pages/admin/LoginPage'
 import { AgendaPage } from './pages/admin/AgendaPage'
 import { ServiciosPage } from './pages/admin/ServiciosPage'
 import { HorarioPage } from './pages/admin/HorarioPage'
+import { BuscarTurnoPage } from './pages/admin/BuscarTurnoPage'
 import { AdminLayout } from './components/admin/AdminLayout'
 import { RequireAuth } from './components/admin/RequireAuth'
 
@@ -27,6 +28,7 @@ function App() {
           <Route path="/admin" element={<AgendaPage />} />
           <Route path="/admin/servicios" element={<ServiciosPage />} />
           <Route path="/admin/horario" element={<HorarioPage />} />
+          <Route path="/admin/buscar" element={<BuscarTurnoPage />} />
         </Route>
       </Route>
     </Routes>

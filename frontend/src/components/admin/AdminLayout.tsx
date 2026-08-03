@@ -5,6 +5,7 @@ const NAV = [
   { to: '/admin', label: 'Agenda' },
   { to: '/admin/servicios', label: 'Servicios' },
   { to: '/admin/horario', label: 'Horario' },
+  { to: '/admin/buscar', label: 'Buscar turno' },
 ]
 
 export function AdminLayout() {
@@ -28,7 +29,7 @@ export function AdminLayout() {
               Panel de Ariel
             </p>
           </div>
-          <nav className="flex items-center gap-1">
+          <nav className="flex flex-wrap items-center gap-1">
             {NAV.map((item) => (
               <Link
                 key={item.to}

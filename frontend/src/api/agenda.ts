@@ -47,3 +47,14 @@ export async function marcarEstadoTurno(
   )
   return data
 }
+
+export async function buscarTurnos(params: {
+  nombre?: string
+  telefono?: string
+}): Promise<TurnoAdmin[]> {
+  const { data } = await apiClient.get<{ turnos: TurnoAdmin[] }>(
+    '/admin/turnos/buscar',
+    { params },
+  )
+  return data.turnos
+}
