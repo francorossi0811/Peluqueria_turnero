@@ -6,6 +6,16 @@ export interface Servicio {
   duracionMinutos: number
 }
 
+// Vista de admin: incluye los inactivos y el propio estado.
+export interface ServicioAdmin extends Servicio {
+  activo: boolean
+}
+
+export interface DatosServicio {
+  nombre: string
+  duracionMinutos: number
+}
+
 export type EstadoTurno =
   'reservado' | 'cancelado' | 'reprogramado' | 'realizado' | 'ausente'
 
@@ -84,6 +94,19 @@ export interface TurnoAfectado {
 export interface ErrorBloqueoAfectaTurnos {
   error: { codigo: 'BLOQUEO_AFECTA_TURNOS'; mensaje: string }
   turnosAfectados: TurnoAfectado[]
+}
+
+export interface FranjaHorario {
+  diaSemana: number // 0 (domingo) a 6 (sábado)
+  horaInicio: string // "HH:mm"
+  horaFin: string // "HH:mm"
+}
+
+export interface Feriado {
+  id: number
+  fecha: string // "YYYY-MM-DD"
+  nombre: string
+  bloquea: boolean
 }
 
 export interface ErrorApi {

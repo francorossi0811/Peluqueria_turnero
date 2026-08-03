@@ -3,6 +3,8 @@ import { ReservarPage } from './pages/ReservarPage'
 import { GestionTurnoPage } from './pages/GestionTurnoPage'
 import { LoginPage } from './pages/admin/LoginPage'
 import { AgendaPage } from './pages/admin/AgendaPage'
+import { ServiciosPage } from './pages/admin/ServiciosPage'
+import { HorarioPage } from './pages/admin/HorarioPage'
 import { AdminLayout } from './components/admin/AdminLayout'
 import { RequireAuth } from './components/admin/RequireAuth'
 
@@ -23,6 +25,8 @@ function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AdminLayout />}>
           <Route path="/admin" element={<AgendaPage />} />
+          <Route path="/admin/servicios" element={<ServiciosPage />} />
+          <Route path="/admin/horario" element={<HorarioPage />} />
         </Route>
       </Route>
     </Routes>
