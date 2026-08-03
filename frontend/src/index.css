@@ -71,12 +71,14 @@ body {
   --color-superficie: #fdf9f0;
   --color-superficie-2: #f0e6d2;
   --color-tinta: #201f1d;
-  --color-tinta-suave: #5c5a56;
-  --color-tinta-tenue: #8c8a85;
-  --color-borde: #ddd4c4;
-  --color-borde-suave: #ece4d4;
+  --color-tinta-suave: #4f4d49;
+  --color-tinta-tenue: #817d76;
+  /* --color-divider original: color-mix(in srgb, #201f1d 16%/8%, transparent) —
+     valores ya calculados sobre el fondo crema, tal cual se ven en el diseño. */
+  --color-borde: #d5cec3;
+  --color-borde-suave: #e6ded3;
   --color-miel: #b68235;
-  --color-miel-suave: #f3e3c8;
+  --color-miel-suave: #fff3e4;
   --color-vino: #201f1d;
   --color-vino-suave: #ece4d4;
   --color-bien: #201f1d;

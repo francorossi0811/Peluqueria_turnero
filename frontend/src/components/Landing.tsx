@@ -24,8 +24,8 @@ function fotoStock(tags: string, w: number, h: number, lock: number): string {
 
 const FOTO_POR_SERVICIO: Record<string, string> = {
   'Corte clásico': '/imagenes/servicio-corte.jpg',
-  Barba: fotoStock('fade,barber', 500, 650, 1),
-  'Corte + Barba': fotoStock('barbershop,haircut', 500, 650, 22),
+  Barba: '/imagenes/servicio-barba.jpg',
+  'Corte + Barba': '/imagenes/servicio-corte-barba.webp',
   Color: '/imagenes/servicio-color.jpg',
 }
 
@@ -41,7 +41,7 @@ const PRODUCTOS = [
     nombre: 'Shampoo',
     categoria: 'Cabello',
     desc: 'Limpieza diaria para todo tipo de cabello.',
-    foto: fotoStock('shampoo,bottle', 500, 500, 41),
+    foto: '/imagenes/producto-shampoo.jpg',
   },
   {
     nombre: 'Aceite para barba',
@@ -66,7 +66,7 @@ const PRODUCTOS = [
 const BENEFICIOS = [
   {
     label: 'Productos de calidad',
-    foto: fotoStock('grooming,products', 500, 650, 50),
+    foto: '/imagenes/beneficio-productos.jpg',
   },
   { label: 'Equipo de calidad', foto: '/imagenes/beneficio-equipo.jpg' },
   {
@@ -150,11 +150,11 @@ export function Landing({ query, onElegir }: LandingProps) {
             </button>
           </div>
         </div>
-        <div className="aspect-[141/101] overflow-hidden rounded-lg bg-[#12100e]">
+        <div className="flex aspect-[141/101] items-center justify-center overflow-hidden rounded-lg bg-[#12100e] p-6">
           <img
-            src="/imagenes/hero.webp"
-            alt=""
-            className="h-full w-full object-cover"
+            src="/imagenes/presentacion.jpg"
+            alt="La Peluquería de Ariel Enrique"
+            className="max-h-full max-w-full object-contain"
           />
         </div>
       </section>
