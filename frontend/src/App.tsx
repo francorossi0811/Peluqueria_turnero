@@ -8,6 +8,7 @@ import { HorarioPage } from './pages/admin/HorarioPage'
 import { BuscarTurnoPage } from './pages/admin/BuscarTurnoPage'
 import { AdminLayout } from './components/admin/AdminLayout'
 import { RequireAuth } from './components/admin/RequireAuth'
+import { ClienteLayout } from './components/ClienteLayout'
 
 function GestionTurnoRoute() {
   const { id } = useParams<{ id: string }>()
@@ -19,8 +20,10 @@ function GestionTurnoRoute() {
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<ReservarPage />} />
-      <Route path="/turno/:id" element={<GestionTurnoRoute />} />
+      <Route element={<ClienteLayout />}>
+        <Route path="/" element={<ReservarPage />} />
+        <Route path="/turno/:id" element={<GestionTurnoRoute />} />
+      </Route>
 
       <Route path="/admin/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>

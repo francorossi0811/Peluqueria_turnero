@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { BotonVolver } from '../components/ui/BotonVolver'
 import { GrillaHorarios } from '../components/GrillaHorarios'
+import { Landing } from '../components/Landing'
 import { obtenerServicios } from '../api/servicios'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { crearTurno } from '../api/turnos'
@@ -90,16 +91,16 @@ export function ReservarPage() {
     })
   }
 
+  if (paso === 'servicio') {
+    return <Landing query={serviciosQuery} onElegir={elegirServicio} />
+  }
+
   return (
     <main className="bg-fondo min-h-screen">
       <div className="mx-auto max-w-md px-4 py-10">
         <p className="text-tinta-suave mb-6 text-center text-xs font-medium tracking-wide uppercase">
           La Peluquería de Ariel Enrique
         </p>
-
-        {paso === 'servicio' && (
-          <PasoServicio query={serviciosQuery} onElegir={elegirServicio} />
-        )}
 
         {paso === 'horario' && servicio && (
           <PasoHorario
@@ -141,49 +142,6 @@ export function ReservarPage() {
         )}
       </div>
     </main>
-  )
-}
-
-function PasoServicio({
-  query,
-  onElegir,
-}: {
-  query: ReturnType<typeof useQuery<Servicio[]>>
-  onElegir: (servicio: Servicio) => void
-}) {
-  if (query.isPending)
-    return <p className="text-tinta-suave text-center">Cargando servicios…</p>
-  if (query.isError) {
-    return (
-      <p className="text-vino text-center">
-        No pudimos cargar los servicios. Recargá la página.
-      </p>
-    )
-  }
-
-  return (
-    <div>
-      <h1 className="font-display text-tinta mb-4 text-2xl font-semibold">
-        Elegí tu servicio
-      </h1>
-      <div className="flex flex-col gap-2">
-        {query.data.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => onElegir(s)}
-            className="border-borde bg-superficie hover:border-miel flex items-center justify-between rounded-md border px-4 py-3 text-left transition"
-          >
-            <span>
-              <span className="text-tinta block font-medium">{s.nombre}</span>
-              <span className="text-tinta-suave block text-sm">
-                {s.duracionMinutos} min
-              </span>
-            </span>
-            <span className="text-tinta-tenue">›</span>
-          </button>
-        ))}
-      </div>
-    </div>
   )
 }
 
