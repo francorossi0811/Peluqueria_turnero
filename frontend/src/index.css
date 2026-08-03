@@ -24,6 +24,10 @@
 
   --font-display:
     Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+  /* Sin uso fuera de `.tema-cliente` (ver más abajo) — declaradas acá solo para que
+     Tailwind genere las utilidades `font-body`/`font-hero`. */
+  --font-body: system-ui, sans-serif;
+  --font-hero: Georgia, serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,50 +56,56 @@ body {
   color: var(--color-tinta);
 }
 
-/* Paleta del lado cliente (landing, reserva, gestión de turno vía link): gris/blanco/
-   negro con miel como único acento. Scopeada a esta clase (en vez de redefinir el
-   @theme global) para no repintar el panel de admin, que sigue usando la paleta cálida
-   de arriba. Los componentes de cliente ya están escritos con estos mismos nombres de
-   token (bg-fondo, text-tinta, bg-superficie-2, text-vino, etc.), así que heredan la
-   paleta nueva solo por estar envueltos en esta clase — sin tocarles el código.
-   `vino`/`bien`/`alerta` (errores y estados de turno) pasan a tonos neutros oscuros en
-   vez de rojo/verde/ámbar para cumplir "el único color es el miel". */
+/* Paleta del lado cliente (landing, reserva, gestión de turno vía link): crema/negro
+   con ámbar como único acento — tomada del diseño que Franco hizo con la herramienta
+   de diseño de Claude (Peluqueria de Ariel Enrique.html). Scopeada a esta clase (en
+   vez de redefinir el @theme global) para no repintar el panel de admin, que sigue
+   usando la paleta original de arriba. Los componentes de cliente ya están escritos
+   con estos mismos nombres de token (bg-fondo, text-tinta, bg-superficie-2, text-vino,
+   etc.), así que heredan la paleta nueva solo por estar envueltos en esta clase — sin
+   tocarles el código. `vino`/`bien`/`alerta` (errores y estados de turno) quedan en
+   tonos neutros oscuros en vez de rojo/verde, siguiendo el mismo sistema de un único
+   acento (ámbar) del diseño original. */
 .tema-cliente {
-  --color-fondo: #f7f7f6;
-  --color-superficie: #ffffff;
-  --color-superficie-2: #efefee;
-  --color-tinta: #161616;
-  --color-tinta-suave: #58585a;
-  --color-tinta-tenue: #8f8f90;
-  --color-borde: #d9d9d7;
-  --color-borde-suave: #ececea;
-  --color-miel: #a3721f;
-  --color-miel-suave: #f2e6cd;
-  --color-vino: #1a1a1a;
-  --color-vino-suave: #ececea;
-  --color-bien: #1a1a1a;
-  --color-bien-suave: #ececea;
-  --color-alerta: #1a1a1a;
-  --color-alerta-suave: #ececea;
+  --color-fondo: #f7efe3;
+  --color-superficie: #fdf9f0;
+  --color-superficie-2: #f0e6d2;
+  --color-tinta: #201f1d;
+  --color-tinta-suave: #5c5a56;
+  --color-tinta-tenue: #8c8a85;
+  --color-borde: #ddd4c4;
+  --color-borde-suave: #ece4d4;
+  --color-miel: #b68235;
+  --color-miel-suave: #f3e3c8;
+  --color-vino: #201f1d;
+  --color-vino-suave: #ece4d4;
+  --color-bien: #201f1d;
+  --color-bien-suave: #ece4d4;
+  --color-alerta: #201f1d;
+  --color-alerta-suave: #ece4d4;
+
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'Lora', system-ui, sans-serif;
+  --font-hero: 'Playfair Display', Georgia, serif;
 }
 
 @media (prefers-color-scheme: dark) {
   .tema-cliente {
-    --color-fondo: #0c0c0c;
-    --color-superficie: #181818;
-    --color-superficie-2: #222222;
-    --color-tinta: #f2f2f0;
-    --color-tinta-suave: #b3b3b1;
-    --color-tinta-tenue: #7d7d7b;
-    --color-borde: #2e2e2c;
-    --color-borde-suave: #232321;
-    --color-miel: #dcab5c;
+    --color-fondo: #181410;
+    --color-superficie: #221c15;
+    --color-superficie-2: #2c241a;
+    --color-tinta: #f3ece0;
+    --color-tinta-suave: #c2b8a6;
+    --color-tinta-tenue: #8e8272;
+    --color-borde: #453a2a;
+    --color-borde-suave: #362d20;
+    --color-miel: #e0ae5f;
     --color-miel-suave: #3c2f18;
-    --color-vino: #eaeae8;
-    --color-vino-suave: #232321;
-    --color-bien: #eaeae8;
-    --color-bien-suave: #232321;
-    --color-alerta: #eaeae8;
-    --color-alerta-suave: #232321;
+    --color-vino: #f3ece0;
+    --color-vino-suave: #362d20;
+    --color-bien: #f3ece0;
+    --color-bien-suave: #362d20;
+    --color-alerta: #f3ece0;
+    --color-alerta-suave: #362d20;
   }
 }
