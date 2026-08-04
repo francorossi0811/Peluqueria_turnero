@@ -87,7 +87,7 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
               setFecha(null)
               setHora(null)
             }}
-            className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           >
             <option value="" disabled>
               Elegí un servicio…
@@ -140,7 +140,7 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
                 required
                 value={clienteNombre}
                 onChange={(e) => setClienteNombre(e.target.value)}
-                className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
               />
             </label>
             <label className="flex flex-col gap-1">
@@ -152,7 +152,7 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
                 type="tel"
                 value={clienteTelefono}
                 onChange={(e) => setClienteTelefono(e.target.value)}
-                className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
               />
             </label>
             <div>

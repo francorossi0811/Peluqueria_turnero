@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
+import { Kicker } from '../../components/ui/Kicker'
 import { buscarTurnos } from '../../api/agenda'
 import { fechaLegible } from '../../utils/fecha'
 import type { EstadoTurno, TurnoAdmin } from '../../types/api'
@@ -45,7 +46,8 @@ export function BuscarTurnoPage() {
 
   return (
     <div>
-      <h1 className="font-display text-tinta mb-4 text-2xl font-semibold">
+      <Kicker>Panel de Ariel</Kicker>
+      <h1 className="font-hero text-tinta mb-4 text-[clamp(26px,3.5vw,34px)] leading-[1.15] font-extrabold">
         Buscar turno
       </h1>
       <p className="text-tinta-suave mb-4 text-sm">
@@ -60,7 +62,7 @@ export function BuscarTurnoPage() {
           <input
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -70,7 +72,7 @@ export function BuscarTurnoPage() {
           <input
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
-            className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           />
         </label>
         <Button

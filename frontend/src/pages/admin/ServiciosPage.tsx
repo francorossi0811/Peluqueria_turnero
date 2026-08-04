@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/ui/Button'
+import { Kicker } from '../../components/ui/Kicker'
 import { FilaServicio } from '../../components/admin/FilaServicio'
 import { ModalServicio } from '../../components/admin/ModalServicio'
 import { actualizarServicio, obtenerServiciosAdmin } from '../../api/servicios'
@@ -28,10 +29,13 @@ export function ServiciosPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-tinta text-2xl font-semibold">
-          Servicios
-        </h1>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Kicker>Panel de Ariel</Kicker>
+          <h1 className="font-hero text-tinta text-[clamp(26px,3.5vw,34px)] leading-[1.15] font-extrabold">
+            Servicios
+          </h1>
+        </div>
         <Button variant="primaryVino" onClick={() => setModalNuevo(true)}>
           + Nuevo servicio
         </Button>

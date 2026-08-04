@@ -7,9 +7,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const estilosPorVariante: Record<Variant, string> = {
-  primary: 'bg-miel text-superficie hover:opacity-90',
-  // Acción principal del panel de admin (acento vino en vez de miel).
-  primaryVino: 'bg-vino text-superficie hover:opacity-90',
+  primary: 'border border-miel text-miel hover:bg-miel/10 active:bg-miel/20',
+  // Sin distinción visual de `primary` — `vino` ya no es un acento propio.
+  primaryVino: 'border border-miel text-miel hover:bg-miel/10 active:bg-miel/20',
   outline: 'border border-borde text-tinta hover:bg-superficie-2',
   ghost: 'text-tinta-suave hover:text-tinta',
   danger: 'border border-vino text-vino hover:bg-vino-suave',

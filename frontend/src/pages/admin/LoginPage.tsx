@@ -29,7 +29,7 @@ export function LoginPage() {
         <p className="text-tinta-suave mb-1 text-center text-xs font-medium tracking-wide uppercase">
           La Peluquería de Ariel Enrique
         </p>
-        <h1 className="font-display text-tinta mb-6 text-center text-2xl font-semibold">
+        <h1 className="font-hero text-tinta mb-6 text-center text-[clamp(26px,3.5vw,34px)] font-extrabold">
           Panel de Ariel
         </h1>
 
@@ -43,7 +43,7 @@ export function LoginPage() {
               autoFocus
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
-              className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+              className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
             />
           </label>
           <label className="flex flex-col gap-1">
@@ -55,7 +55,7 @@ export function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+              className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
             />
           </label>
 

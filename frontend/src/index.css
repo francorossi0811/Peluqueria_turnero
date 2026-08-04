@@ -1,72 +1,17 @@
 @import 'tailwindcss';
 
-/* Paleta y tipografía tomadas 1:1 del wireframe aprobado (miel = cliente, vino = admin,
-   fondo cálido tostado). Los valores de dark mode se sobreescriben más abajo — Tailwind
-   genera las utilidades (bg-miel, text-tinta, etc.) a partir de estas variables, así que
-   overridearlas alcanza para que el modo oscuro funcione sin tocar los componentes. */
+/* Paleta y tipografía únicas de todo el sitio (cliente + admin) — tomadas del diseño
+   que Franco hizo con la herramienta de diseño de Claude. Fondo crema, texto casi
+   negro, ámbar (miel) como único acento de marca. Diseño fijo, sin variante de modo
+   oscuro (la fuente original no la tiene).
+
+   `vino` se mantiene como nombre de token por compatibilidad con el código existente
+   (banners de error, botón `danger`) pero ya no es un color distinto — vale lo mismo
+   que `tinta`, así que esos elementos rinden neutros en vez de rojo, siguiendo el
+   mismo criterio de "un solo acento" en toda la app. `bien`/`alerta` son la única
+   excepción: se mantienen verde/ámbar-naranja para que los estados de turno
+   (Realizado/Ausente) y feriados sigan distinguiéndose de un vistazo. */
 @theme {
-  --color-fondo: #e8dcc0;
-  --color-superficie: #fbf6ea;
-  --color-superficie-2: #f1e7cf;
-  --color-tinta: #2b2016;
-  --color-tinta-suave: #79644a;
-  --color-tinta-tenue: #a5906f;
-  --color-borde: #d5c39d;
-  --color-borde-suave: #e6d8b8;
-  --color-miel: #a3721f;
-  --color-miel-suave: #f0e1bd;
-  --color-vino: #8c3b2e;
-  --color-vino-suave: #f2ddd3;
-  --color-bien: #3f7d4f;
-  --color-bien-suave: #e1ecdc;
-  --color-alerta: #a9761f;
-  --color-alerta-suave: #f3e4c0;
-
-  --font-display:
-    Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
-  /* Sin uso fuera de `.tema-cliente` (ver más abajo) — declaradas acá solo para que
-     Tailwind genere las utilidades `font-body`/`font-hero`. */
-  --font-body: system-ui, sans-serif;
-  --font-hero: Georgia, serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-fondo: #1d160e;
-    --color-superficie: #291f15;
-    --color-superficie-2: #33271a;
-    --color-tinta: #f3e8d2;
-    --color-tinta-suave: #c2a97f;
-    --color-tinta-tenue: #8e7856;
-    --color-borde: #4a3a24;
-    --color-borde-suave: #382c1b;
-    --color-miel: #dcab5c;
-    --color-miel-suave: #3c2f18;
-    --color-vino: #dd8a72;
-    --color-vino-suave: #3d2721;
-    --color-bien: #8fc49b;
-    --color-bien-suave: #243621;
-    --color-alerta: #e0b15c;
-    --color-alerta-suave: #3b2e14;
-  }
-}
-
-body {
-  background-color: var(--color-fondo);
-  color: var(--color-tinta);
-}
-
-/* Paleta del lado cliente (landing, reserva, gestión de turno vía link): crema/negro
-   con ámbar como único acento — tomada del diseño que Franco hizo con la herramienta
-   de diseño de Claude (Peluqueria de Ariel Enrique.html). Scopeada a esta clase (en
-   vez de redefinir el @theme global) para no repintar el panel de admin, que sigue
-   usando la paleta original de arriba. Los componentes de cliente ya están escritos
-   con estos mismos nombres de token (bg-fondo, text-tinta, bg-superficie-2, text-vino,
-   etc.), así que heredan la paleta nueva solo por estar envueltos en esta clase — sin
-   tocarles el código. `vino`/`bien`/`alerta` (errores y estados de turno) quedan en
-   tonos neutros oscuros en vez de rojo/verde, siguiendo el mismo sistema de un único
-   acento (ámbar) del diseño original. */
-.tema-cliente {
   --color-fondo: #f7efe3;
   --color-superficie: #fdf9f0;
   --color-superficie-2: #f0e6d2;
@@ -81,12 +26,17 @@ body {
   --color-miel-suave: #fff3e4;
   --color-vino: #201f1d;
   --color-vino-suave: #ece4d4;
-  --color-bien: #201f1d;
-  --color-bien-suave: #ece4d4;
-  --color-alerta: #201f1d;
-  --color-alerta-suave: #ece4d4;
+  --color-bien: #3f7d4f;
+  --color-bien-suave: #e1ecdc;
+  --color-alerta: #a8541a;
+  --color-alerta-suave: #f3ddc4;
 
   --font-display: 'Cormorant Garamond', Georgia, serif;
   --font-body: 'Lora', system-ui, sans-serif;
   --font-hero: 'Playfair Display', Georgia, serif;
+}
+
+body {
+  background-color: var(--color-fondo);
+  color: var(--color-tinta);
 }

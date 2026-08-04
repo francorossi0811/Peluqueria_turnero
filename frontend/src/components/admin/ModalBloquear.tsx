@@ -67,7 +67,7 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
               type="date"
               value={fechaInicio}
               onChange={(e) => setFechaInicio(e.target.value)}
-              className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+              className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
             />
           </label>
           <label className="flex flex-1 flex-col gap-1">
@@ -79,7 +79,7 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
               value={fechaFin}
               min={fechaInicio}
               onChange={(e) => setFechaFin(e.target.value)}
-              className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+              className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
             />
           </label>
         </div>
@@ -103,7 +103,7 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
                 type="time"
                 value={horaInicio}
                 onChange={(e) => setHoraInicio(e.target.value)}
-                className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
               />
             </label>
             <label className="flex flex-1 flex-col gap-1">
@@ -114,7 +114,7 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
                 type="time"
                 value={horaFin}
                 onChange={(e) => setHoraFin(e.target.value)}
-                className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
               />
             </label>
           </div>
@@ -128,7 +128,7 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
             placeholder="Ej: turno médico"
-            className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           />
         </label>
 

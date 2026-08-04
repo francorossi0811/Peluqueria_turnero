@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
+import { Kicker } from '../../components/ui/Kicker'
 import {
   obtenerHorarioLaboral,
   guardarHorarioLaboral,
@@ -25,7 +26,8 @@ export function HorarioPage() {
   return (
     <div className="flex flex-col gap-10">
       <div>
-        <h1 className="font-display text-tinta mb-4 text-2xl font-semibold">
+        <Kicker>Panel de Ariel</Kicker>
+        <h1 className="font-hero text-tinta mb-4 text-[clamp(26px,3.5vw,34px)] leading-[1.15] font-extrabold">
           Horario laboral
         </h1>
         <SeccionHorarioLaboral />
@@ -132,7 +134,7 @@ function SeccionHorarioLaboral() {
                     onChange={(e) =>
                       actualizarFranja(f.indice, 'horaInicio', e.target.value)
                     }
-                    className="border-borde bg-superficie text-tinta focus:border-vino min-w-0 rounded-md border px-2 py-1 text-sm outline-none"
+                    className="border-borde bg-superficie text-tinta focus:border-miel min-w-0 rounded-md border px-2 py-1 text-sm outline-none"
                   />
                   <span className="text-tinta-tenue">a</span>
                   <input
@@ -141,7 +143,7 @@ function SeccionHorarioLaboral() {
                     onChange={(e) =>
                       actualizarFranja(f.indice, 'horaFin', e.target.value)
                     }
-                    className="border-borde bg-superficie text-tinta focus:border-vino min-w-0 rounded-md border px-2 py-1 text-sm outline-none"
+                    className="border-borde bg-superficie text-tinta focus:border-miel min-w-0 rounded-md border px-2 py-1 text-sm outline-none"
                   />
                   <button
                     onClick={() => eliminarFranja(f.indice)}

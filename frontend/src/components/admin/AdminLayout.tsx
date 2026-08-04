@@ -25,7 +25,7 @@ export function AdminLayout() {
             <p className="text-tinta-suave text-xs font-medium tracking-wide uppercase">
               La Peluquería de Ariel Enrique
             </p>
-            <p className="font-display text-tinta text-lg font-semibold">
+            <p className="font-hero text-tinta text-lg font-semibold">
               Panel de Ariel
             </p>
           </div>
@@ -36,7 +36,7 @@ export function AdminLayout() {
                 to={item.to}
                 className={`rounded-md px-3 py-2 text-sm font-medium transition ${
                   location.pathname === item.to
-                    ? 'bg-vino-suave text-vino'
+                    ? 'bg-miel-suave text-miel'
                     : 'text-tinta-suave hover:text-tinta'
                 }`}
               >

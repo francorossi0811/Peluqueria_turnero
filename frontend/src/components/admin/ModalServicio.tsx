@@ -51,7 +51,7 @@ export function ModalServicio({ servicio, onClose }: ModalServicioProps) {
             autoFocus
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -66,7 +66,7 @@ export function ModalServicio({ servicio, onClose }: ModalServicioProps) {
             step={5}
             value={duracionMinutos}
             onChange={(e) => setDuracionMinutos(Number(e.target.value))}
-            className="border-borde bg-superficie text-tinta focus:border-vino rounded-md border px-3 py-2 outline-none"
+            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           />
         </label>
 

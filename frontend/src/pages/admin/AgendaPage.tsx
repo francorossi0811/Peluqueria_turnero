@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/ui/Button'
+import { Kicker } from '../../components/ui/Kicker'
 import { FilaTurno } from '../../components/admin/FilaTurno'
 import { FilaBloqueo } from '../../components/admin/FilaBloqueo'
 import { ModalEditarTurno } from '../../components/admin/ModalEditarTurno'
@@ -84,10 +85,13 @@ export function AgendaPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-tinta text-2xl font-semibold">
-          Agenda
-        </h1>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Kicker>Panel de Ariel</Kicker>
+          <h1 className="font-hero text-tinta text-[clamp(26px,3.5vw,34px)] leading-[1.15] font-extrabold">
+            Agenda
+          </h1>
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => setModalBloquear(true)}>
             Bloquear horario
@@ -123,7 +127,7 @@ export function AgendaPage() {
               onClick={() => setVista(v)}
               className={`rounded px-3 py-1 text-sm font-medium transition ${
                 vista === v
-                  ? 'bg-vino-suave text-vino'
+                  ? 'bg-miel-suave text-miel'
                   : 'text-tinta-suave hover:text-tinta'
               }`}
             >
