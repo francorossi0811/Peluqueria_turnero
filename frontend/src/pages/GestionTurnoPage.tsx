@@ -6,6 +6,7 @@ import { isAxiosError } from 'axios'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { BotonVolver } from '../components/ui/BotonVolver'
+import { Kicker } from '../components/ui/Kicker'
 import { GrillaHorarios } from '../components/GrillaHorarios'
 import { obtenerTurno, cancelarTurno, reprogramarTurno } from '../api/turnos'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
@@ -129,7 +130,8 @@ export function GestionTurnoPage({ id }: { id: string }) {
             setErrorAccion(null)
           }}
         />
-        <h1 className="font-display text-tinta text-2xl font-semibold">
+        <Kicker>Reprogramar turno</Kicker>
+        <h1 className="font-hero text-tinta text-[clamp(26px,4vw,36px)] leading-[1.15] font-extrabold">
           Elegí nuevo día y horario
         </h1>
         <p className="text-tinta-suave mb-4 text-sm">
@@ -176,8 +178,9 @@ export function GestionTurnoPage({ id }: { id: string }) {
 
   return (
     <PaginaCentrada>
-      <h1 className="font-display text-tinta mb-4 text-2xl font-semibold">
-        Tu turno
+      <Kicker>Tu turno</Kicker>
+      <h1 className="font-hero text-tinta mb-4 text-[clamp(26px,4vw,36px)] leading-[1.15] font-extrabold">
+        {turno.servicio.nombre}
       </h1>
 
       <Card className="mb-4">

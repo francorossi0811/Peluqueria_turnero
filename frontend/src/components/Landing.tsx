@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { Kicker } from './ui/Kicker'
+import { BTN_OUTLINE, BTN_GHOST } from './ui/estilosBoton'
 import type { Servicio } from '../types/api'
 import type { UseQueryResult } from '@tanstack/react-query'
 
@@ -75,23 +76,8 @@ const BENEFICIOS = [
   },
 ]
 
-// Botones del diseño original: outline (acento) y texto solo (ghost) — distintos del
-// <Button> compartido (que es sólido relleno), así que van locales acá nomás.
-const BTN_OUTLINE =
-  'inline-flex items-center justify-center rounded-md border border-miel px-4 py-2.5 font-display text-sm font-semibold text-miel transition hover:bg-miel/10 active:bg-miel/20'
-const BTN_GHOST =
-  'inline-flex items-center justify-center rounded-md px-2 py-2.5 font-display text-sm font-semibold text-miel transition hover:bg-miel/10 active:bg-miel/20'
-
 function scrollA(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-}
-
-function Kicker({ children }: { children: ReactNode }) {
-  return (
-    <span className="mb-3 inline-block rounded bg-[#5a3b0a] px-2.5 py-1 text-xs font-medium tracking-wider text-white uppercase">
-      {children}
-    </span>
-  )
 }
 
 export function Landing({ query, onElegir }: LandingProps) {

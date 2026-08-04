@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
-import { Button } from '../components/ui/Button'
-import { Card } from '../components/ui/Card'
 import { BotonVolver } from '../components/ui/BotonVolver'
+import { Kicker } from '../components/ui/Kicker'
+import { BTN_OUTLINE, BTN_GHOST } from '../components/ui/estilosBoton'
 import { GrillaHorarios } from '../components/GrillaHorarios'
 import { Landing } from '../components/Landing'
 import { obtenerServicios } from '../api/servicios'
@@ -97,10 +98,15 @@ export function ReservarPage() {
 
   return (
     <main className="bg-fondo min-h-screen">
-      <div className="mx-auto max-w-md px-4 py-10">
-        <p className="text-tinta-suave mb-6 text-center text-xs font-medium tracking-wide uppercase">
-          La Peluquería de Ariel Enrique
-        </p>
+      <div className="mx-auto max-w-[820px] px-[clamp(20px,5vw,72px)] py-8">
+        <nav className="border-borde mb-8 flex items-center justify-between border-b pb-4">
+          <span className="font-display text-tinta text-lg font-semibold">
+            La Peluquería de Ariel Enrique
+          </span>
+          <Link to="/" className="text-miel text-sm hover:underline">
+            Volver al inicio
+          </Link>
+        </nav>
 
         {paso === 'horario' && servicio && (
           <PasoHorario
@@ -138,7 +144,11 @@ export function ReservarPage() {
         )}
 
         {paso === 'confirmacion' && turnoCreado && (
-          <PasoConfirmacion turno={turnoCreado} />
+          <PasoConfirmacion
+            turno={turnoCreado}
+            nombre={clienteNombre}
+            telefono={clienteTelefono}
+          />
         )}
       </div>
     </main>
@@ -169,11 +179,12 @@ function PasoHorario({
   return (
     <div>
       <BotonVolver onClick={onVolver} />
-      <h1 className="font-display text-tinta text-2xl font-semibold">
-        Elegí día y horario
+      <Kicker>Reserva de turno</Kicker>
+      <h1 className="font-hero text-tinta mb-2 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
+        {servicio.nombre}
       </h1>
-      <p className="text-tinta-suave mb-4 text-sm">
-        {servicio.nombre} · {servicio.duracionMinutos} min
+      <p className="font-body text-tinta mb-4 opacity-75">
+        Elegí el día y el horario para tu turno · {servicio.duracionMinutos} min
       </p>
 
       {error && (
@@ -201,13 +212,13 @@ function PasoHorario({
         />
       )}
 
-      <Button
-        className="mt-4 w-full"
+      <button
+        className={`${BTN_OUTLINE} mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50`}
         disabled={!fecha || !hora}
         onClick={onContinuar}
       >
         Continuar
-      </Button>
+      </button>
     </div>
   )
 }
@@ -237,19 +248,13 @@ function PasoDatos({
 }) {
   return (
     <div>
-      <BotonVolver onClick={onVolver} />
-      <h1 className="font-display text-tinta mb-4 text-2xl font-semibold">
+      <Kicker>Un paso más</Kicker>
+      <h1 className="font-hero text-tinta mb-2 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
         Tus datos
       </h1>
-
-      <Card className="mb-4">
-        <p className="text-tinta-tenue text-xs tracking-wide uppercase">
-          Resumen
-        </p>
-        <p className="text-tinta mt-1 text-sm">
-          {servicio.nombre} · {fechaLegible(fecha)} · {hora}
-        </p>
-      </Card>
+      <p className="font-body text-tinta mb-4 opacity-80">
+        {servicio.nombre} · {fechaLegible(fecha)} · {hora}
+      </p>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-3">
         <label className="flex flex-col gap-1">
@@ -260,6 +265,7 @@ function PasoDatos({
             required
             value={nombre}
             onChange={(e) => onNombreChange(e.target.value)}
+            placeholder="Ej: Juan Pérez"
             className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           />
         </label>
@@ -272,12 +278,23 @@ function PasoDatos({
             type="tel"
             value={telefono}
             onChange={(e) => onTelefonoChange(e.target.value)}
+            placeholder="Ej: 351 555 1234"
             className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           />
         </label>
-        <Button type="submit" disabled={enviando} className="mt-2">
-          {enviando ? 'Confirmando…' : 'Confirmar turno'}
-        </Button>
+
+        <div className="mt-2 flex gap-3">
+          <button type="button" className={BTN_GHOST} onClick={onVolver}>
+            Volver
+          </button>
+          <button
+            type="submit"
+            disabled={enviando}
+            className={`${BTN_OUTLINE} flex-1 disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            {enviando ? 'Confirmando…' : 'Confirmar turno'}
+          </button>
+        </div>
         <p className="text-tinta-tenue text-center text-xs">
           Sin cuenta ni contraseña — tu turno se gestiona con un link único.
         </p>
@@ -286,44 +303,49 @@ function PasoDatos({
   )
 }
 
-function PasoConfirmacion({ turno }: { turno: Turno }) {
+function PasoConfirmacion({
+  turno,
+  nombre,
+  telefono,
+}: {
+  turno: Turno
+  nombre: string
+  telefono: string
+}) {
   const [copiado, setCopiado] = useState(false)
   const link = `${window.location.origin}/turno/${turno.id}`
 
   return (
-    <div className="text-center">
-      <div className="bg-bien-suave text-bien mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full text-2xl font-bold">
-        ✓
-      </div>
-      <h1 className="font-display text-tinta mb-4 text-2xl font-semibold">
-        ¡Turno confirmado!
+    <div className="mx-auto max-w-[56ch] text-center">
+      <Kicker>Turno confirmado</Kicker>
+      <h1 className="font-hero text-tinta mb-4 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
+        ¡Listo, {nombre}!
       </h1>
-
-      <Card className="mb-4 text-left">
-        <p className="text-tinta-tenue text-xs tracking-wide uppercase">
-          {turno.servicio.nombre}
-        </p>
-        <p className="text-tinta mt-1 text-sm">
-          {fechaLegible(turno.fecha)} · {turno.hora}
-        </p>
-      </Card>
+      <p className="font-body text-tinta mb-2 text-lg">
+        {turno.servicio.nombre}
+      </p>
+      <p className="font-body text-tinta mb-2 text-lg">
+        {fechaLegible(turno.fecha)} · {turno.hora}
+      </p>
+      <p className="font-body text-tinta mb-6 opacity-75">
+        Te contactaremos al {telefono} si hace falta reprogramar.
+      </p>
 
       <label className="text-tinta-tenue mb-2 block text-left text-xs tracking-wide uppercase">
         Tu link para gestionar el turno
       </label>
-      <div className="border-borde bg-superficie-2 text-tinta mb-4 truncate rounded-md border px-3 py-2 text-left text-sm">
+      <div className="border-borde bg-superficie-2 text-tinta mb-3 truncate rounded-md border px-3 py-2 text-left text-sm">
         {link}
       </div>
-      <Button
-        variant="outline"
-        className="w-full"
+      <button
+        className={`${BTN_OUTLINE} w-full`}
         onClick={() => {
           void navigator.clipboard.writeText(link)
           setCopiado(true)
         }}
       >
         {copiado ? 'Copiado ✓' : 'Copiar link'}
-      </Button>
+      </button>
 
       <p className="border-borde bg-superficie-2 text-tinta-suave mt-4 rounded-md border border-dashed px-3 py-2 text-left text-xs">
         <span className="bg-borde-suave mr-1 rounded px-1 py-0.5 font-mono text-[10px] tracking-wide uppercase">
@@ -332,6 +354,10 @@ function PasoConfirmacion({ turno }: { turno: Turno }) {
         Te llegaría este mismo mensaje por WhatsApp cuando Ariel tenga cuenta de
         negocio.
       </p>
+
+      <Link to="/" className={`${BTN_GHOST} mt-6 inline-flex`}>
+        Volver al inicio
+      </Link>
     </div>
   )
 }
