@@ -86,6 +86,24 @@ describe('generarIcs', () => {
     expect(ics).toContain('SEQUENCE:2')
   })
 
+  it('agrega un recordatorio cuando se piden minutos de aviso', () => {
+    const ics = generarIcs({ ...BASE, minutosDeAviso: 120 })
+    expect(ics).toContain('BEGIN:VALARM')
+    expect(ics).toContain('TRIGGER:-PT120M')
+    expect(ics).toContain('ACTION:DISPLAY')
+    expect(ics).toContain('END:VALARM')
+  })
+
+  it('no agrega recordatorio si no se piden minutos de aviso', () => {
+    expect(generarIcs(BASE)).not.toContain('VALARM')
+  })
+
+  it('no incluye invitados: el evento es solo del cliente', () => {
+    const ics = generarIcs({ ...BASE, minutosDeAviso: 120 })
+    expect(ics).not.toContain('ATTENDEE')
+    expect(ics).not.toContain('ORGANIZER')
+  })
+
   it('omite LOCATION si no hay ubicación', () => {
     expect(generarIcs(BASE)).not.toContain('LOCATION:')
     expect(generarIcs({ ...BASE, ubicacion: 'Pastor Taboada 10' })).toContain(

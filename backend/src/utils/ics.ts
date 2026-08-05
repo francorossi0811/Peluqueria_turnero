@@ -77,6 +77,9 @@ export interface EventoIcs {
   creadoEn: Date
   /** Se incrementa cuando el evento cambia, para que el calendario lo actualice. */
   secuencia?: number
+  /** Minutos antes del turno a los que el calendario avisa. Sin esto, avisa (o no)
+   * según la configuración por defecto de cada cliente. */
+  minutosDeAviso?: number
 }
 
 export function generarIcs(evento: EventoIcs): string {
@@ -96,6 +99,19 @@ export function generarIcs(evento: EventoIcs): string {
     `DESCRIPTION:${escaparTexto(evento.descripcion)}`,
     ...(evento.ubicacion
       ? [`LOCATION:${escaparTexto(evento.ubicacion)}`]
+      : []),
+    'STATUS:CONFIRMED',
+    // Recordatorio propio del evento: si no, que le avise o no depende de la
+    // configuración por defecto del calendario de cada cliente. Con esto, el turno
+    // le suena solo — que es la parte de HU-05 que se puede cubrir sin WhatsApp.
+    ...(evento.minutosDeAviso !== undefined
+      ? [
+          'BEGIN:VALARM',
+          'ACTION:DISPLAY',
+          `TRIGGER:-PT${evento.minutosDeAviso}M`,
+          `DESCRIPTION:${escaparTexto(evento.titulo)}`,
+          'END:VALARM',
+        ]
       : []),
     'END:VEVENT',
     'END:VCALENDAR',

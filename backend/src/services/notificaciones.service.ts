@@ -44,6 +44,10 @@ export function linkDeGestion(turnoId: string): string {
 
 const DIRECCION = 'Pastor Taboada 10, X5016 Córdoba'
 
+/** Cuánto antes avisa el calendario. Dos horas: suficiente para reacomodarse, y todavía
+ * dentro de la ventana de 60 minutos para poder cancelar o reprogramar online. */
+const MINUTOS_DE_AVISO = 120
+
 /** HU-19 — Arma el evento de calendario de un turno.
  *
  * El UID se basa en el turno *original* de la cadena de reprogramaciones
@@ -64,6 +68,7 @@ export function construirEventoIcs(turno: Turno): EventoIcs {
       `Podés cancelar o reprogramar hasta 60 minutos antes del turno.`,
     ubicacion: DIRECCION,
     creadoEn: turno.createdAt,
+    minutosDeAviso: MINUTOS_DE_AVISO,
   }
 }
 
