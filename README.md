@@ -124,9 +124,19 @@ Una sola variable: `VITE_API_URL`, con la URL de Render **más `/api`** — por 
 cambiarla hay que redeployar.
 
 Como es una SPA con rutas de cliente (`/turno/:id`, `/admin/...`), entrar directo a una de
-esas URLs tiene que servir `index.html`. El preset de Vite en Vercel ya lo resuelve; si
-alguna ruta profunda diera 404, agregar un `vercel.json` con un rewrite de `/(.*)` a
-`/index.html`.
+esas URLs tiene que servir `index.html`. **El preset de Vite no alcanza:** sin ayuda,
+Vercel busca un archivo físico en `/admin`, no lo encuentra y devuelve 404 antes de que
+React Router llegue a intervenir. Solo funcionaría la raíz, y el link único que va en cada
+mail (`/turno/:id`) quedaría roto para todos los clientes.
+
+Por eso está `frontend/vercel.json`, que reescribe cualquier ruta a `index.html`:
+
+```json
+{ "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+```
+
+No afecta a los assets (`/assets/...`): Vercel sirve primero los archivos que existen y
+solo reescribe lo que no encuentra.
 
 ### 3. Después de deployar, revisar
 
