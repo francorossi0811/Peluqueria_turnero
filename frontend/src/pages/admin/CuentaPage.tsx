@@ -14,11 +14,12 @@ import {
 } from '../../api/push'
 import { clearToken, setToken } from '../../lib/authStorage'
 import {
+  crearSuscripcion,
   desuscribirse,
   esIOS,
   estaInstaladaComoApp,
+  pedirPermiso,
   soportaPush,
-  suscribirse,
   suscripcionActual,
 } from '../../lib/push'
 import type { ErrorApi } from '../../types/api'
@@ -109,24 +110,47 @@ function SeccionNotificaciones() {
   async function activar() {
     setError(null)
     setMensaje(null)
+
+    // El permiso va PRIMERO, antes de cualquier await: ver el comentario de
+    // `pedirPermiso()`. Pedirlo después de ir a buscar la clave al backend funciona en
+    // Android pero falla en iPhone, y falla en silencio.
+    let permiso: NotificationPermission
+    try {
+      permiso = await pedirPermiso()
+    } catch {
+      setError(
+        'Este dispositivo no nos deja pedir el permiso. En iPhone tiene que ser iOS 16.4 o más nuevo, y el panel abierto desde el ícono de la pantalla de inicio.',
+      )
+      return
+    }
+
+    if (permiso === 'denied') {
+      setError(
+        'Las notificaciones están bloqueadas para este sitio. En iPhone se habilitan en Ajustes → Notificaciones, buscando "Panel de Ariel"; en Android, desde los ajustes del sitio en Chrome.',
+      )
+      return
+    }
+    if (permiso !== 'granted') {
+      setError('Quedó sin permiso. Tocá de nuevo y elegí "Permitir".')
+      return
+    }
+
     setTrabajando(true)
     try {
       const clave = await obtenerClavePublica()
-      const suscripcion = await suscribirse(clave)
+      const suscripcion = await crearSuscripcion(clave)
       await registrarSuscripcion(suscripcion)
       setSuscripto(true)
       setMensaje('Listo, ya te van a llegar los avisos a este dispositivo.')
     } catch (err) {
-      if (err instanceof Error && err.message === 'PERMISO_DENEGADO') {
-        setError(
-          'Bloqueaste las notificaciones para este sitio. Hay que habilitarlas desde la configuración del navegador y volver a intentar.',
-        )
-      } else if (isAxiosError(err) && err.response?.status === 503) {
+      if (isAxiosError(err) && err.response?.status === 503) {
         setError(
           'El servidor todavía no tiene configuradas las notificaciones push.',
         )
       } else {
-        setError('No pudimos activar los avisos. Probá de nuevo.')
+        setError(
+          `No pudimos activar los avisos: ${err instanceof Error ? err.message : 'error desconocido'}`,
+        )
       }
     } finally {
       setTrabajando(false)
@@ -174,8 +198,11 @@ function SeccionNotificaciones() {
 
       {!soportado && (
         <p className="text-tinta-suave mt-3 text-sm">
-          Este navegador no soporta notificaciones. Probá desde Chrome en la
-          computadora o el celular.
+          {enIOS
+            ? // En iPhone todos los navegadores usan el motor de Safari, así que sugerir
+              // "probá con Chrome" no serviría de nada: la limitación es del sistema.
+              'Este iPhone no soporta avisos web. Hacen falta iOS 16.4 o más nuevo y tener el panel agregado a la pantalla de inicio.'
+            : 'Este navegador no soporta notificaciones. Probá desde Chrome en la computadora o el celular.'}
         </p>
       )}
 

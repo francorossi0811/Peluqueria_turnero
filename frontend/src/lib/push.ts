@@ -57,18 +57,27 @@ export async function suscripcionActual(): Promise<PushSubscription | null> {
   return (await registro?.pushManager.getSubscription()) ?? null
 }
 
-/** Pide permiso y crea la suscripción. Tiene que llamarse desde un gesto real del
- * usuario (un click), o el navegador rechaza el pedido de permiso. */
-export async function suscribirse(
+/** Pide permiso para notificar.
+ *
+ * **Tiene que ser lo primero que corra en el handler del click, sin ningún `await`
+ * antes.** El navegador solo acepta este pedido mientras siga vigente la "activación
+ * transitoria" que otorga al tocar un botón, y esperar una respuesta de red o el
+ * registro del service worker la consume.
+ *
+ * Chrome es permisivo y lo acepta igual, así que un orden equivocado funciona en Android
+ * y falla **solo en iPhone**: Safari lo rechaza sin siquiera mostrar el diálogo, lo que
+ * se ve como "el botón no hace nada". Por eso esto está separado de `crearSuscripcion`,
+ * que sí necesita esperar a la red. */
+export async function pedirPermiso(): Promise<NotificationPermission> {
+  return Notification.requestPermission()
+}
+
+/** Crea la suscripción. Llamar solo después de que `pedirPermiso` devolvió 'granted'. */
+export async function crearSuscripcion(
   clavePublica: string,
 ): Promise<PushSubscriptionJSON> {
   const registro = await registrarServiceWorker()
   await navigator.serviceWorker.ready
-
-  const permiso = await Notification.requestPermission()
-  if (permiso !== 'granted') {
-    throw new Error('PERMISO_DENEGADO')
-  }
 
   const suscripcion = await registro.pushManager.subscribe({
     // Obligatorio en Chrome: no se admiten pushes sin payload visible para el usuario.
