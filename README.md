@@ -53,12 +53,24 @@ apuntan al mismo repo, cada uno con su carpeta como raíz.
 | Campo | Valor |
 |---|---|
 | Root Directory | `backend` |
-| Build Command | `npm install && npm run migrate:deploy` |
+| Build Command | `npm install && npm run migrate:deploy && npm run seed` |
 | Start Command | `npm start` |
 
-El `npm install` dispara el `postinstall` que corre `prisma generate`, y
-`migrate:deploy` aplica las migraciones a la base de producción. Sin ese segundo paso la
-base queda vacía: sin tablas y, sobre todo, sin el `EXCLUDE` que impide la doble reserva.
+Los tres pasos del build, en orden: `npm install` dispara el `postinstall` que corre
+`prisma generate`; `migrate:deploy` aplica las migraciones (sin esto la base queda sin
+tablas y, sobre todo, sin el `EXCLUDE` que impide la doble reserva); y `seed` crea los
+cuatro servicios, el horario laboral y la cuenta de Ariel.
+
+**El seed va en el build a propósito**, y no como paso manual: el plan gratuito de Render
+no da acceso a shell, así que no hay dónde correrlo a mano. Es seguro que se repita en
+cada deploy porque `prisma/seed.ts` es idempotente — cada bloque comprueba si el dato ya
+existe antes de crearlo. En particular, **el administrador solo se crea si no existe**, así
+que si Ariel cambia su contraseña desde el panel, un redeploy no se la revierte.
+
+> Si preferís no atar el deploy al seed, la alternativa es correrlo una sola vez desde tu
+> máquina apuntando a la base de producción:
+> `DATABASE_URL="<la-url-de-neon>" npm run seed` dentro de `backend/`. Neon es accesible
+> por internet, así que no hace falta shell en Render.
 
 Variables de entorno (las mismas de `backend/.env.example`):
 
@@ -74,11 +86,31 @@ Variables de entorno (las mismas de `backend/.env.example`):
   imprime por consola en vez de enviarse
 - `MAIL_REPLY_TO` — a dónde responden los clientes. Conviene el mail de la peluquería
 
-Después del primer deploy, crear la cuenta de admin una sola vez (Render → Shell):
+#### Cómo generar los secretos
+
+**`JWT_SECRET`** — firma los tokens de sesión del panel. Cualquiera que lo tenga puede
+fabricarse un token válido y entrar como Ariel, así que tiene que ser largo y aleatorio,
+distinto del de desarrollo, y no salir nunca del panel de variables de Render:
 
 ```bash
-npx prisma db seed
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
+
+**Claves VAPID** — identifican a este servidor ante los servicios de push de Google y
+Apple. Se generan de a pares y van juntas:
+
+```bash
+cd backend && npx web-push generate-vapid-keys
+```
+
+Imprime una pública y una privada: van en `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY`.
+`VAPID_SUBJECT` es un dato de contacto en formato `mailto:` (por ejemplo
+`mailto:turnos@lapeluqueria.com`) que el servicio de push usa si necesita reportar un
+problema con los envíos.
+
+Generá un par nuevo para producción y **no lo cambies después**: las suscripciones que
+Ariel ya tenga están firmadas contra la clave pública vigente, y si la reemplazás el
+celular deja de recibir avisos hasta volver a activarlos desde "Mi cuenta".
 
 ### 2. Frontend (Vercel → Add New Project)
 
@@ -98,6 +130,9 @@ alguna ruta profunda diera 404, agregar un `vercel.json` con un rewrite de `/(.*
 
 ### 3. Después de deployar, revisar
 
+- Que el log del build de Render termine con `Seed listo: { servicios: 4, franjas: 10,
+  administradores: 1 }` — si dice `administradores: 0`, faltó `ADMIN_USUARIO` o
+  `ADMIN_PASSWORD`
 - Reservar un turno de prueba con email y confirmar que el mail llega con un link de la
   URL de Vercel, no de localhost — es el error más fácil de cometer
 - Desde el celular de Ariel: **Mi cuenta → Activar avisos en este dispositivo → Enviar

@@ -55,6 +55,11 @@ SELECT conname FROM pg_constraint WHERE conname = 'turnos_no_solapamiento';
 - `npm start` — corre el server con `tsx`, o sea TypeScript directo, sin paso de compilado
 - `npm run migrate:deploy` — aplica las migraciones pendientes; es lo que corre en el
   deploy (en desarrollo se usa `prisma migrate dev`)
+- `npm run seed` — carga servicios, horario laboral y la cuenta de admin. Idempotente:
+  cada bloque comprueba si el dato existe antes de crearlo, y el administrador **no** se
+  pisa si ya está, así que correrlo de nuevo nunca revierte una contraseña cambiada desde
+  el panel. Por eso puede vivir en el build de Render, donde no hay shell para correrlo
+  a mano
 - `npm run lint` — lint con oxlint
 - `npm run format` — formatea con Prettier
 - `npm test` — tests con vitest
