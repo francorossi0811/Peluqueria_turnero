@@ -9,8 +9,19 @@ import {
   guardarHorarioLaboral,
 } from '../../api/horarioLaboral'
 import { obtenerFeriados, actualizarFeriado } from '../../api/feriados'
+import { FilaServicio } from '../../components/admin/FilaServicio'
+import { ModalServicio } from '../../components/admin/ModalServicio'
+import {
+  actualizarServicio,
+  obtenerServiciosAdmin,
+} from '../../api/servicios'
 import { fechaLegible } from '../../utils/fecha'
-import type { ErrorApi, Feriado, FranjaHorario } from '../../types/api'
+import type {
+  ErrorApi,
+  Feriado,
+  FranjaHorario,
+  ServicioAdmin,
+} from '../../types/api'
 
 const DIAS = [
   'Domingo',
@@ -22,22 +33,38 @@ const DIAS = [
   'Sábado',
 ]
 
-export function HorarioPage() {
+// Las tres secciones de acá son lo mismo desde el punto de vista de Ariel: definen
+// *cuándo* atiende y *qué* ofrece. Ninguna se toca seguido — se configuran una vez y se
+// ajustan cada tanto — así que no justificaban una entrada cada una en el nav.
+export function HorariosServiciosPage() {
   return (
     <div className="flex flex-col gap-10">
       <div>
         <Kicker>Panel de Ariel</Kicker>
-        <h1 className="font-hero text-tinta mb-4 text-[clamp(26px,3.5vw,34px)] leading-[1.15] font-extrabold">
-          Horario laboral
+        <h1 className="font-hero text-tinta mb-1 text-[clamp(26px,3.5vw,34px)] leading-[1.15] font-extrabold">
+          Horarios y servicios
         </h1>
+        <p className="text-tinta-suave text-sm">
+          Todo lo de esta pantalla cambia los horarios que ven los clientes al
+          reservar.
+        </p>
+      </div>
+
+      <div>
+        <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
+          Horario laboral
+        </h2>
         <SeccionHorarioLaboral />
       </div>
+
       <div>
         <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
           Feriados
         </h2>
         <SeccionFeriados />
       </div>
+
+      <SeccionServicios />
     </div>
   )
 }
@@ -237,6 +264,74 @@ function SeccionFeriados() {
           </div>
         </Card>
       ))}
+    </div>
+  )
+}
+
+function SeccionServicios() {
+  const queryClient = useQueryClient()
+  const [modalNuevo, setModalNuevo] = useState(false)
+  const [servicioEditar, setServicioEditar] = useState<ServicioAdmin | null>(
+    null,
+  )
+
+  const serviciosQuery = useQuery({
+    queryKey: ['servicios-admin'],
+    queryFn: obtenerServiciosAdmin,
+  })
+
+  const cambiarActivoMutation = useMutation({
+    mutationFn: ({ id, activo }: { id: string; activo: boolean }) =>
+      actualizarServicio(id, { activo }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['servicios-admin'] })
+    },
+  })
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-tinta text-xl font-semibold">
+          Servicios
+        </h2>
+        <Button variant="primaryVino" onClick={() => setModalNuevo(true)}>
+          + Nuevo servicio
+        </Button>
+      </div>
+
+      {serviciosQuery.isPending && (
+        <p className="text-tinta-suave">Cargando servicios…</p>
+      )}
+      {serviciosQuery.isError && (
+        <p className="text-vino">No pudimos cargar los servicios.</p>
+      )}
+
+      {serviciosQuery.data && (
+        <div className="flex flex-col gap-2">
+          {serviciosQuery.data.map((s) => (
+            <FilaServicio
+              key={s.id}
+              servicio={s}
+              onEditar={() => setServicioEditar(s)}
+              onCambiarActivo={() =>
+                cambiarActivoMutation.mutate({ id: s.id, activo: !s.activo })
+              }
+              cambiando={
+                cambiarActivoMutation.isPending &&
+                cambiarActivoMutation.variables?.id === s.id
+              }
+            />
+          ))}
+        </div>
+      )}
+
+      {modalNuevo && <ModalServicio onClose={() => setModalNuevo(false)} />}
+      {servicioEditar && (
+        <ModalServicio
+          servicio={servicioEditar}
+          onClose={() => setServicioEditar(null)}
+        />
+      )}
     </div>
   )
 }

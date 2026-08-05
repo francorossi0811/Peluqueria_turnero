@@ -57,13 +57,20 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
       onClose()
     },
     onError: (err) => {
-      const codigo = isAxiosError<ErrorApi>(err)
-        ? err.response?.data.error.codigo
+      const datos = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error
         : null
-      if (codigo === 'HORARIO_NO_DISPONIBLE') {
+      if (datos?.codigo === 'HORARIO_NO_DISPONIBLE') {
         setError('Ese horario se acaba de ocupar. Elegí otro.')
         setHora(null)
         void queryClient.invalidateQueries({ queryKey: ['disponibilidad'] })
+        return
+      }
+      // El backend valida el teléfono y el mail (backend/src/utils/validaciones.ts).
+      // Su mensaje dice qué campo está mal; el genérico de abajo dejaría a Ariel
+      // adivinando.
+      if (datos?.codigo === 'PARAMETROS_INVALIDOS') {
+        setError(datos.mensaje)
         return
       }
       setError('No pudimos cargar el turno. Probá de nuevo.')

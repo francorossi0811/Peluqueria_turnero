@@ -3,3 +3,12 @@ dist/
 .env
 .DS_Store
 *.log
+
+# Material fuente del diseño (originales sin renombrar y exports de la herramienta de
+# diseño). Las imágenes que la app realmente usa viven en frontend/public/imagenes/.
+/imagenes/
+*.zip
+
+# Lock huérfano: en la raíz no hay package.json. Los reales son backend/package-lock.json
+# y frontend/package-lock.json, y esos sí se versionan.
+/package-lock.json

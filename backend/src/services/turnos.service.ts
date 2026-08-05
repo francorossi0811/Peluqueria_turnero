@@ -8,6 +8,7 @@ import {
   HorarioNoDisponibleError,
   TurnoNoEncontradoError,
   TurnoNoModificableError,
+  TurnoYaTieneEmailError,
 } from './errores'
 import {
   ahoraArgentina,
@@ -215,6 +216,37 @@ export async function reprogramarTurno(
     if (esViolacionDeSolapamiento(err)) throw new HorarioNoDisponibleError()
     throw err
   }
+}
+
+/**
+ * HU-19 — El cliente que reservó sin dejar mail lo carga después, desde la pantalla de
+ * confirmación, para recibir ahí el link de gestión.
+ *
+ * **Se puede una sola vez por turno, y solo si todavía no tiene mail.** Ese límite no es
+ * un capricho de producto: el id del turno *es* el token de acceso, así que cualquiera
+ * con el link puede llamar a este endpoint. Sin el límite, el backend sería una máquina
+ * de mandar mails a direcciones arbitrarias, todas las veces que se quiera. Con él, cada
+ * turno dispara como mucho un mail extra, al que lo pidió.
+ *
+ * El `updateMany` con `clienteEmail: null` en el `where` hace que el chequeo y la
+ * escritura sean una sola operación atómica: dos requests simultáneos no pueden pasar
+ * los dos. El `obtenerTurno` de arriba está solo para poder decir *por qué* falló.
+ */
+export async function guardarEmailDelCliente(
+  id: string,
+  email: string,
+): Promise<Turno> {
+  const turno = await obtenerTurno(id)
+  validarEsReservado(turno)
+  if (turno.clienteEmail) throw new TurnoYaTieneEmailError()
+
+  const { count } = await prisma.turno.updateMany({
+    where: { id, estado: 'reservado', clienteEmail: null },
+    data: { clienteEmail: email },
+  })
+  if (count === 0) throw new TurnoYaTieneEmailError()
+
+  return obtenerTurno(id)
 }
 
 /**

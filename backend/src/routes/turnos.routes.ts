@@ -3,6 +3,7 @@ import {
   getTurno,
   getTurnoIcs,
   postCancelarTurno,
+  postEnviarConfirmacion,
   postReprogramarTurno,
   postTurno,
 } from '../controllers/turnos.controller'
@@ -16,3 +17,5 @@ turnosRouter.get('/turnos/:id', getTurno)
 turnosRouter.get('/turnos/:id/calendario.ics', getTurnoIcs)
 turnosRouter.post('/turnos/:id/cancelar', postCancelarTurno)
 turnosRouter.post('/turnos/:id/reprogramar', postReprogramarTurno)
+// HU-19 — Cargar el mail después de reservar, para recibir el link. Un solo uso.
+turnosRouter.post('/turnos/:id/enviar-confirmacion', postEnviarConfirmacion)

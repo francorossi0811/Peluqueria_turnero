@@ -7,6 +7,7 @@ import {
   crearTurno,
   editarTurno,
   estaDentroDeVentanaDeCambio,
+  guardarEmailDelCliente,
   listarTurnosEnRango,
   marcarTurno,
   marcarTurnosComoVistos,
@@ -19,6 +20,7 @@ import {
   ServicioNoDisponibleError,
   TurnoNoEncontradoError,
   TurnoNoModificableError,
+  TurnoYaTieneEmailError,
 } from '../services/errores'
 import {
   enviarConfirmacionDeTurno,
@@ -31,6 +33,10 @@ import {
   formatearFecha,
   formatearHora,
 } from '../utils/fechaHora'
+import {
+  esTelefonoValido,
+  MENSAJE_TELEFONO_INVALIDO,
+} from '../utils/validaciones'
 import type { Turno } from '../../generated/prisma/client.ts'
 
 const horaSchema = z
@@ -42,7 +48,12 @@ const bodySchema = z.object({
   fecha: z.iso.date(),
   hora: horaSchema,
   clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
-  clienteTelefono: z.string().trim().min(6, 'Teléfono inválido.'),
+  // El `min(6)` de antes dejaba pasar "abcdef": Ariel necesita este número para poder
+  // llamar o escribir por WhatsApp, así que tiene que ser un teléfono de verdad.
+  clienteTelefono: z
+    .string()
+    .trim()
+    .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO),
   // HU-19 — Opcional. El `preprocess` es necesario porque un input de texto vacío llega
   // como `""`, que no pasa la validación de email; sin esto, dejar el campo en blanco
   // daría error en vez de significar "no dejó mail".
@@ -232,6 +243,54 @@ export async function getTurnoIcs(req: Request, res: Response) {
     res.setHeader('Content-Disposition', 'attachment; filename="turno.ics"')
     res.send(icsDeTurno(turno))
   } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+const emailSchema = z.object({
+  email: z.email('El email no parece válido.'),
+})
+
+/** HU-19 — El cliente que reservó sin dejar mail lo carga desde la pantalla de
+ * confirmación y recibe ahí mismo su link.
+ *
+ * Público, sin auth, igual que el resto de `/turnos/:id`: el id es el token. El límite
+ * de un solo uso por turno —el motivo por el que esto no es un relay de mails abierto—
+ * está explicado en `guardarEmailDelCliente`. */
+export async function postEnviarConfirmacion(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = emailSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const { email } = bodyParsed.data
+
+  try {
+    const turno = await guardarEmailDelCliente(idParsed.data.id, email)
+    res.json({ email })
+
+    void enviarConfirmacionDeTurno(turno)
+  } catch (err) {
+    if (err instanceof TurnoYaTieneEmailError) {
+      res.status(409).json({
+        error: {
+          codigo: 'TURNO_YA_TIENE_EMAIL',
+          mensaje: 'Este turno ya tiene un email cargado.',
+        },
+      })
+      return
+    }
     if (manejarErroresComunes(err, res)) return
     throw err
   }

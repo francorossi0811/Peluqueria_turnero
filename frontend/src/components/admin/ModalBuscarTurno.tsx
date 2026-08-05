@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Button } from '../../components/ui/Button'
-import { Card } from '../../components/ui/Card'
-import { Kicker } from '../../components/ui/Kicker'
+import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
+import { Modal } from '../ui/Modal'
 import { buscarTurnos } from '../../api/agenda'
 import { fechaLegible } from '../../utils/fecha'
 import type { EstadoTurno, TurnoAdmin } from '../../types/api'
+
+// Caso borde de Docs/historias-de-usuario-casos-de-uso.md §4: el cliente perdió su link
+// único y Ariel se lo tiene que reenviar. Antes era una página propia en el nav; es una
+// acción puntual sobre la agenda, no una sección donde uno se queda, así que vive acá
+// junto a "Cargar turno" y "Bloquear horario".
 
 const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
   reservado: 'Reservado',
@@ -23,8 +28,10 @@ const ESTILO_ESTADO: Record<EstadoTurno, string> = {
   ausente: 'bg-alerta-suave text-alerta',
 }
 
-// Caso borde: cliente perdió su link único — Ariel lo busca acá para reenviárselo.
-export function BuscarTurnoPage() {
+const INPUT =
+  'border-borde bg-superficie text-tinta focus:border-miel w-full rounded-md border px-3 py-2 outline-none'
+
+export function ModalBuscarTurno({ onClose }: { onClose: () => void }) {
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
 
@@ -45,36 +52,35 @@ export function BuscarTurnoPage() {
   }
 
   return (
-    <div>
-      <Kicker>Panel de Ariel</Kicker>
-      <h1 className="font-hero text-tinta mb-4 text-[clamp(26px,3.5vw,34px)] leading-[1.15] font-extrabold">
-        Buscar turno
-      </h1>
+    <Modal titulo="Buscar turno" onClose={onClose}>
       <p className="text-tinta-suave mb-4 text-sm">
         Para cuando un cliente perdió su link y necesitás reenviárselo.
       </p>
 
-      <form onSubmit={buscar} className="mb-6 flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-            Nombre
-          </span>
-          <input
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-            Teléfono
-          </span>
-          <input
-            value={telefono}
-            onChange={(e) => setTelefono(e.target.value)}
-            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
-          />
-        </label>
+      <form onSubmit={buscar} className="mb-4 flex flex-col gap-3">
+        <div className="flex flex-wrap gap-3">
+          <label className="flex min-w-[8rem] flex-1 flex-col gap-1">
+            <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+              Nombre
+            </span>
+            <input
+              autoFocus
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className={INPUT}
+            />
+          </label>
+          <label className="flex min-w-[8rem] flex-1 flex-col gap-1">
+            <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+              Teléfono
+            </span>
+            <input
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              className={INPUT}
+            />
+          </label>
+        </div>
         <Button
           type="submit"
           variant="primaryVino"
@@ -84,10 +90,14 @@ export function BuscarTurnoPage() {
         </Button>
       </form>
 
-      {mutation.isSuccess && mutation.data.length === 0 && (
-        <p className="text-tinta-suave">No encontramos turnos.</p>
+      {mutation.isError && (
+        <p className="text-vino text-sm">
+          No pudimos buscar. Probá de nuevo.
+        </p>
       )}
-
+      {mutation.isSuccess && mutation.data.length === 0 && (
+        <p className="text-tinta-suave text-sm">No encontramos turnos.</p>
+      )}
       {mutation.isSuccess && mutation.data.length > 0 && (
         <div className="flex flex-col gap-2">
           {mutation.data.map((t) => (
@@ -95,7 +105,7 @@ export function BuscarTurnoPage() {
           ))}
         </div>
       )}
-    </div>
+    </Modal>
   )
 }
 

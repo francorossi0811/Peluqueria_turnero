@@ -73,11 +73,17 @@ Response:
 | POST | `/api/turnos/:id/cancelar` | Cancela el turno, valida ventana de 60 min (CU-02) |
 | POST | `/api/turnos/:id/reprogramar` | Reprograma a un nuevo horario, valida ventana de 60 min + disponibilidad (CU-02, HU-04) |
 | GET | `/api/turnos/:id/calendario.ics` | El turno como evento de calendario (HU-19). Devuelve `text/calendar`, no JSON. Público por el mismo motivo que `GET /api/turnos/:id`: el id *es* el token |
+| POST | `/api/turnos/:id/enviar-confirmacion` | Carga el email de un turno que no lo tenía y le manda la confirmación (HU-19). **Un solo uso por turno** |
 
 `POST /api/turnos` acepta además `clienteEmail` (opcional, HU-19). Un string vacío se
 trata como "no dejó email"; uno con formato inválido responde `400 PARAMETROS_INVALIDOS`.
 Si hay email, se envía la confirmación con el link y el `.ics` adjunto — también al
 reprogramar, porque reprogramar genera un turno nuevo y por lo tanto un link nuevo.
+
+`clienteTelefono` se valida contra la regla de `backend/src/utils/validaciones.ts`:
+dígitos, espacios, guiones, paréntesis y un `+` inicial, con entre 8 y 15 dígitos. Lo que
+no la cumple responde `400 PARAMETROS_INVALIDOS`. Vale igual para la carga manual de
+Ariel (`POST /api/admin/turnos`), que extiende el mismo schema.
 
 **POST `/api/turnos`** — body:
 ```json
@@ -98,6 +104,21 @@ minutos:
 ```json
 { "error": { "codigo": "FUERA_DE_VENTANA_CANCELACION", "mensaje": "Ya no podés cancelar online. Contactá directamente a Ariel." } }
 ```
+
+**POST `/api/turnos/:id/enviar-confirmacion`** — body `{ "email": "juana@gmail.com" }`.
+Guarda el email en el turno y le manda la confirmación con el link y el `.ics`. Response
+`200`: `{ "email": "juana@gmail.com" }`.
+
+Es para el cliente que reservó sin dejar email y lo carga después, desde la pantalla de
+confirmación. **Solo funciona si el turno todavía no tiene email y está `reservado`**; si
+ya tiene, responde `409 TURNO_YA_TIENE_EMAIL`. Ese límite es lo que evita que el endpoint
+sea un relay de mails abierto: el id del turno es el token, así que cualquiera con el link
+puede llamarlo, y sin el límite se podrían disparar mails a direcciones arbitrarias sin
+tope. El chequeo y la escritura son una sola operación atómica (`updateMany` con
+`clienteEmail: null` en el `where`), así que dos requests simultáneos no pasan los dos.
+
+Como efecto secundario deseado, el email queda guardado en el turno: si el cliente después
+reprograma, la reprogramación también le llega por mail.
 
 **POST `/api/turnos/:id/reprogramar`** — mismo body que la creación (`fecha`, `hora`, y
 opcionalmente nuevo `servicioId`). Internamente: valida ventana de 60 min sobre el turno

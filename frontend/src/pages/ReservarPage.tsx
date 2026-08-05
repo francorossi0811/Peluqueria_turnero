@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { BotonVolver } from '../components/ui/BotonVolver'
@@ -9,13 +8,31 @@ import { GrillaHorarios } from '../components/GrillaHorarios'
 import { Landing } from '../components/Landing'
 import { obtenerServicios } from '../api/servicios'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
-import { crearTurno, urlCalendario } from '../api/turnos'
+import { crearTurno, enviarConfirmacion, urlCalendario } from '../api/turnos'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
+import {
+  esEmailValido,
+  esTelefonoValido,
+  MENSAJE_EMAIL_INVALIDO,
+  MENSAJE_TELEFONO_INVALIDO,
+} from '../utils/validaciones'
 import type { DisponibilidadDia, ErrorApi, Servicio, Turno } from '../types/api'
 
 type Paso = 'servicio' | 'horario' | 'datos' | 'confirmacion'
 
 const DIAS_A_MOSTRAR = 14
+
+const INPUT_BASE = 'rounded-md border px-3 py-2 outline-none bg-superficie text-tinta'
+
+function claseInput(conError: boolean): string {
+  return conError
+    ? `${INPUT_BASE} border-vino`
+    : `${INPUT_BASE} border-borde focus:border-miel`
+}
+
+function ErrorCampo({ children }: { children: React.ReactNode }) {
+  return <span className="text-vino text-xs">{children}</span>
+}
 
 export function ReservarPage() {
   const queryClient = useQueryClient()
@@ -79,6 +96,26 @@ export function ReservarPage() {
     setFecha(null)
     setHora(null)
     setPaso('horario')
+    // La landing es larga y el click sale de la grilla de servicios, allá abajo: sin
+    // esto el wizard aparece con la página scrolleada a la mitad.
+    window.scrollTo({ top: 0 })
+  }
+
+  // La landing NO es otra ruta: es el primer paso de esta misma página, que vive en "/".
+  // Por eso "volver al inicio" no puede ser un <Link to="/"> — navegar a la ruta en la
+  // que ya estás no remonta nada y el paso queda donde estaba (el botón no hacía nada).
+  // Volver al inicio es resetear el wizard.
+  function volverAlInicio() {
+    setPaso('servicio')
+    setServicio(null)
+    setFecha(null)
+    setHora(null)
+    setClienteNombre('')
+    setClienteTelefono('')
+    setClienteEmail('')
+    setTurnoCreado(null)
+    setErrorHorario(null)
+    window.scrollTo({ top: 0 })
   }
 
   function confirmar(e: React.FormEvent) {
@@ -107,9 +144,12 @@ export function ReservarPage() {
           <span className="font-display text-tinta text-lg font-semibold">
             La Peluquería de Ariel Enrique
           </span>
-          <Link to="/" className="text-miel text-sm hover:underline">
+          <button
+            onClick={volverAlInicio}
+            className="text-miel text-sm hover:underline"
+          >
             Volver al inicio
-          </Link>
+          </button>
         </nav>
 
         {paso === 'horario' && servicio && (
@@ -155,6 +195,7 @@ export function ReservarPage() {
             nombre={clienteNombre}
             telefono={clienteTelefono}
             email={clienteEmail.trim()}
+            onVolverAlInicio={volverAlInicio}
           />
         )}
       </div>
@@ -257,6 +298,35 @@ function PasoDatos({
   onVolver: () => void
   onSubmit: (e: React.FormEvent) => void
 }) {
+  const [errores, setErrores] = useState<{
+    nombre?: string
+    telefono?: string
+    email?: string
+  }>({})
+
+  // El form va con `noValidate` y valida acá: si dejáramos la validación nativa del
+  // navegador, el submit se frenaría antes de llegar a esta función y el cliente vería
+  // la burbuja gris del navegador en vez del error en el campo, con el estilo del resto.
+  function manejarSubmit(e: React.FormEvent) {
+    e.preventDefault()
+
+    const nuevos: typeof errores = {}
+    if (!nombre.trim()) nuevos.nombre = 'Poné tu nombre y apellido.'
+    if (!esTelefonoValido(telefono)) nuevos.telefono = MENSAJE_TELEFONO_INVALIDO
+    // El email es opcional: solo se valida si escribió algo.
+    if (email.trim() && !esEmailValido(email))
+      nuevos.email = MENSAJE_EMAIL_INVALIDO
+
+    setErrores(nuevos)
+    if (Object.keys(nuevos).length > 0) return
+
+    onSubmit(e)
+  }
+
+  function limpiarError(campo: keyof typeof errores) {
+    setErrores((prev) => (prev[campo] ? { ...prev, [campo]: undefined } : prev))
+  }
+
   return (
     <div>
       <Kicker>Un paso más</Kicker>
@@ -267,31 +337,38 @@ function PasoDatos({
         {servicio.nombre} · {fechaLegible(fecha)} · {hora}
       </p>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <form onSubmit={manejarSubmit} noValidate className="flex flex-col gap-3">
         <label className="flex flex-col gap-1">
           <span className="text-tinta-tenue text-xs tracking-wide uppercase">
             Nombre y apellido
           </span>
           <input
-            required
             value={nombre}
-            onChange={(e) => onNombreChange(e.target.value)}
+            onChange={(e) => {
+              onNombreChange(e.target.value)
+              limpiarError('nombre')
+            }}
             placeholder="Ej: Juan Pérez"
-            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+            className={claseInput(Boolean(errores.nombre))}
           />
+          {errores.nombre && <ErrorCampo>{errores.nombre}</ErrorCampo>}
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-tinta-tenue text-xs tracking-wide uppercase">
             Teléfono
           </span>
           <input
-            required
             type="tel"
+            inputMode="tel"
             value={telefono}
-            onChange={(e) => onTelefonoChange(e.target.value)}
-            placeholder="Ej: 351 555 1234"
-            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+            onChange={(e) => {
+              onTelefonoChange(e.target.value)
+              limpiarError('telefono')
+            }}
+            placeholder="Ej: 351 459 3325"
+            className={claseInput(Boolean(errores.telefono))}
           />
+          {errores.telefono && <ErrorCampo>{errores.telefono}</ErrorCampo>}
         </label>
 
         <label className="flex flex-col gap-1">
@@ -300,15 +377,23 @@ function PasoDatos({
           </span>
           <input
             type="email"
+            inputMode="email"
             value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
+            onChange={(e) => {
+              onEmailChange(e.target.value)
+              limpiarError('email')
+            }}
             placeholder="Ej: juan@gmail.com"
-            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+            className={claseInput(Boolean(errores.email))}
           />
-          <span className="text-tinta-tenue text-xs">
-            Te mandamos el link de tu turno por mail así no lo perdés. Si no
-            ponés, guardalo vos o escribile a Ariel.
-          </span>
+          {errores.email ? (
+            <ErrorCampo>{errores.email}</ErrorCampo>
+          ) : (
+            <span className="text-tinta-tenue text-xs">
+              Te mandamos el link de tu turno por mail así no lo perdés. Si no
+              ponés, te lo podemos mandar después.
+            </span>
+          )}
         </label>
 
         <div className="mt-2 flex gap-3">
@@ -336,13 +421,19 @@ function PasoConfirmacion({
   nombre,
   telefono,
   email,
+  onVolverAlInicio,
 }: {
   turno: Turno
   nombre: string
   telefono: string
   email: string
+  onVolverAlInicio: () => void
 }) {
   const [copiado, setCopiado] = useState(false)
+  // Si no dejó mail al reservar, puede cargarlo acá (HU-19). Una vez enviado, esta
+  // pantalla se comporta igual que si lo hubiera dejado desde el principio.
+  const [emailCargado, setEmailCargado] = useState<string | null>(null)
+  const emailDelTurno = email || emailCargado
   const link = `${window.location.origin}/turno/${turno.id}`
 
   return (
@@ -361,43 +452,117 @@ function PasoConfirmacion({
         Te contactaremos al {telefono} si hace falta reprogramar.
       </p>
 
-      {email && (
-        <p className="font-body text-tinta mb-4 opacity-75">
-          Te mandamos la confirmación con el link a <strong>{email}</strong>.
-        </p>
-      )}
-
       <a href={urlCalendario(turno.id)} className={`${BTN_OUTLINE} mb-6 w-full`}>
         Agregar a mi calendario
       </a>
 
-      <label className="text-tinta-tenue mb-2 block text-left text-xs tracking-wide uppercase">
-        Tu link para gestionar el turno
-      </label>
-      <div className="border-borde bg-superficie-2 text-tinta mb-3 truncate rounded-md border px-3 py-2 text-left text-sm">
-        {link}
-      </div>
+      {/* Con mail, el link no se muestra: ya le llegó a la casilla y ahí no se pierde.
+          Mostrarlo igual invitaría a copiarlo a mano, que es justo el paso que el mail
+          viene a sacar. Sin mail, el link es lo único que tiene, así que va bien
+          visible y con botón para copiarlo. */}
+      {emailDelTurno ? (
+        <p className="border-borde bg-superficie-2 text-tinta mt-2 rounded-md border px-3 py-2 text-left text-sm">
+          Te mandamos el link para gestionar tu turno a{' '}
+          <strong>{emailDelTurno}</strong>. Con ese link podés cancelar o
+          reprogramar hasta 60 minutos antes. Si no lo ves, fijate en spam.
+        </p>
+      ) : (
+        <>
+          <label className="text-tinta-tenue mb-2 block text-left text-xs tracking-wide uppercase">
+            Tu link para gestionar el turno
+          </label>
+          <div className="border-borde bg-superficie-2 text-tinta mb-3 truncate rounded-md border px-3 py-2 text-left text-sm">
+            {link}
+          </div>
+          <button
+            className={`${BTN_OUTLINE} w-full`}
+            onClick={() => {
+              void navigator.clipboard.writeText(link)
+              setCopiado(true)
+            }}
+          >
+            {copiado ? 'Copiado ✓' : 'Copiar link'}
+          </button>
+
+          <PedirMail turnoId={turno.id} onEnviado={setEmailCargado} />
+        </>
+      )}
+
       <button
-        className={`${BTN_OUTLINE} w-full`}
-        onClick={() => {
-          void navigator.clipboard.writeText(link)
-          setCopiado(true)
-        }}
+        onClick={onVolverAlInicio}
+        className={`${BTN_GHOST} mt-6 inline-flex`}
       >
-        {copiado ? 'Copiado ✓' : 'Copiar link'}
-      </button>
-
-      <p className="border-borde bg-superficie-2 text-tinta-suave mt-4 rounded-md border border-dashed px-3 py-2 text-left text-xs">
-        <span className="bg-borde-suave mr-1 rounded px-1 py-0.5 font-mono text-[10px] tracking-wide uppercase">
-          Simulado
-        </span>
-        Este mismo mensaje te llegaría además por WhatsApp cuando Ariel tenga
-        cuenta de negocio.
-      </p>
-
-      <Link to="/" className={`${BTN_GHOST} mt-6 inline-flex`}>
         Volver al inicio
-      </Link>
+      </button>
     </div>
+  )
+}
+
+/** HU-19 — Segunda oportunidad para dejar el mail, para el que reservó sin ponerlo.
+ *
+ * Va acá y no en otro lado porque este es el momento en que el cliente está mirando su
+ * link y cae en la cuenta de que lo puede perder. El backend lo acepta una sola vez por
+ * turno (ver `guardarEmailDelCliente`), así que este bloque desaparece al enviarlo. */
+function PedirMail({
+  turnoId,
+  onEnviado,
+}: {
+  turnoId: string
+  onEnviado: (email: string) => void
+}) {
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: () => enviarConfirmacion(turnoId, email.trim()),
+    onSuccess: (data) => onEnviado(data.email),
+    onError: (err) => {
+      setError(
+        (isAxiosError<ErrorApi>(err) && err.response?.data.error.mensaje) ||
+          'No pudimos mandarte el mail. Probá de nuevo.',
+      )
+    },
+  })
+
+  return (
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!esEmailValido(email)) {
+          setError(MENSAJE_EMAIL_INVALIDO)
+          return
+        }
+        setError(null)
+        mutation.mutate()
+      }}
+      className="border-borde bg-superficie-2 mt-4 rounded-md border p-3 text-left"
+    >
+      <p className="text-tinta text-sm">
+        ¿Querés que te lo mandemos por mail? Así no dependés de guardar el link
+        ahora.
+      </p>
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        <input
+          type="email"
+          inputMode="email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value)
+            setError(null)
+          }}
+          placeholder="Ej: juan@gmail.com"
+          className={`${claseInput(Boolean(error))} flex-1`}
+        />
+        <button
+          type="submit"
+          disabled={mutation.isPending}
+          className={`${BTN_OUTLINE} disabled:cursor-not-allowed disabled:opacity-50`}
+        >
+          {mutation.isPending ? 'Enviando…' : 'Mandámelo'}
+        </button>
+      </div>
+      {error && <p className="text-vino mt-2 text-xs">{error}</p>}
+    </form>
   )
 }

@@ -7,6 +7,7 @@ import { FilaBloqueo } from '../../components/admin/FilaBloqueo'
 import { ModalEditarTurno } from '../../components/admin/ModalEditarTurno'
 import { ModalCargarTurno } from '../../components/admin/ModalCargarTurno'
 import { ModalBloquear } from '../../components/admin/ModalBloquear'
+import { ModalBuscarTurno } from '../../components/admin/ModalBuscarTurno'
 import {
   cancelarTurnoAdmin,
   marcarEstadoTurno,
@@ -35,6 +36,7 @@ export function AgendaPage() {
   const [fecha, setFecha] = useState(hoyIso())
   const [modalCargar, setModalCargar] = useState(false)
   const [modalBloquear, setModalBloquear] = useState(false)
+  const [modalBuscar, setModalBuscar] = useState(false)
   const [turnoEditar, setTurnoEditar] = useState<TurnoAdmin | null>(null)
 
   const desde = fecha
@@ -109,6 +111,9 @@ export function AgendaPage() {
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setModalBuscar(true)}>
+            Buscar turno
+          </Button>
           <Button variant="outline" onClick={() => setModalBloquear(true)}>
             Bloquear horario
           </Button>
@@ -260,6 +265,7 @@ export function AgendaPage() {
           onClose={() => setModalBloquear(false)}
         />
       )}
+      {modalBuscar && <ModalBuscarTurno onClose={() => setModalBuscar(false)} />}
     </div>
   )
 }

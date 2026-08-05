@@ -25,12 +25,14 @@ Como cliente, quiero reservar un turno eligiendo servicio, día y horario, para 
 - Solo se muestran horarios realmente disponibles (considerando la duración del servicio elegido).
 - Al confirmar, recibo un link único para administrar mi turno.
 - No necesito crear cuenta ni contraseña.
+- El teléfono es obligatorio y se valida de verdad: entre 8 y 15 dígitos, admitiendo espacios, guiones, paréntesis y un `+` inicial. Es el único dato con el que Ariel me puede ubicar si algo cambia, así que no puede quedar en cualquier cosa. El email es opcional, pero si lo dejo tiene que tener formato válido.
 
 **HU-02 — Recibir confirmación**
 Como cliente, quiero recibir una confirmación clara de mi turno, para saber que quedó agendado correctamente.
-- La confirmación muestra fecha, hora, servicio y el link único.
+- La confirmación muestra fecha, hora, servicio y el link único. El link queda siempre visible y se puede copiar, haya dejado email o no.
 - Si dejo mi email (es opcional), me llega la confirmación por mail con el link y el turno adjunto para el calendario — así no dependo de copiar el link a mano.
-- (El envío por WhatsApp sigue simulado, para cuando Ariel tenga cuenta de negocio. El mail sí es real.)
+- Si no lo dejé al reservar, la misma pantalla de confirmación me lo ofrece ahí: cargo el mail y lo recibo, sin volver a empezar (ver HU-19).
+- (El aviso por WhatsApp no existe ni simulado: quedó fuera de alcance. Ver §5.)
 
 **HU-03 — Cancelar turno**
 Como cliente, quiero poder cancelar mi turno usando mi link único, para liberar el horario si no puedo asistir, sin tener que llamar a Ariel.
@@ -45,7 +47,7 @@ Como cliente, quiero reprogramar mi turno a otro día/horario usando mi link ún
 
 **HU-05 — Recibir recordatorio**
 Como cliente, quiero recibir un recordatorio antes de mi turno, para no olvidarme.
-- Recordatorio simulado en v1 (marca en el panel de Ariel), real cuando se conecte WhatsApp Business API.
+- Cubierto en parte por HU-19: el evento de calendario trae su propia alarma 2 horas antes, así que me avisa mi propio celular. Un recordatorio mandado por el sistema (WhatsApp o mail) queda fuera de alcance — ver §5.
 
 ### Administrador (Ariel)
 
@@ -113,6 +115,8 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
 - El evento incluye el link para cancelar o reprogramar en su descripción.
 - Si dejé mi email, el turno viene además adjunto en el mail de confirmación (HU-02).
 - Si reprogramo, el evento del calendario se actualiza en lugar de duplicarse.
+- El evento avisa solo 2 horas antes, sin depender de cómo tenga configurado el calendario cada uno. Dos horas dejan margen para reacomodarse y siguen estando fuera de la ventana de 60 minutos, así que todavía puedo cancelar o reprogramar online.
+- Si reservé **sin** dejar email, la pantalla de confirmación me lo ofrece ahí mismo y me manda el link con el turno adjunto. Se puede una sola vez por turno: el id del turno es el token de acceso, así que sin ese límite cualquiera con el link podría hacer que el sistema mande mails a direcciones arbitrarias. El email queda guardado, así que una reprogramación posterior también me llega.
 
 ---
 
@@ -154,7 +158,7 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
   2. Sistema detecta que hay uno o más turnos activos en ese rango.
   3. Sistema le muestra la lista de turnos afectados y pide confirmación explícita.
   4. Si confirma, esos turnos pasan a *Cancelado* (con motivo "bloqueado por el local") y el rango queda bloqueado.
-  - *Nota: en v1 esto no dispara notificación real al cliente (solo queda registrado); cuando conectemos WhatsApp real, este es el primer caso donde un aviso automático es importante.*
+  - *Nota: esto no le avisa al cliente — el turno queda cancelado y Ariel se lo comunica por WhatsApp a mano. Es el caso donde más se nota que no hay aviso automático de cancelación: el cliente se entera recién si abre su link. Con el email ya guardado el mecanismo existiría (un mail de "Ariel canceló tu turno"), pero es funcionalidad nueva, no está implementada.*
 
 ### CU-04 — Cálculo de disponibilidad
 
@@ -183,7 +187,9 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
 
 ## 5. Fuera de alcance en v1 (recordatorio)
 
-Precios · Deudas por ausencia · Multi-peluquero · WhatsApp Business API real · Recuperación autoservicio del link para clientes sin email · Recordatorio automático antes del turno (HU-05 sigue simulado; el evento de calendario de HU-19 lo cubre en parte, con la alarma del propio celular)
+Precios · Deudas por ausencia · Multi-peluquero · **Cualquier aviso por WhatsApp al cliente** · Recuperación autoservicio del link para clientes sin email · Recordatorio automático mandado por el sistema (HU-05: lo cubre en parte la alarma del evento de calendario de HU-19)
+
+*Sobre WhatsApp:* antes figuraba como "simulado en la interfaz", con un cartel en la pantalla de confirmación diciendo que el mensaje llegaría cuando Ariel tuviera cuenta de negocio. Ese cartel se sacó: la integración con WhatsApp Business API no se va a hacer, así que prometerla en la interfaz era mentirle al cliente. WhatsApp sigue siendo el canal de contacto con Ariel, pero a mano, no desde el sistema.
 
 *Salieron de esta lista: que Ariel cambie su contraseña desde el panel (HU-16) y el envío del link por mail (HU-02, HU-19), ambos ya implementados.*
 

@@ -31,8 +31,9 @@ Es un proyecto de portfolio de un estudiante de Ingeniería en Sistemas (4to añ
 - El turno guarda una copia (nombre + duración) del servicio al momento de reservar — si Ariel cambia la duración de un servicio después, los turnos ya reservados no cambian.
 - Nunca se borra un turno físicamente: la aplicación no hace `DELETE` sobre `turnos`, todo cambio es un `UPDATE` de `estado` (+ `updated_at`). Al reprogramar, el turno viejo queda en estado `reprogramado` y el nuevo apunta a él con `turno_origen_id`. **No hay tabla de historial/auditoría** — el rastro es ese, no un log de cambios.
 - La sesión del admin dura 7 días y se renueva sola mientras use el panel; cambiar la contraseña invalida los tokens emitidos antes (HU-15, HU-16).
-- El cliente puede dejar un **email opcional** al reservar: si lo deja, recibe la confirmación con su link único y el turno adjunto para el calendario. Los que no dejan email siguen dependiendo de guardar el link o de escribirle a Ariel.
-- **Fuera de alcance:** precios, sistema de deudas por ausencias, multi-peluquero, WhatsApp Business API real (el aviso al cliente por WhatsApp sigue simulado en la interfaz; los avisos a Ariel y el mail al cliente ya son reales).
+- El cliente puede dejar un **email opcional** al reservar: si lo deja, recibe la confirmación con su link único y el turno adjunto para el calendario. Si no lo dejó, la pantalla de confirmación se lo ofrece ahí mismo (`POST /api/turnos/:id/enviar-confirmacion`, **un solo uso por turno** — el id del turno es el token, así que sin ese límite sería un relay de mails abierto).
+- El **teléfono se valida** (8 a 15 dígitos, con espacios/guiones/paréntesis y un `+` inicial) en el frontend y en el backend. La regla vive en `utils/validaciones.ts`, duplicada a propósito en los dos lados: la del backend es la que decide.
+- **Fuera de alcance:** precios, sistema de deudas por ausencias, multi-peluquero, y **cualquier aviso por WhatsApp al cliente** — no está ni simulado. WhatsApp sigue siendo el canal para hablar con Ariel, pero a mano. Los avisos a Ariel (push) y el mail al cliente sí son reales.
 
 ## Estado actual del proyecto
 

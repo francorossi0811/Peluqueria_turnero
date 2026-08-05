@@ -124,15 +124,14 @@ export function Landing({ query, onElegir }: LandingProps) {
             Corte, barba y color con la dedicación de siempre. Un espacio para
             todos, atendido por Ariel Enrique.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
+          {/* Un solo CTA: el "Ver servicios" que había al lado hacía exactamente lo
+              mismo (scroll a #servicios), así que eran dos botones idénticos pegados. */}
+          <div className="mt-6">
             <button
               onClick={() => scrollA('servicios')}
               className={BTN_OUTLINE}
             >
               Reservar turno
-            </button>
-            <button onClick={() => scrollA('servicios')} className={BTN_GHOST}>
-              Ver servicios
             </button>
           </div>
         </div>

@@ -1,11 +1,9 @@
-import { Route, Routes, useParams } from 'react-router-dom'
+import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { ReservarPage } from './pages/ReservarPage'
 import { GestionTurnoPage } from './pages/GestionTurnoPage'
 import { LoginPage } from './pages/admin/LoginPage'
 import { AgendaPage } from './pages/admin/AgendaPage'
-import { ServiciosPage } from './pages/admin/ServiciosPage'
-import { HorarioPage } from './pages/admin/HorarioPage'
-import { BuscarTurnoPage } from './pages/admin/BuscarTurnoPage'
+import { HorariosServiciosPage } from './pages/admin/HorariosServiciosPage'
 import { CuentaPage } from './pages/admin/CuentaPage'
 import { AdminLayout } from './components/admin/AdminLayout'
 import { RequireAuth } from './components/admin/RequireAuth'
@@ -27,10 +25,24 @@ function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AdminLayout />}>
           <Route path="/admin" element={<AgendaPage />} />
-          <Route path="/admin/servicios" element={<ServiciosPage />} />
-          <Route path="/admin/horario" element={<HorarioPage />} />
-          <Route path="/admin/buscar" element={<BuscarTurnoPage />} />
+          <Route path="/admin/horarios" element={<HorariosServiciosPage />} />
           <Route path="/admin/cuenta" element={<CuentaPage />} />
+
+          {/* Rutas viejas: "Servicios", "Horario" y "Buscar turno" eran páginas propias
+              en el nav. Se redirigen en vez de borrarse porque Ariel vive en este panel
+              y puede tener alguna guardada en favoritos. */}
+          <Route
+            path="/admin/servicios"
+            element={<Navigate to="/admin/horarios" replace />}
+          />
+          <Route
+            path="/admin/horario"
+            element={<Navigate to="/admin/horarios" replace />}
+          />
+          <Route
+            path="/admin/buscar"
+            element={<Navigate to="/admin" replace />}
+          />
         </Route>
       </Route>
     </Routes>

@@ -10,7 +10,8 @@
 6. **Servicios externos salientes** — las únicas llamadas que el backend hace hacia afuera:
    - **Web Push** (VAPID, librería `web-push`) para avisarle a Ariel al celular cuando entra un turno (HU-18). Opcional: sin claves configuradas, el resto funciona igual.
    - **Envío de mail** para la confirmación al cliente (HU-19), detrás de una interfaz `Mailer` con dos implementaciones: Brevo en producción y una que escribe por consola en desarrollo (o mientras no haya cuenta creada). Cambiar de proveedor es agregar un archivo.
-7. **(Fase 2)** WhatsApp Business API — se conecta desde el backend cuando Ariel tenga cuenta de negocio. Hasta entonces el aviso por WhatsApp al cliente queda simulado; los avisos a Ariel y el mail al cliente ya son reales.
+
+No hay una tercera integración saliente: **WhatsApp Business API quedó descartada**, no diferida. El aviso al cliente por WhatsApp estuvo un tiempo "simulado" con un cartel en la pantalla de confirmación, y ese cartel se sacó — anunciar en la interfaz una integración que no se va a construir es peor que no tenerla. El mail cubre el mismo objetivo (que el link llegue solo a algún lado) sin cuenta de negocio ni aprobación de Meta.
 
 ## Decisiones y por qué
 
@@ -20,9 +21,10 @@
 - **El admin sí tiene cuenta real (JWT)** porque tiene control total sobre la agenda de todos.
 - **La API es REST**, no GraphQL ni RPC — más simple de razonar, documentar y testear para el alcance de este proyecto.
 
-## Fuera de alcance en v1
+## Fuera de alcance
 
-Integración real con WhatsApp Business API (queda mockeada hasta que exista cuenta de negocio).
+Integración con WhatsApp Business API — descartada, no diferida (ver arriba y §5 de
+`historias-de-usuario-casos-de-uso.md`).
 
 ## Decisiones de las etapas de v2
 

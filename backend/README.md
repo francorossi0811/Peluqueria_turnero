@@ -48,9 +48,23 @@ SELECT conname FROM pg_constraint WHERE conname = 'turnos_no_solapamiento';
 ## Scripts
 
 - `npm run dev` — server de desarrollo con recarga (`tsx watch`)
-- `npm run build` — compila a `dist/`
-- `npm start` — corre el build compilado
+- `npm run build` — **solo chequea tipos.** No emite JavaScript: el `tsconfig.json` tiene
+  `noEmit: true` porque usa `allowImportingTsExtensions` (los imports del cliente de
+  Prisma llevan `.ts` explícito), y TypeScript no permite emitir con esa opción activada.
+  No existe `dist/`.
+- `npm start` — corre el server con `tsx`, o sea TypeScript directo, sin paso de compilado
+- `npm run migrate:deploy` — aplica las migraciones pendientes; es lo que corre en el
+  deploy (en desarrollo se usa `prisma migrate dev`)
 - `npm run lint` — lint con oxlint
 - `npm run format` — formatea con Prettier
+- `npm test` — tests con vitest
+
+### Por qué `tsx` y `prisma` están en `dependencies`
+
+Parecen herramientas de desarrollo, pero producción las necesita: `npm start` corre
+`tsx src/server.ts`, y tanto el `postinstall` (`prisma generate`) como
+`migrate:deploy` usan el CLI de Prisma. En `devDependencies`, un `npm install` con
+`NODE_ENV=production` —que es como instala Render— no las bajaría y el server no
+arrancaría. Es un modo de falla que solo aparece en el deploy, nunca en local.
 
 Ver `Docs/especificacion-api.md` (en la raíz del repo) para el contrato completo de la API.

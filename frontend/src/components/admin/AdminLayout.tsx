@@ -1,55 +1,55 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { clearToken } from '../../lib/authStorage'
+import { Link, Outlet, useLocation } from 'react-router-dom'
+import type { ComponentType } from 'react'
+import {
+  IconoAgenda,
+  IconoPersona,
+  IconoReloj,
+} from '../ui/Iconos'
 
-const NAV = [
-  { to: '/admin', label: 'Agenda' },
-  { to: '/admin/servicios', label: 'Servicios' },
-  { to: '/admin/horario', label: 'Horario' },
-  { to: '/admin/buscar', label: 'Buscar turno' },
-  { to: '/admin/cuenta', label: 'Mi cuenta' },
+// Tres destinos, no cinco. "Buscar turno" pasó a ser un modal dentro de la agenda (es
+// una acción sobre la agenda, no una sección aparte) y "Servicios" se juntó con
+// "Horario": las dos son configuración de cómo trabaja Ariel, y ninguna se toca seguido.
+// "Salir" salió del nav a propósito — es una acción destructiva de sesión y no merece
+// estar a un click de distancia todo el día; vive abajo de todo en "Mi cuenta".
+const NAV: {
+  to: string
+  label: string
+  Icono: ComponentType<{ className?: string }>
+}[] = [
+  { to: '/admin', label: 'Agenda', Icono: IconoAgenda },
+  { to: '/admin/horarios', label: 'Horarios y servicios', Icono: IconoReloj },
+  { to: '/admin/cuenta', label: 'Mi cuenta', Icono: IconoPersona },
 ]
 
 export function AdminLayout() {
-  const navigate = useNavigate()
   const location = useLocation()
-
-  function salir() {
-    clearToken()
-    navigate('/admin/login')
-  }
 
   return (
     <div className="bg-fondo min-h-screen">
       <header className="border-borde border-b">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="text-tinta-suave text-xs font-medium tracking-wide uppercase">
-              La Peluquería de Ariel Enrique
-            </p>
-            <p className="font-hero text-tinta text-lg font-semibold">
-              Panel de Ariel
-            </p>
-          </div>
+          {/* Solo el nombre del local. "Panel de Ariel" ya lo dice el kicker de cada
+              página, y repetirlo acá arriba no aporta: si está viendo esta pantalla,
+              sabe perfectamente en qué panel está. */}
+          <p className="font-hero text-tinta text-lg font-semibold">
+            La Peluquería de Ariel Enrique
+          </p>
           <nav className="flex flex-wrap items-center gap-1">
-            {NAV.map((item) => (
+            {NAV.map(({ to, label, Icono }) => (
               <Link
-                key={item.to}
-                to={item.to}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition ${
-                  location.pathname === item.to
+                key={to}
+                to={to}
+                aria-current={location.pathname === to ? 'page' : undefined}
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${
+                  location.pathname === to
                     ? 'bg-miel-suave text-miel'
                     : 'text-tinta-suave hover:text-tinta'
                 }`}
               >
-                {item.label}
+                <Icono />
+                {label}
               </Link>
             ))}
-            <button
-              onClick={salir}
-              className="text-tinta-suave hover:text-tinta ml-2 rounded-md px-3 py-2 text-sm"
-            >
-              Salir
-            </button>
           </nav>
         </div>
       </header>

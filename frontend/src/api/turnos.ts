@@ -24,6 +24,19 @@ export async function cancelarTurno(id: string): Promise<Turno> {
   return data
 }
 
+/** HU-19 — Cargar el mail después de haber reservado sin dejarlo, para recibir el link.
+ * El backend lo acepta una sola vez por turno (ver especificacion-api.md). */
+export async function enviarConfirmacion(
+  id: string,
+  email: string,
+): Promise<{ email: string }> {
+  const { data } = await apiClient.post<{ email: string }>(
+    `/turnos/${id}/enviar-confirmacion`,
+    { email },
+  )
+  return data
+}
+
 export async function reprogramarTurno(
   id: string,
   datos: Reprogramacion,

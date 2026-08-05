@@ -25,7 +25,9 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(datos.title, {
       body: datos.body,
-      icon: '/favicon.svg',
+      // PNG y no SVG: Android no rasteriza SVG en las notificaciones y deja el hueco
+      // vacío.
+      icon: '/icono-192.png',
       // Reemplaza la notificación anterior en vez de apilar una por cada turno.
       tag: 'turno-nuevo',
       renotify: true,

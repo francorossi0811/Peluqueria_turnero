@@ -48,14 +48,37 @@ disponibilidad en dos lugares distintos de la interfaz.
 | 3 | Agenda semanal | HU-07 |
 | 4 | Cargar turno manual (modal) | HU-08 |
 | 5 | Bloquear horario (modal, con confirmación) | HU-11, CU-03 |
-| 6 | Configurar servicios | HU-13 |
-| 7 | Configurar horario laboral + feriados | HU-14 |
-| 8 | Buscar turno (para reenviar un link perdido) | Caso borde "cliente pierde su link único" |
-| 9 | Mi cuenta (usuario + cambiar contraseña) | HU-16 |
+| 6 | Buscar turno (modal, para reenviar un link perdido) | Caso borde "cliente pierde su link único" |
+| 7 | Horarios y servicios (horario laboral + feriados + servicios) | HU-13, HU-14 |
+| 8 | Mi cuenta (usuario + avisos + contraseña + cerrar sesión) | HU-16, HU-18 |
 
 **Editar turno (HU-09)** y **marcar Realizado/Ausente (HU-12)** no tienen pantalla propia:
 son acciones inline sobre una fila de la agenda diaria/semanal (pantalla 2), no un flujo
 separado — son ediciones de un campo, no ameritan una pantalla dedicada.
+
+### El nav del panel: tres destinos
+
+El nav llegó a tener cinco entradas más un botón "Salir", y era demasiado para un panel
+que en la práctica se usa para una sola cosa. Quedó así:
+
+| Ítem | Ícono | Qué agrupa |
+|---|---|---|
+| **Agenda** | calendario | La agenda diaria/semanal y todo lo que se hace sobre ella: cargar turno, bloquear horario y buscar turno, los tres como modales |
+| **Horarios y servicios** | reloj | Horario laboral, feriados y servicios — las tres son configuración de cuándo y qué atiende, y ninguna se toca seguido |
+| **Mi cuenta** | persona | Usuario, avisos al celular, cambio de contraseña y cerrar sesión |
+
+Dos decisiones detrás de eso:
+
+- **"Buscar turno" no es una sección, es una acción sobre la agenda.** Se usa cuando un
+  cliente escribe porque perdió su link; uno no "se queda" ahí. Como modal, además, queda
+  al lado de las otras dos acciones de la agenda en vez de competir con ellas desde el nav.
+- **"Salir" ya no está en el nav.** Ariel tiene el panel abierto casi todo el día en la
+  tablet del mostrador: un botón permanente arriba a la derecha es un click accidental
+  esperando pasar, y volver a entrar cuesta tipear la contraseña con las manos ocupadas.
+  Vive abajo de todo en "Mi cuenta", donde hay que ir a buscarlo.
+
+Las rutas viejas (`/admin/servicios`, `/admin/horario`, `/admin/buscar`) redirigen en vez
+de desaparecer, porque Ariel puede tener alguna guardada en favoritos.
 
 ---
 

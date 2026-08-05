@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Button } from '../../components/ui/Button'
@@ -11,7 +12,7 @@ import {
   obtenerClavePublica,
   registrarSuscripcion,
 } from '../../api/push'
-import { setToken } from '../../lib/authStorage'
+import { clearToken, setToken } from '../../lib/authStorage'
 import {
   desuscribirse,
   esIOS,
@@ -47,7 +48,40 @@ export function CuentaPage() {
         </h2>
         <SeccionPassword />
       </div>
+      <div>
+        <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
+          Cerrar sesión
+        </h2>
+        <SeccionSalir />
+      </div>
     </div>
+  )
+}
+
+/** Cerrar sesión vive acá, abajo de todo, y ya no en el nav.
+ *
+ * Ariel tiene el panel abierto casi todo el día en la tablet del mostrador: un botón
+ * "Salir" permanente arriba a la derecha es un click accidental a punto de pasar, y
+ * volver a entrar cuesta tipear la contraseña con las manos ocupadas. Acá hay que
+ * buscarlo, que es lo correcto para algo que en la práctica casi nunca quiere hacer. */
+function SeccionSalir() {
+  const navigate = useNavigate()
+
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-tinta-suave text-sm">
+        Cierra la sesión en este dispositivo. En los demás sigue abierta.
+      </p>
+      <Button
+        variant="outline"
+        onClick={() => {
+          clearToken()
+          navigate('/admin/login')
+        }}
+      >
+        Cerrar sesión
+      </Button>
+    </Card>
   )
 }
 
