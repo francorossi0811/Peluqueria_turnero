@@ -40,6 +40,7 @@ export interface NuevoTurno {
   hora: string // "HH:mm"
   clienteNombre: string
   clienteTelefono: string
+  clienteEmail?: string // HU-19: opcional
 }
 
 export interface Reprogramacion {
@@ -54,7 +55,9 @@ export interface TurnoAdmin extends Turno {
   horaFin: string // "HH:mm"
   clienteNombre: string
   clienteTelefono: string
+  clienteEmail: string | null // HU-19
   origen: OrigenTurno
+  vistoPorAdmin: boolean // HU-17
 }
 
 export interface NuevoTurnoManual extends NuevoTurno {
@@ -111,4 +114,9 @@ export interface Feriado {
 
 export interface ErrorApi {
   error: { codigo: string; mensaje: string }
+}
+
+/** Cuenta del admin logueado (HU-15) — `GET /api/admin/me`. */
+export interface Me {
+  usuario: string
 }

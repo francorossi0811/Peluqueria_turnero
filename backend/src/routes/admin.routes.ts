@@ -1,13 +1,20 @@
 import { Router } from 'express'
-import { getMe } from '../controllers/admin.controller'
+import { getMe, patchPassword } from '../controllers/admin.controller'
 import {
   getAgenda,
   getBuscarTurnos,
   patchEstadoTurno,
   patchTurno,
   postCancelarTurnoAdmin,
+  postMarcarVistos,
   postTurnoManual,
 } from '../controllers/turnos.controller'
+import {
+  deleteSuscripcion,
+  getClavePublica,
+  postPrueba,
+  postSuscripcion,
+} from '../controllers/push.controller'
 import {
   getServiciosAdmin,
   patchServicio,
@@ -28,6 +35,7 @@ import { requireAuth } from '../middlewares/auth.middleware'
 export const adminRouter = Router()
 
 adminRouter.get('/admin/me', requireAuth, getMe)
+adminRouter.patch('/admin/password', requireAuth, patchPassword)
 adminRouter.get('/admin/turnos', requireAuth, getAgenda)
 adminRouter.get('/admin/turnos/buscar', requireAuth, getBuscarTurnos)
 adminRouter.post('/admin/turnos', requireAuth, postTurnoManual)
@@ -38,6 +46,13 @@ adminRouter.post(
   postCancelarTurnoAdmin,
 )
 adminRouter.patch('/admin/turnos/:id/estado', requireAuth, patchEstadoTurno)
+adminRouter.post('/admin/turnos/marcar-vistos', requireAuth, postMarcarVistos)
+
+// HU-18 — Notificaciones push al celular de Ariel.
+adminRouter.get('/admin/push/clave-publica', requireAuth, getClavePublica)
+adminRouter.post('/admin/push/suscripciones', requireAuth, postSuscripcion)
+adminRouter.delete('/admin/push/suscripciones', requireAuth, deleteSuscripcion)
+adminRouter.post('/admin/push/prueba', requireAuth, postPrueba)
 
 adminRouter.get('/admin/servicios', requireAuth, getServiciosAdmin)
 adminRouter.post('/admin/servicios', requireAuth, postServicio)

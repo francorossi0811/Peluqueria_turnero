@@ -6,6 +6,7 @@ const NAV = [
   { to: '/admin/servicios', label: 'Servicios' },
   { to: '/admin/horario', label: 'Horario' },
   { to: '/admin/buscar', label: 'Buscar turno' },
+  { to: '/admin/cuenta', label: 'Mi cuenta' },
 ]
 
 export function AdminLayout() {

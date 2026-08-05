@@ -50,6 +50,8 @@ disponibilidad en dos lugares distintos de la interfaz.
 | 5 | Bloquear horario (modal, con confirmación) | HU-11, CU-03 |
 | 6 | Configurar servicios | HU-13 |
 | 7 | Configurar horario laboral + feriados | HU-14 |
+| 8 | Buscar turno (para reenviar un link perdido) | Caso borde "cliente pierde su link único" |
+| 9 | Mi cuenta (usuario + cambiar contraseña) | HU-16 |
 
 **Editar turno (HU-09)** y **marcar Realizado/Ausente (HU-12)** no tienen pantalla propia:
 son acciones inline sobre una fila de la agenda diaria/semanal (pantalla 2), no un flujo

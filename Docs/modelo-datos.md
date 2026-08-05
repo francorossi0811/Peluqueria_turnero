@@ -153,18 +153,28 @@ disponibilidad, un feriado con `bloquea = true` se trata igual que un bloqueo de
 completo; con `bloquea = false` el día se calcula con el `horario_laboral` normal, como si
 no fuera feriado.
 
-### `administradores` — HU-15
+### `administradores` — HU-15, HU-16
 
 | Columna | Tipo | Notas |
 |---|---|---|
 | `id` | uuid, PK | |
 | `usuario` | varchar, unique, not null | |
-| `password_hash` | varchar, not null | nunca se guarda la contraseña en texto plano |
+| `password_hash` | varchar, not null | nunca se guarda la contraseña en texto plano (bcrypt) |
+| `password_changed_at` | timestamptz, null | último cambio de contraseña (HU-16); `null` = nunca se cambió |
 | `created_at` | timestamptz | |
 
 Aunque hoy hay un solo administrador (Ariel), se modela como tabla en vez de credenciales
 fijas por variable de entorno, para no tener que tocar código si el día de mañana cambia
-la contraseña o se agrega un segundo usuario administrativo.
+la contraseña o se agrega un segundo usuario administrativo. Eso es exactamente lo que
+habilitó HU-16: la variable de entorno `ADMIN_PASSWORD` solo se lee en el seed inicial
+para crear la fila, y desde ahí la contraseña se administra desde el panel.
+
+`password_changed_at` es lo que hace que cambiar la contraseña cierre de verdad las otras
+sesiones: el middleware de auth rechaza todo JWT cuyo `iat` sea anterior a esta fecha.
+Es la única consulta a base que hace la validación del token, y rompe a propósito la
+pureza "stateless" del JWT — sin ella, un token robado seguiría valiendo hasta 7 días
+después de cambiar la contraseña, y la funcionalidad daría una sensación falsa de
+seguridad.
 
 ### `turnos` — HU-01 a HU-10, CU-01, CU-02, CU-04, casos borde
 
@@ -173,6 +183,7 @@ la contraseña o se agrega un segundo usuario administrativo.
 | `id` | uuid, PK, default `gen_random_uuid()` | Se usa directamente como **token del link único** que recibe el cliente — no adivinable, sin necesidad de un campo separado |
 | `cliente_nombre` | varchar, not null | |
 | `cliente_telefono` | varchar, not null | |
+| `cliente_email` | varchar, null | Opcional (HU-19): muchos clientes de Ariel no usan mail. Si está, recibe la confirmación con el link y el `.ics` |
 | `servicio_id` | uuid, FK → `servicios.id`, not null | |
 | `servicio_nombre_snapshot` | varchar, not null | "Foto" del servicio al momento de reservar |
 | `servicio_duracion_snapshot` | int, not null | Ídem, en minutos |
@@ -181,6 +192,7 @@ la contraseña o se agrega un segundo usuario administrativo.
 | `hora_fin` | time, not null | Calculada (`hora_inicio` + duración snapshot) y guardada, para usarla directo en el constraint anti-solapamiento |
 | `estado` | varchar, `CHECK` | `reservado` \| `cancelado` \| `reprogramado` \| `realizado` \| `ausente` |
 | `origen` | varchar, `CHECK` | `online` \| `telefono` \| `whatsapp` (HU-08) |
+| `visto_por_admin` | boolean, not null, default `false` | HU-17: si Ariel ya vio el turno en el panel. Los que carga él mismo nacen en `true` |
 | `motivo_cancelacion` | text, null | |
 | `turno_origen_id` | uuid, null, FK → `turnos.id` | Si nació de una reprogramación, apunta al turno viejo (HU-04) |
 | `bloqueo_cancelacion_id` | uuid, null, FK → `bloqueos_horario.id` | Si fue cancelado porque Ariel bloqueó ese rango (CU-03), queda registrado el motivo puntual |

@@ -7,8 +7,14 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { BotonVolver } from '../components/ui/BotonVolver'
 import { Kicker } from '../components/ui/Kicker'
+import { BTN_OUTLINE } from '../components/ui/estilosBoton'
 import { GrillaHorarios } from '../components/GrillaHorarios'
-import { obtenerTurno, cancelarTurno, reprogramarTurno } from '../api/turnos'
+import {
+  obtenerTurno,
+  cancelarTurno,
+  reprogramarTurno,
+  urlCalendario,
+} from '../api/turnos'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import type { ErrorApi, EstadoTurno } from '../types/api'
@@ -209,6 +215,15 @@ export function GestionTurnoPage({ id }: { id: string }) {
         <div className="border-vino bg-vino-suave text-vino mb-4 rounded-md border px-3 py-2 text-sm">
           {errorAccion}
         </div>
+      )}
+
+      {turno.estado === 'reservado' && (
+        <a
+          href={urlCalendario(turno.id)}
+          className={`${BTN_OUTLINE} mb-4 w-full`}
+        >
+          Agregar a mi calendario
+        </a>
       )}
 
       {turno.estado === 'reservado' &&

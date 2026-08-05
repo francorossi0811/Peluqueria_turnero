@@ -6,6 +6,12 @@
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": [".claude/dev-frontend.sh"],
       "port": 5173
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [".claude/dev-backend.sh"],
+      "port": 3000
     }
   ]
 }

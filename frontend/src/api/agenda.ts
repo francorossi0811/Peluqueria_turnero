@@ -48,6 +48,15 @@ export async function marcarEstadoTurno(
   return data
 }
 
+/** HU-17 — Saca el resaltado de "nuevo" a los turnos que Ariel ya miró. */
+export async function marcarTurnosVistos(ids: string[]): Promise<number> {
+  const { data } = await apiClient.post<{ marcados: number }>(
+    '/admin/turnos/marcar-vistos',
+    { ids },
+  )
+  return data.marcados
+}
+
 export async function buscarTurnos(params: {
   nombre?: string
   telefono?: string

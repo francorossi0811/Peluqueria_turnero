@@ -23,6 +23,7 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
   const [hora, setHora] = useState<string | null>(null)
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
+  const [clienteEmail, setClienteEmail] = useState('')
   const [origen, setOrigen] = useState<'telefono' | 'whatsapp'>('telefono')
   const [error, setError] = useState<string | null>(null)
 
@@ -48,6 +49,7 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
         hora: hora!,
         clienteNombre,
         clienteTelefono,
+        clienteEmail: clienteEmail.trim() || undefined,
         origen,
       }),
     onSuccess: () => {
@@ -152,6 +154,18 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
                 type="tel"
                 value={clienteTelefono}
                 onChange={(e) => setClienteTelefono(e.target.value)}
+                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+                Email (opcional)
+              </span>
+              <input
+                type="email"
+                value={clienteEmail}
+                onChange={(e) => setClienteEmail(e.target.value)}
+                placeholder="Si te lo dicta, le llega la confirmación"
                 className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
               />
             </label>

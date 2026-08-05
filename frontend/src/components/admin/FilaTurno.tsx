@@ -44,8 +44,18 @@ export function FilaTurno({
   const [confirmandoCancelar, setConfirmandoCancelar] = useState(false)
   const esReservado = turno.estado === 'reservado'
 
+  // HU-17 — Un turno sin ver se destaca con el borde del acento, para que salte a la
+  // vista en un día cargado sin necesidad de leer fila por fila.
+  const sinVer = !turno.vistoPorAdmin
+
   return (
-    <div className="border-borde bg-superficie-2 rounded-lg border p-3">
+    <div
+      className={`rounded-lg border p-3 ${
+        sinVer
+          ? 'border-miel bg-miel-suave/40 shadow-sm'
+          : 'border-borde bg-superficie-2'
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-tinta font-medium">
@@ -58,11 +68,18 @@ export function FilaTurno({
             {ETIQUETA_ORIGEN[turno.origen]}
           </p>
         </div>
-        <span
-          className={`inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase ${ESTILO_ESTADO[turno.estado]}`}
-        >
-          {ETIQUETA_ESTADO[turno.estado]}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {sinVer && (
+            <span className="bg-miel inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide text-white uppercase">
+              Nuevo
+            </span>
+          )}
+          <span
+            className={`inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase ${ESTILO_ESTADO[turno.estado]}`}
+          >
+            {ETIQUETA_ESTADO[turno.estado]}
+          </span>
+        </div>
       </div>
 
       {esReservado && !confirmandoCancelar && (

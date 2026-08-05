@@ -10,6 +10,7 @@ import { ModalBloquear } from '../../components/admin/ModalBloquear'
 import {
   cancelarTurnoAdmin,
   marcarEstadoTurno,
+  marcarTurnosVistos,
   obtenerAgenda,
 } from '../../api/agenda'
 import { eliminarBloqueo, obtenerBloqueos } from '../../api/bloqueos'
@@ -42,6 +43,20 @@ export function AgendaPage() {
   const agendaQuery = useQuery({
     queryKey: ['agenda', desde, hasta],
     queryFn: () => obtenerAgenda(desde, hasta),
+    // HU-17 — Con el panel abierto, los turnos nuevos aparecen solos. Va acá y no como
+    // default del QueryClient a propósito: si no, el wizard público también estaría
+    // pidiendo disponibilidad cada 30 segundos y quemando el plan gratuito de Render.
+    // `refetchIntervalInBackground` queda en false (default): una pestaña de fondo deja
+    // de pedir, y de paso no mantiene la sesión viva sola para siempre.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  })
+
+  const marcarVistosMutation = useMutation({
+    mutationFn: marcarTurnosVistos,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+    },
   })
 
   const bloqueosQuery = useQuery({
@@ -82,6 +97,7 @@ export function AgendaPage() {
   }
 
   const dias = diasEnRango(desde, hasta)
+  const sinVer = (agendaQuery.data ?? []).filter((t) => !t.vistoPorAdmin)
 
   return (
     <div>
@@ -136,6 +152,25 @@ export function AgendaPage() {
           ))}
         </div>
       </div>
+
+      {sinVer.length > 0 && (
+        <div className="border-miel bg-miel-suave/40 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2">
+          <p className="text-tinta text-sm font-medium">
+            {sinVer.length === 1
+              ? 'Tenés 1 turno nuevo sin ver.'
+              : `Tenés ${sinVer.length} turnos nuevos sin ver.`}
+          </p>
+          <Button
+            variant="outline"
+            disabled={marcarVistosMutation.isPending}
+            onClick={() => marcarVistosMutation.mutate(sinVer.map((t) => t.id))}
+          >
+            {marcarVistosMutation.isPending
+              ? 'Marcando…'
+              : 'Marcar como vistos'}
+          </Button>
+        </div>
+      )}
 
       {(agendaQuery.isPending || bloqueosQuery.isPending) && (
         <p className="text-tinta-suave">Cargando agenda…</p>

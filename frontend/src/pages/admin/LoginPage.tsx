@@ -1,9 +1,20 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { login } from '../../api/auth'
 import { setToken } from '../../lib/authStorage'
 import { Button } from '../../components/ui/Button'
+
+// Antes mostrábamos "Usuario o contraseña incorrectos." ante cualquier fallo, lo que
+// tapaba los errores de red y los 500 — Ariel veía "contraseña incorrecta" cuando en
+// realidad el backend estaba caído.
+function mensajeDeError(err: unknown): string {
+  if (isAxiosError(err) && err.response?.status === 401) {
+    return 'Usuario o contraseña incorrectos.'
+  }
+  return 'No pudimos conectar con el servidor. Probá de nuevo en un momento.'
+}
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -61,7 +72,7 @@ export function LoginPage() {
 
           {loginMutation.isError && (
             <div className="border-vino bg-vino-suave text-vino rounded-md border px-3 py-2 text-sm">
-              Usuario o contraseña incorrectos.
+              {mensajeDeError(loginMutation.error)}
             </div>
           )}
 

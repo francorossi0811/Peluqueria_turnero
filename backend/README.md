@@ -27,6 +27,24 @@ npx prisma migrate dev --name init
 migración hay que agregarlo a mano en el SQL generado — ver el comentario al final de
 `prisma/schema.prisma`.
 
+**Esto aplica a toda migración futura, no solo a la inicial.** Como el constraint existe
+en la base pero no en `schema.prisma`, Prisma lo ve como una diferencia y puede emitir un
+`DROP CONSTRAINT "turnos_no_solapamiento"` en cualquier migración nueva. Perderlo en
+silencio sería quedarse sin la garantía de que no se pisen dos turnos, que es justamente
+la que no se puede confiar a la lógica de aplicación. Por eso el procedimiento es siempre:
+
+```bash
+npx prisma migrate dev --create-only --name <nombre>
+# leer el SQL generado y borrar cualquier línea que toque turnos_no_solapamiento
+npx prisma migrate deploy
+```
+
+Y después de aplicar, confirmar que sigue ahí:
+
+```sql
+SELECT conname FROM pg_constraint WHERE conname = 'turnos_no_solapamiento';
+```
+
 ## Scripts
 
 - `npm run dev` — server de desarrollo con recarga (`tsx watch`)

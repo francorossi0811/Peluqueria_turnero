@@ -77,9 +77,34 @@ model Administrador {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   usuario      String   @unique
   passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
+
+  // HU-16 — Cuándo cambió la contraseña por última vez. Los tokens emitidos antes de
+  // esta fecha dejan de valer (ver tokenPrecedeAlCambioDePassword en auth.service.ts),
+  // que es lo que hace que cambiar la contraseña realmente cierre las otras sesiones.
+  // Nullable: la cuenta creada por el seed nunca cambió la contraseña, y `null` se lee
+  // natural como "no hay nada que invalidar".
+  passwordChangedAt DateTime? @map("password_changed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("administradores")
+}
+
+// HU-18 — Suscripciones de Web Push del navegador de Ariel (una por dispositivo).
+// Sin FK a `administradores` a propósito: hay un solo admin, y agregar una relación
+// "por las dudas" sería generalidad especulativa. Ver Docs/modelo-datos.md.
+model PushSuscripcion {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // La URL que da el navegador para empujarle una notificación. Única: si el mismo
+  // dispositivo se vuelve a suscribir, se actualiza en vez de duplicarse.
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("push_suscripciones")
 }
 
 model Turno {
@@ -88,6 +113,11 @@ model Turno {
 
   clienteNombre   String @map("cliente_nombre")
   clienteTelefono String @map("cliente_telefono")
+
+  // HU-19 — Opcional a propósito: muchos clientes de Ariel no usan mail. Los que lo
+  // dejan reciben la confirmación con el link de gestión; los que no, siguen
+  // arreglándose por WhatsApp con Ariel, como hasta ahora.
+  clienteEmail String? @map("cliente_email")
 
   servicioId String   @map("servicio_id") @db.Uuid
   servicio   Servicio @relation(fields: [servicioId], references: [id])
@@ -103,6 +133,12 @@ model Turno {
   estado            EstadoTurno @default(reservado)
   origen            OrigenTurno @default(online)
   motivoCancelacion String?     @map("motivo_cancelacion")
+
+  // HU-17 — Si Ariel ya vio este turno en el panel. Los que carga él mismo nacen en
+  // `true` (no tiene sentido avisarle de lo que acaba de tipear). Vive en la base y no
+  // en el navegador porque Ariel usa el celular y la tablet del mostrador: marcarlo como
+  // visto en uno tiene que callarlo en el otro.
+  vistoPorAdmin Boolean @default(false) @map("visto_por_admin")
 
   turnoOrigenId String? @map("turno_origen_id") @db.Uuid
   turnoOrigen   Turno?  @relation("Reprogramacion", fields: [turnoOrigenId], references: [id])

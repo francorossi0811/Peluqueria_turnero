@@ -6,7 +6,9 @@
 ## 1. Convenciones generales
 
 - **Base URL:** `/api`
-- **Formato:** JSON en request y response (`Content-Type: application/json`).
+- **Formato:** JSON en request y response (`Content-Type: application/json`). Única
+  excepción: `GET /api/turnos/:id/calendario.ics` devuelve `text/calendar` como archivo
+  descargable (HU-19).
 - **Nombres de campos:** JSON en `camelCase`; las columnas de base de datos están en
   `snake_case` (ver `Docs/modelo-datos.md`) — el mapeo es responsabilidad de la capa de
   backend, no se expone `snake_case` en la API.
@@ -20,6 +22,15 @@
   `Authorization: Bearer <jwt>`. Las rutas públicas (flujo del cliente) no requieren
   autenticación — usan el `id` del turno como token de acceso (ver
   `Docs/modelo-datos.md`, tabla `turnos`).
+- **Duración y renovación de la sesión (HU-15):** el token vale 7 días. Cuando ya pasó la
+  mitad de su vida, cualquier respuesta de una ruta `/api/admin/*` incluye el header
+  `X-Token-Renovado` con un token nuevo, y el cliente **debe** reemplazar el que tenía
+  guardado. Así la sesión se extiende sola mientras Ariel use el panel, sin endpoint de
+  refresh ni cookies. El header está declarado en `Access-Control-Expose-Headers`, sin lo
+  cual el browser no podría leerlo cuando el frontend está en otro dominio.
+- **Invalidación por cambio de contraseña (HU-16):** un token emitido antes del último
+  cambio de contraseña se rechaza con `401 TOKEN_INVALIDO`, aunque todavía no haya
+  vencido.
 - **Formato de error:**
   ```json
   { "error": { "codigo": "HORARIO_NO_DISPONIBLE", "mensaje": "Ese horario ya no está disponible." } }
@@ -61,6 +72,12 @@ Response:
 | GET | `/api/turnos/:id` | Detalle del turno (el link único que recibe el cliente apunta acá) |
 | POST | `/api/turnos/:id/cancelar` | Cancela el turno, valida ventana de 60 min (CU-02) |
 | POST | `/api/turnos/:id/reprogramar` | Reprograma a un nuevo horario, valida ventana de 60 min + disponibilidad (CU-02, HU-04) |
+| GET | `/api/turnos/:id/calendario.ics` | El turno como evento de calendario (HU-19). Devuelve `text/calendar`, no JSON. Público por el mismo motivo que `GET /api/turnos/:id`: el id *es* el token |
+
+`POST /api/turnos` acepta además `clienteEmail` (opcional, HU-19). Un string vacío se
+trata como "no dejó email"; uno con formato inválido responde `400 PARAMETROS_INVALIDOS`.
+Si hay email, se envía la confirmación con el link y el `.ics` adjunto — también al
+reprogramar, porque reprogramar genera un turno nuevo y por lo tanto un link nuevo.
 
 **POST `/api/turnos`** — body:
 ```json
@@ -92,11 +109,29 @@ nuevo (mismo shape que el POST de creación).
 
 ## 3. Endpoints de administración (`/api/admin/*` — JWT requerido)
 
-### Auth — HU-15
+### Auth y cuenta — HU-15, HU-16
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/auth/login` | `{ "usuario": "...", "password": "..." }` → `{ "token": "<jwt>" }` |
+| POST | `/api/auth/login` | `{ "usuario": "...", "password": "..." }` → `{ "token": "<jwt>" }`. Credenciales incorrectas: `401 CREDENCIALES_INVALIDAS` (no distingue usuario inexistente de contraseña incorrecta) |
+| GET | `/api/admin/me` | `{ "usuario": "ariel" }` — la cuenta del admin logueado |
+| PATCH | `/api/admin/password` | `{ "passwordActual": "...", "passwordNueva": "..." }` → `{ "token": "<jwt nuevo>" }` (HU-16) |
+
+Sobre `PATCH /api/admin/password`:
+
+- Devuelve un token nuevo porque el cambio invalida todos los emitidos antes; el cliente
+  tiene que reemplazar el guardado o su propia sesión queda muerta.
+- La contraseña nueva debe tener al menos 8 caracteres y ser distinta de la actual;
+  si no, `400 PARAMETROS_INVALIDOS`.
+- Contraseña actual incorrecta responde **`400`**, no `401`:
+
+  ```json
+  { "error": { "codigo": "PASSWORD_ACTUAL_INCORRECTA", "mensaje": "La contraseña actual no es correcta." } }
+  ```
+
+  Es deliberado. El request está bien formado y el llamador *sí* está autenticado — lo
+  que está mal es el dato. Además, el frontend trata todo `401` como "sesión vencida" y
+  desloguea, así que un `401` acá echaría a Ariel por un error de tipeo.
 
 ### Agenda y turnos — HU-06 a HU-10, HU-12
 
@@ -108,6 +143,24 @@ nuevo (mismo shape que el POST de creación).
 | PATCH | `/api/admin/turnos/:id` | Mover un turno a otro horario (HU-09), sin límite de 60 min |
 | POST | `/api/admin/turnos/:id/cancelar` | Cancela sin límite de 60 min (HU-10) |
 | PATCH | `/api/admin/turnos/:id/estado` | `{ "estado": "realizado" \| "ausente" }` (HU-12) |
+| POST | `/api/admin/turnos/marcar-vistos` | `{ "ids": ["<uuid>", …] }` → `{ "marcados": n }`. Apaga la marca "Nuevo" (HU-17) |
+
+Los turnos en la vista de admin incluyen además `vistoPorAdmin` (HU-17) y `clienteEmail`
+(HU-19). Los que se cargan por `POST /api/admin/turnos` nacen con `vistoPorAdmin: true`:
+no tiene sentido marcarle como nuevo a Ariel algo que acaba de escribir él.
+
+### Notificaciones push — HU-18
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/push/clave-publica` | `{ "clavePublica": "<VAPID>" }`. `503 PUSH_NO_CONFIGURADO` si el servidor no tiene claves VAPID |
+| POST | `/api/admin/push/suscripciones` | Body: el `PushSubscription.toJSON()` del navegador. Idempotente por `endpoint` |
+| DELETE | `/api/admin/push/suscripciones` | `{ "endpoint": "..." }` |
+| POST | `/api/admin/push/prueba` | Manda un aviso de prueba → `{ "enviadas": n }` |
+
+La clave pública se sirve por API y no se compila dentro del frontend a propósito: una
+copia de build-time se desincroniza de la del servidor sin que nadie lo note, y genera
+suscripciones a las que después no se les puede enviar nada.
 
 ### Servicios — HU-13
 

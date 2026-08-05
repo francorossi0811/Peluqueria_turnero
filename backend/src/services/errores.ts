@@ -4,6 +4,8 @@ export class TurnoNoEncontradoError extends Error {}
 export class TurnoNoModificableError extends Error {}
 export class FueraDeVentanaError extends Error {}
 export class CredencialesInvalidasError extends Error {}
+export class AdministradorNoEncontradoError extends Error {}
+export class PasswordActualIncorrectaError extends Error {}
 export class ServicioNoEncontradoError extends Error {}
 export class BloqueoNoEncontradoError extends Error {}
 export class FeriadoNoEncontradoError extends Error {}

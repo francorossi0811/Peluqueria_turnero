@@ -37,6 +37,22 @@ export function formatearFecha(fecha: Date): string {
   return `${anio}-${mes}-${dia}`
 }
 
+const FORMATO_LEGIBLE = new Intl.DateTimeFormat('es-AR', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  // Las fechas se guardan ancladas en UTC como valores de pared (ver combinarFechaHora),
+  // así que hay que leerlas en UTC o el formateo se correría un día según el huso en el
+  // que esté corriendo el server.
+  timeZone: 'UTC',
+})
+
+/** Fecha en castellano para textos dirigidos a personas (mails, notificaciones):
+ * "miércoles 5 de agosto". La API sigue usando `formatearFecha` (ISO). */
+export function formatearFechaLegible(fecha: Date): string {
+  return FORMATO_LEGIBLE.format(fecha)
+}
+
 // "YYYY-MM-DD" -> Date anclada en UTC a medianoche, para comparar/guardar como DATE.
 export function fechaDesdeIso(iso: string): Date {
   const [anio, mes, dia] = iso.split('-').map(Number)

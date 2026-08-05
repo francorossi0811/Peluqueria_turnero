@@ -9,7 +9,7 @@ import { GrillaHorarios } from '../components/GrillaHorarios'
 import { Landing } from '../components/Landing'
 import { obtenerServicios } from '../api/servicios'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
-import { crearTurno } from '../api/turnos'
+import { crearTurno, urlCalendario } from '../api/turnos'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import type { DisponibilidadDia, ErrorApi, Servicio, Turno } from '../types/api'
 
@@ -26,6 +26,7 @@ export function ReservarPage() {
   const [hora, setHora] = useState<string | null>(null)
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
+  const [clienteEmail, setClienteEmail] = useState('')
   const [turnoCreado, setTurnoCreado] = useState<Turno | null>(null)
   const [errorHorario, setErrorHorario] = useState<string | null>(null)
 
@@ -89,6 +90,9 @@ export function ReservarPage() {
       hora,
       clienteNombre,
       clienteTelefono,
+      // Vacío significa "no dejó mail". Se manda `undefined` y no '' para no guardar
+      // un dato falso en la base.
+      clienteEmail: clienteEmail.trim() || undefined,
     })
   }
 
@@ -135,9 +139,11 @@ export function ReservarPage() {
             hora={hora}
             nombre={clienteNombre}
             telefono={clienteTelefono}
+            email={clienteEmail}
             enviando={crearTurnoMutation.isPending}
             onNombreChange={setClienteNombre}
             onTelefonoChange={setClienteTelefono}
+            onEmailChange={setClienteEmail}
             onVolver={() => setPaso('horario')}
             onSubmit={confirmar}
           />
@@ -148,6 +154,7 @@ export function ReservarPage() {
             turno={turnoCreado}
             nombre={clienteNombre}
             telefono={clienteTelefono}
+            email={clienteEmail.trim()}
           />
         )}
       </div>
@@ -229,9 +236,11 @@ function PasoDatos({
   hora,
   nombre,
   telefono,
+  email,
   enviando,
   onNombreChange,
   onTelefonoChange,
+  onEmailChange,
   onVolver,
   onSubmit,
 }: {
@@ -240,9 +249,11 @@ function PasoDatos({
   hora: string
   nombre: string
   telefono: string
+  email: string
   enviando: boolean
   onNombreChange: (v: string) => void
   onTelefonoChange: (v: string) => void
+  onEmailChange: (v: string) => void
   onVolver: () => void
   onSubmit: (e: React.FormEvent) => void
 }) {
@@ -283,6 +294,23 @@ function PasoDatos({
           />
         </label>
 
+        <label className="flex flex-col gap-1">
+          <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+            Email (opcional)
+          </span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => onEmailChange(e.target.value)}
+            placeholder="Ej: juan@gmail.com"
+            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+          />
+          <span className="text-tinta-tenue text-xs">
+            Te mandamos el link de tu turno por mail así no lo perdés. Si no
+            ponés, guardalo vos o escribile a Ariel.
+          </span>
+        </label>
+
         <div className="mt-2 flex gap-3">
           <button type="button" className={BTN_GHOST} onClick={onVolver}>
             Volver
@@ -307,10 +335,12 @@ function PasoConfirmacion({
   turno,
   nombre,
   telefono,
+  email,
 }: {
   turno: Turno
   nombre: string
   telefono: string
+  email: string
 }) {
   const [copiado, setCopiado] = useState(false)
   const link = `${window.location.origin}/turno/${turno.id}`
@@ -327,9 +357,19 @@ function PasoConfirmacion({
       <p className="font-body text-tinta mb-2 text-lg">
         {fechaLegible(turno.fecha)} · {turno.hora}
       </p>
-      <p className="font-body text-tinta mb-6 opacity-75">
+      <p className="font-body text-tinta mb-4 opacity-75">
         Te contactaremos al {telefono} si hace falta reprogramar.
       </p>
+
+      {email && (
+        <p className="font-body text-tinta mb-4 opacity-75">
+          Te mandamos la confirmación con el link a <strong>{email}</strong>.
+        </p>
+      )}
+
+      <a href={urlCalendario(turno.id)} className={`${BTN_OUTLINE} mb-6 w-full`}>
+        Agregar a mi calendario
+      </a>
 
       <label className="text-tinta-tenue mb-2 block text-left text-xs tracking-wide uppercase">
         Tu link para gestionar el turno
@@ -351,8 +391,8 @@ function PasoConfirmacion({
         <span className="bg-borde-suave mr-1 rounded px-1 py-0.5 font-mono text-[10px] tracking-wide uppercase">
           Simulado
         </span>
-        Te llegaría este mismo mensaje por WhatsApp cuando Ariel tenga cuenta de
-        negocio.
+        Este mismo mensaje te llegaría además por WhatsApp cuando Ariel tenga
+        cuenta de negocio.
       </p>
 
       <Link to="/" className={`${BTN_GHOST} mt-6 inline-flex`}>

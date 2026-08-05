@@ -9,6 +9,7 @@ import {
   estaDentroDeVentanaDeCambio,
   listarTurnosEnRango,
   marcarTurno,
+  marcarTurnosComoVistos,
   obtenerTurno,
   reprogramarTurno,
 } from '../services/turnos.service'
@@ -19,6 +20,11 @@ import {
   TurnoNoEncontradoError,
   TurnoNoModificableError,
 } from '../services/errores'
+import {
+  enviarConfirmacionDeTurno,
+  icsDeTurno,
+  notificarNuevoTurno,
+} from '../services/notificaciones.service'
 import {
   ahoraArgentina,
   fechaDesdeIso,
@@ -37,6 +43,13 @@ const bodySchema = z.object({
   hora: horaSchema,
   clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
   clienteTelefono: z.string().trim().min(6, 'Teléfono inválido.'),
+  // HU-19 — Opcional. El `preprocess` es necesario porque un input de texto vacío llega
+  // como `""`, que no pasa la validación de email; sin esto, dejar el campo en blanco
+  // daría error en vez de significar "no dejó mail".
+  clienteEmail: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z.email('El email no parece válido.').optional(),
+  ),
 })
 
 const reprogramarSchema = z.object({
@@ -99,7 +112,9 @@ function turnoAdminDto(turno: Turno) {
     horaFin: formatearHora(turno.horaFin),
     clienteNombre: turno.clienteNombre,
     clienteTelefono: turno.clienteTelefono,
+    clienteEmail: turno.clienteEmail,
     origen: turno.origen,
+    vistoPorAdmin: turno.vistoPorAdmin,
   }
 }
 
@@ -167,8 +182,14 @@ export async function postTurno(req: Request, res: Response) {
     return
   }
 
-  const { servicioId, fecha, hora, clienteNombre, clienteTelefono } =
-    parsed.data
+  const {
+    servicioId,
+    fecha,
+    hora,
+    clienteNombre,
+    clienteTelefono,
+    clienteEmail,
+  } = parsed.data
 
   try {
     const turno = await crearTurno({
@@ -177,8 +198,39 @@ export async function postTurno(req: Request, res: Response) {
       hora,
       clienteNombre,
       clienteTelefono,
+      clienteEmail,
     })
     res.status(201).json(turnoADto(turno))
+
+    // Avisos, después de responder y sin `await`: la reserva ya está guardada, y ni un
+    // push ni un mail caído pueden hacerla fallar. Va acá y no dentro de `crearTurno`
+    // para que la carga manual de Ariel (postTurnoManual) no dispare nada — es la ruta,
+    // y no un flag, la que expresa "esto vino de un cliente".
+    void notificarNuevoTurno(turno)
+    void enviarConfirmacionDeTurno(turno)
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+/** HU-19 — Descarga del turno como archivo de calendario.
+ *
+ * Es pública y sin auth por el mismo motivo que `GET /api/turnos/:id`: el id del turno
+ * ES el token de acceso. Tener la generación acá (y no en el navegador) permite que el
+ * mail de confirmación apunte a esta misma URL, sin duplicar la lógica. */
+export async function getTurnoIcs(req: Request, res: Response) {
+  const parsed = idSchema.safeParse(req.params)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  try {
+    const turno = await obtenerTurno(parsed.data.id)
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8')
+    res.setHeader('Content-Disposition', 'attachment; filename="turno.ics"')
+    res.send(icsDeTurno(turno))
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
     throw err
@@ -197,8 +249,15 @@ export async function postTurnoManual(req: Request, res: Response) {
     return
   }
 
-  const { servicioId, fecha, hora, clienteNombre, clienteTelefono, origen } =
-    parsed.data
+  const {
+    servicioId,
+    fecha,
+    hora,
+    clienteNombre,
+    clienteTelefono,
+    clienteEmail,
+    origen,
+  } = parsed.data
 
   try {
     const turno = await crearTurno({
@@ -207,9 +266,14 @@ export async function postTurnoManual(req: Request, res: Response) {
       hora,
       clienteNombre,
       clienteTelefono,
+      clienteEmail,
       origen,
     })
     res.status(201).json(turnoAdminDto(turno))
+
+    // También cuando lo carga Ariel: si el cliente le dictó un mail, merece la
+    // confirmación con su link igual que si hubiera reservado él mismo por la web.
+    void enviarConfirmacionDeTurno(turno)
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
     throw err
@@ -278,6 +342,10 @@ export async function postReprogramarTurno(req: Request, res: Response) {
       hora,
     })
     res.status(201).json(turnoADto(turno))
+
+    // Reprogramar crea un turno nuevo, o sea un link nuevo: sin este mail, el único
+    // link que le queda al cliente apunta a un turno ya en estado `reprogramado`.
+    void enviarConfirmacionDeTurno(turno, { esReprogramacion: true })
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
     throw err
@@ -385,6 +453,25 @@ export async function patchEstadoTurno(req: Request, res: Response) {
     if (manejarErroresComunes(err, res)) return
     throw err
   }
+}
+
+// HU-17
+const marcarVistosSchema = z.object({
+  ids: z.array(z.uuid()).min(1, 'Mandá al menos un turno.'),
+})
+
+export async function postMarcarVistos(req: Request, res: Response) {
+  const parsed = marcarVistosSchema.safeParse(req.body)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const marcados = await marcarTurnosComoVistos(parsed.data.ids)
+  res.json({ marcados })
 }
 
 const buscarSchema = z

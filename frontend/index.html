@@ -5,7 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>La Peluquería de Ariel Enrique — Turnero</title>
-    <!-- Fuentes de la landing (Playfair Display, Cormorant Garamond, Lora) — ver .tema-cliente en index.css -->
+    <!-- PWA: permite que Ariel instale el panel en el celular. En iPhone eso no es un
+         extra sino un requisito para que funcionen las notificaciones push (HU-18).
+         Para mejorar la calidad del icono al instalar, exportar del diseño un PNG de
+         192x192 y otro de 512x512, dejarlos en public/ y sumarlos a manifest.webmanifest. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#f7efe3" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Panel de Ariel" />
+    <!-- Fuentes del sitio (Playfair Display, Cormorant Garamond, Lora) — ver el @theme en index.css -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

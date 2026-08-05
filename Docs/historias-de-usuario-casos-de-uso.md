@@ -15,6 +15,9 @@
 
 ## 2. Historias de Usuario
 
+*Las HU-16 en adelante se agregaron después del alcance inicial de v1, en el orden en que
+se fueron construyendo — por eso no siguen el agrupamiento por actor de las primeras 15.*
+
 ### Cliente
 
 **HU-01 — Reservar turno**
@@ -26,7 +29,8 @@ Como cliente, quiero reservar un turno eligiendo servicio, día y horario, para 
 **HU-02 — Recibir confirmación**
 Como cliente, quiero recibir una confirmación clara de mi turno, para saber que quedó agendado correctamente.
 - La confirmación muestra fecha, hora, servicio y el link único.
-- (v1: la notificación es simulada en la web; el envío real por WhatsApp queda para cuando Ariel tenga API de negocio).
+- Si dejo mi email (es opcional), me llega la confirmación por mail con el link y el turno adjunto para el calendario — así no dependo de copiar el link a mano.
+- (El envío por WhatsApp sigue simulado, para cuando Ariel tenga cuenta de negocio. El mail sí es real.)
 
 **HU-03 — Cancelar turno**
 Como cliente, quiero poder cancelar mi turno usando mi link único, para liberar el horario si no puedo asistir, sin tener que llamar a Ariel.
@@ -76,7 +80,39 @@ Como Ariel, quiero poder cambiar mis días y horarios de atención, para refleja
 
 **HU-15 — Iniciar sesión**
 Como Ariel, quiero acceder a mi panel con usuario y contraseña, para que nadie más pueda modificar mi agenda.
-- (v1: la contraseña se carga una sola vez, por variable de entorno, al desplegar/hacer el seed inicial — la elige Ariel, no queda en ningún archivo del repo. Un endpoint para que Ariel la cambie él mismo desde el panel queda para una versión futura, ver sección 5.)
+- La cuenta se crea una sola vez, al hacer el seed inicial, con la contraseña que Ariel elige por variable de entorno (`ADMIN_PASSWORD`) — no queda en ningún archivo del repo. De ahí en más la contraseña vive hasheada en la tabla `administradores` y Ariel la cambia desde el panel (HU-16); la variable de entorno no se vuelve a leer.
+- La sesión dura 7 días y se renueva sola mientras use el panel: cada request autenticado la extiende, así que teniendo el panel abierto seguido no necesita volver a loguearse. Cerrar el navegador no cierra la sesión.
+- Al cambiar la contraseña se cierran las sesiones abiertas en otros dispositivos (HU-16).
+
+**HU-16 — Cambiar mi contraseña**
+Como Ariel, quiero cambiar mi contraseña desde el panel, para poder elegir una que solo yo sepa y cambiarla si sospecho que alguien la tiene.
+- Tengo que ingresar la contraseña actual para confirmar que soy yo.
+- La nueva tiene que tener al menos 8 caracteres y ser distinta de la actual.
+- Si me equivoco en la contraseña actual me lo avisa y me deja seguir en la pantalla — no me cierra la sesión.
+- Al cambiarla, las sesiones abiertas en otros dispositivos dejan de valer, pero la que estoy usando sigue activa.
+
+**HU-17 — Ver los turnos nuevos apenas entran**
+Como Ariel, quiero que los turnos que reservan por la web aparezcan solos en el panel, para no tener que estar recargando la página durante el día.
+- Con el panel abierto, la agenda se actualiza sola cada 30 segundos y al volver a la pestaña.
+- Los turnos que todavía no vi quedan destacados y con una marca "Nuevo", para distinguirlos de un vistazo en un día cargado.
+- Puedo marcarlos todos como vistos de una. Queda registrado del lado del servidor, así marcarlos en la tablet también los apaga en el celular.
+- Los turnos que cargo yo a mano (HU-08) nacen ya vistos: no tiene sentido avisarme de algo que acabo de escribir.
+
+**HU-18 — Aviso en el celular de un turno nuevo**
+Como Ariel, quiero que me llegue un aviso al celular cuando entra una reserva, para enterarme aunque tenga el panel cerrado.
+- El aviso trae el cliente, el servicio, el día y la hora.
+- Solo avisa de las reservas que entran por la web, no de las que cargo yo.
+- Se activa desde "Mi cuenta", por dispositivo, y se puede desactivar y probar desde ahí mismo.
+- (En iPhone, Apple solo permite estos avisos si el sitio está agregado a la pantalla de inicio; el panel explica cómo hacerlo cuando detecta ese caso.)
+
+### Cliente (continuación)
+
+**HU-19 — Agregar el turno a mi calendario**
+Como cliente, quiero agregar el turno al calendario de mi celular, para que me lo recuerde y para no depender de guardar un link.
+- El botón está en la pantalla de confirmación y también al abrir el link de gestión.
+- El evento incluye el link para cancelar o reprogramar en su descripción.
+- Si dejé mi email, el turno viene además adjunto en el mail de confirmación (HU-02).
+- Si reprogramo, el evento del calendario se actualiza en lugar de duplicarse.
 
 ---
 
@@ -140,14 +176,16 @@ Como Ariel, quiero acceder a mi panel con usuario y contraseña, para que nadie 
 | Servicio de larga duración (ej. Color, 90 min) cerca del cierre o del descanso | No se ofrece como horario válido si no entra completo (ver CU-04) |
 | Ariel cambia la duración de un servicio después de que ya hay turnos reservados con la duración vieja | El turno guarda una "foto" del servicio (nombre + duración) al momento de reservar, no una referencia que cambie después |
 | Ariel cambia el horario laboral general | Los turnos ya reservados fuera del nuevo horario se mantienen válidos; solo los horarios *nuevos* respetan la config actualizada |
-| Cliente pierde su link único | No hay recuperación automática en v1 (no hay email ni cuenta). Debe escribirle a Ariel, que puede buscar el turno en su panel y reenviarle el link |
+| Cliente pierde su link único | Si dejó email, el link le llegó por mail y además quedó dentro del evento del calendario (HU-02, HU-19). Si no dejó email, no hay recuperación automática: le escribe a Ariel, que busca el turno en su panel y le reenvía el link |
 | Cliente reprograma repetidamente para "trabar" horarios | Fuera de alcance v1 — lo anotamos como posible mejora futura (límite de reprogramaciones) |
 
 ---
 
 ## 5. Fuera de alcance en v1 (recordatorio)
 
-Precios · Deudas por ausencia · Multi-peluquero · WhatsApp Business API real · Recuperación de link por teléfono/email · Que Ariel cambie su contraseña desde el panel (HU-15, v1 la carga por variable de entorno)
+Precios · Deudas por ausencia · Multi-peluquero · WhatsApp Business API real · Recuperación autoservicio del link para clientes sin email · Recordatorio automático antes del turno (HU-05 sigue simulado; el evento de calendario de HU-19 lo cubre en parte, con la alarma del propio celular)
+
+*Salieron de esta lista: que Ariel cambie su contraseña desde el panel (HU-16) y el envío del link por mail (HU-02, HU-19), ambos ya implementados.*
 
 ---
 

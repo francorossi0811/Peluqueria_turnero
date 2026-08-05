@@ -22,6 +22,7 @@ export interface DatosNuevoTurno {
   hora: string // "HH:mm"
   clienteNombre: string
   clienteTelefono: string
+  clienteEmail?: string // HU-19: opcional, muchos clientes de Ariel no usan mail
   origen?: OrigenTurno // HU-08: admin manda 'telefono'/'whatsapp'; público no manda nada -> 'online'
 }
 
@@ -78,6 +79,7 @@ export async function crearTurno(input: DatosNuevoTurno): Promise<Turno> {
       data: {
         clienteNombre: input.clienteNombre,
         clienteTelefono: input.clienteTelefono,
+        clienteEmail: input.clienteEmail,
         servicioId: servicio.id,
         servicioNombreSnapshot: servicio.nombre,
         servicioDuracionSnapshot: servicio.duracionMinutos,
@@ -85,6 +87,10 @@ export async function crearTurno(input: DatosNuevoTurno): Promise<Turno> {
         horaInicio,
         horaFin,
         origen: input.origen ?? 'online',
+        // HU-17 — Los que carga Ariel nacen vistos: no tiene sentido marcarle como
+        // "nuevo" un turno que acaba de tipear él mismo. `origen` ya distingue los dos
+        // llamadores (ver el comentario de arriba), así que no hace falta nada más.
+        vistoPorAdmin: Boolean(input.origen),
       },
     })
   } catch (err) {
@@ -94,6 +100,16 @@ export async function crearTurno(input: DatosNuevoTurno): Promise<Turno> {
     if (esViolacionDeSolapamiento(err)) throw new HorarioNoDisponibleError()
     throw err
   }
+}
+
+/** HU-17 — Marca turnos como vistos por Ariel. Recibe una lista porque el caso normal
+ * es "ya miré la agenda, sacá el resaltado de todos". Idempotente. */
+export async function marcarTurnosComoVistos(ids: string[]): Promise<number> {
+  const { count } = await prisma.turno.updateMany({
+    where: { id: { in: ids } },
+    data: { vistoPorAdmin: true },
+  })
+  return count
 }
 
 export async function obtenerTurno(id: string): Promise<Turno> {
@@ -177,6 +193,9 @@ export async function reprogramarTurno(
         data: {
           clienteNombre: original.clienteNombre,
           clienteTelefono: original.clienteTelefono,
+          // Sin esto, el cliente que reprograma se queda sin forma de recibir el link
+          // nuevo — y el que tenía apunta a un turno ya en estado `reprogramado`.
+          clienteEmail: original.clienteEmail,
           servicioId: servicio.id,
           servicioNombreSnapshot: servicio.nombre,
           servicioDuracionSnapshot: servicio.duracionMinutos,
