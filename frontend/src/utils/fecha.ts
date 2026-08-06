@@ -24,6 +24,24 @@ export function sumarDias(fechaIso: string, dias: number): string {
   return formatearFechaIso(fecha)
 }
 
+/** 0 = domingo … 6 = sábado. Misma convención que `horario_laboral.dia_semana` en la
+ * base y que los arrays de nombres de acá abajo, así que un `diaSemana` sirve
+ * indistintamente para indexar cualquiera de los dos. */
+export function diaSemana(fechaIso: string): number {
+  return fechaDesdeIso(fechaIso).getDay()
+}
+
+/** El domingo de la semana que contiene a `fechaIso` (o la misma fecha, si ya es
+ * domingo).
+ *
+ * Las semanas se anclan en domingo y no en lunes por dos motivos: es la convención que
+ * ya usa `getDay()` y todos los arrays de días del proyecto, y hace que un domingo o un
+ * lunes —los dos días que Ariel no trabaja— caigan en la semana que **empieza**, que es
+ * la que quiere ver cuando mira la agenda esos días. */
+export function domingoDeLaSemana(fechaIso: string): string {
+  return sumarDias(fechaIso, -diaSemana(fechaIso))
+}
+
 const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 export function etiquetaDiaCorta(fechaIso: string): string {

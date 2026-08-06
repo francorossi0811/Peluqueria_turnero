@@ -15,7 +15,14 @@ import {
   obtenerAgenda,
 } from '../../api/agenda'
 import { eliminarBloqueo, obtenerBloqueos } from '../../api/bloqueos'
-import { hoyIso, sumarDias, fechaLegible } from '../../utils/fecha'
+import { obtenerHorarioLaboral } from '../../api/horarioLaboral'
+import {
+  hoyIso,
+  sumarDias,
+  fechaLegible,
+  diaSemana,
+  domingoDeLaSemana,
+} from '../../utils/fecha'
 import type { TurnoAdmin } from '../../types/api'
 
 type Vista = 'dia' | 'semana'
@@ -30,6 +37,32 @@ function diasEnRango(desde: string, hasta: string): string[] {
   return dias
 }
 
+/** El rango de la vista "Semana": del primer al último día que Ariel efectivamente
+ * trabaja, dentro de la semana calendario donde esté parado.
+ *
+ * Hoy eso da martes a sábado, pero **no está escrito en ningún lado del código**: sale
+ * de qué días tienen franjas cargadas en "Horarios y servicios". Si Ariel mañana abre
+ * los lunes, la agenda lo sigue sola, sin tocar nada acá.
+ *
+ * Antes la semana eran 7 días corridos desde donde estuviera parado: parado un jueves
+ * veía jueves→miércoles, y siempre le entraban dos días en los que no trabaja. */
+function rangoDeLaSemana(
+  fecha: string,
+  diasLaborales: number[],
+): { desde: string; hasta: string } {
+  // Sin horario cargado no hay de dónde deducir la semana laboral: se cae a los 7 días
+  // corridos de siempre en vez de mostrar un rango vacío.
+  if (diasLaborales.length === 0) {
+    return { desde: fecha, hasta: sumarDias(fecha, 6) }
+  }
+
+  const domingo = domingoDeLaSemana(fecha)
+  return {
+    desde: sumarDias(domingo, Math.min(...diasLaborales)),
+    hasta: sumarDias(domingo, Math.max(...diasLaborales)),
+  }
+}
+
 export function AgendaPage() {
   const queryClient = useQueryClient()
   const [vista, setVista] = useState<Vista>('dia')
@@ -39,8 +72,23 @@ export function AgendaPage() {
   const [modalBuscar, setModalBuscar] = useState(false)
   const [turnoEditar, setTurnoEditar] = useState<TurnoAdmin | null>(null)
 
-  const desde = fecha
-  const hasta = vista === 'semana' ? sumarDias(fecha, 6) : fecha
+  // Qué días trabaja Ariel, según lo que tenga cargado en "Horarios y servicios".
+  // `staleTime` alto porque esto cambia una vez cada muchos meses, y la agenda se
+  // refresca cada 30 segundos: sin esto, cada refresco arrastraría también esta query.
+  const horarioQuery = useQuery({
+    queryKey: ['horario-laboral'],
+    queryFn: obtenerHorarioLaboral,
+    staleTime: 60 * 60 * 1000,
+  })
+  const diasLaborales = [
+    ...new Set((horarioQuery.data ?? []).map((f) => f.diaSemana)),
+  ]
+  const esDiaLaboral = (dia: string) => diasLaborales.includes(diaSemana(dia))
+
+  const { desde, hasta } =
+    vista === 'semana'
+      ? rangoDeLaSemana(fecha, diasLaborales)
+      : { desde: fecha, hasta: fecha }
 
   const agendaQuery = useQuery({
     queryKey: ['agenda', desde, hasta],
@@ -228,8 +276,12 @@ export function AgendaPage() {
               (b) => b.fechaInicio <= dia && b.fechaFin >= dia,
             )
 
+            // Un día laboral se muestra siempre, aunque esté vacío: "el miércoles no
+            // tenés nada" es información, y antes se escondía. Un día no laboral solo
+            // aparece si pasa algo en él — típicamente un bloqueo que Ariel cargó.
             if (
               vista === 'semana' &&
+              !esDiaLaboral(dia) &&
               turnosDelDia.length === 0 &&
               bloqueosDelDia.length === 0
             ) {
