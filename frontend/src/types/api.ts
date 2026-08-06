@@ -29,9 +29,21 @@ export interface Turno {
   puedeCancelar?: boolean
 }
 
+/** Por qué un día no tiene horarios. Permite explicarle al cliente qué pasó en vez de
+ * mostrarle siempre el mismo "no hay turnos". */
+export type EstadoDia =
+  | 'disponible'
+  | 'cerrado'
+  | 'feriado'
+  | 'bloqueado'
+  | 'completo'
+
 export interface DisponibilidadDia {
   fecha: string // "YYYY-MM-DD"
   horarios: string[] // "HH:mm"
+  estado: EstadoDia
+  /** Motivo del bloqueo o nombre del feriado, cuando corresponde. */
+  motivo: string | null
 }
 
 export interface NuevoTurno {

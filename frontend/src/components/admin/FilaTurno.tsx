@@ -82,13 +82,14 @@ export function FilaTurno({
         </div>
       </div>
 
+      {/* Las cuatro acciones pesaban lo mismo y competían entre sí. Ahora hay jerarquía:
+          "Realizado" y "Ausente" son lo que Ariel hace todos los días, decenas de veces,
+          y quedan adelante y destacadas; "Editar" y "Cancelar" son excepciones y pasan a
+          la derecha, sin caja, separadas por un divisor. */}
       {esReservado && !confirmandoCancelar && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="outline" onClick={onEditar}>
-            Editar
-          </Button>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button
-            variant="outline"
+            variant="primary"
             onClick={() => onMarcarEstado('realizado')}
             disabled={marcando}
           >
@@ -101,7 +102,13 @@ export function FilaTurno({
           >
             Ausente
           </Button>
-          <Button variant="danger" onClick={() => setConfirmandoCancelar(true)}>
+
+          <span className="bg-borde mx-1 hidden h-6 w-px sm:block" />
+
+          <Button variant="ghost" onClick={onEditar}>
+            Editar
+          </Button>
+          <Button variant="ghost" onClick={() => setConfirmandoCancelar(true)}>
             Cancelar
           </Button>
         </div>

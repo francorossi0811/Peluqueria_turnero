@@ -6,12 +6,13 @@ import { PrismaClient } from '../generated/prisma/client.ts'
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
 
-// Datos reales confirmados con Franco (ver Docs/modelo-datos.md).
+// Datos reales confirmados con Franco (ver Docs/modelo-datos.md). El `orden` es el de
+// exhibición al cliente, del servicio más pedido al menos pedido.
 const SERVICIOS = [
-  { nombre: 'Corte clásico', duracionMinutos: 30 },
-  { nombre: 'Corte + Barba', duracionMinutos: 45 },
-  { nombre: 'Color', duracionMinutos: 90 },
-  { nombre: 'Barba', duracionMinutos: 20 },
+  { nombre: 'Corte clásico', duracionMinutos: 30, orden: 1 },
+  { nombre: 'Corte + Barba', duracionMinutos: 45, orden: 2 },
+  { nombre: 'Barba', duracionMinutos: 20, orden: 3 },
+  { nombre: 'Color', duracionMinutos: 90, orden: 4 },
 ]
 
 function hora(h: number, m = 0): Date {

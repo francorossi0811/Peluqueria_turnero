@@ -6,13 +6,22 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
 }
 
+// Tres niveles de énfasis, y la diferencia entre ellos tiene que verse de lejos: en la
+// agenda conviven cuatro acciones por turno y antes todas pesaban igual.
+//
+// - `primary`: relleno sólido. La acción que Ariel quiere hacer en ese momento.
+// - `outline`: fondo propio más claro que el crema de la página, con borde. Se despega
+//   sin competir. Antes era transparente y se perdía sobre el fondo.
+// - `ghost`: sin caja. Acciones de escape o poco frecuentes.
 const estilosPorVariante: Record<Variant, string> = {
-  primary: 'border border-miel text-miel hover:bg-miel/10 active:bg-miel/20',
-  // Sin distinción visual de `primary` — `vino` ya no es un acento propio.
-  primaryVino: 'border border-miel text-miel hover:bg-miel/10 active:bg-miel/20',
-  outline: 'border border-borde text-tinta hover:bg-superficie-2',
-  ghost: 'text-tinta-suave hover:text-tinta',
-  danger: 'border border-vino text-vino hover:bg-vino-suave',
+  primary:
+    'bg-miel-fuerte text-white border border-miel-fuerte hover:bg-miel active:bg-miel',
+  // Alias histórico de `primary` — `vino` dejó de ser un acento propio.
+  primaryVino:
+    'bg-miel-fuerte text-white border border-miel-fuerte hover:bg-miel active:bg-miel',
+  outline: 'border border-borde bg-superficie text-tinta hover:bg-superficie-2',
+  ghost: 'text-tinta-suave hover:bg-superficie-2 hover:text-tinta',
+  danger: 'border border-borde bg-superficie text-vino hover:bg-vino-suave',
 }
 
 export function Button({
@@ -22,7 +31,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`rounded-md px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${estilosPorVariante[variant]} ${className}`}
+      className={`rounded-md px-4 py-3 text-base font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${estilosPorVariante[variant]} ${className}`}
       {...props}
     />
   )

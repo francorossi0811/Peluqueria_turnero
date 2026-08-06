@@ -99,7 +99,9 @@ export function AgendaPage() {
   }
 
   const dias = diasEnRango(desde, hasta)
-  const sinVer = (agendaQuery.data ?? []).filter((t) => !t.vistoPorAdmin)
+  const turnos = agendaQuery.data?.turnos ?? []
+  const sinVer = turnos.filter((t) => !t.vistoPorAdmin)
+  const nuevosMasAdelante = agendaQuery.data?.nuevosMasAdelante ?? 0
 
   return (
     <div>
@@ -177,6 +179,29 @@ export function AgendaPage() {
         </div>
       )}
 
+      {/* HU-17 — Turnos nuevos que entraron para más adelante. Sin esto, un turno que
+          cae dentro de tres días queda invisible hasta que Ariel navega hasta ahí. */}
+      {nuevosMasAdelante > 0 && (
+        <div className="border-borde bg-superficie-2 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2">
+          <p className="text-tinta text-sm">
+            {nuevosMasAdelante === 1
+              ? 'Además tenés 1 turno nuevo '
+              : `Además tenés ${nuevosMasAdelante} turnos nuevos `}
+            {vista === 'dia' ? 'esta semana' : 'la semana que viene'}, fuera de
+            lo que estás viendo.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (vista === 'dia') setVista('semana')
+              else setFecha((f) => sumarDias(f, 7))
+            }}
+          >
+            {vista === 'dia' ? 'Ver la semana' : 'Ir a esa semana'}
+          </Button>
+        </div>
+      )}
+
       {(agendaQuery.isPending || bloqueosQuery.isPending) && (
         <p className="text-tinta-suave">Cargando agenda…</p>
       )}
@@ -187,9 +212,18 @@ export function AgendaPage() {
       {agendaQuery.data && bloqueosQuery.data && (
         <div className="flex flex-col gap-6">
           {dias.map((dia) => {
-            const turnosDelDia = agendaQuery.data
+            // Los que ya se resolvieron (realizado / ausente) caen al fondo: lo que le
+            // sirve a Ariel de un vistazo es qué le queda por atender, no lo que ya pasó.
+            // Dentro de cada grupo, por hora.
+            const turnosDelDia = turnos
               .filter((t) => t.fecha === dia)
-              .sort((a, b) => a.hora.localeCompare(b.hora))
+              .sort((a, b) => {
+                const resuelto = (t: TurnoAdmin) =>
+                  t.estado === 'realizado' || t.estado === 'ausente' ? 1 : 0
+                return (
+                  resuelto(a) - resuelto(b) || a.hora.localeCompare(b.hora)
+                )
+              })
             const bloqueosDelDia = bloqueosQuery.data.filter(
               (b) => b.fechaInicio <= dia && b.fechaFin >= dia,
             )

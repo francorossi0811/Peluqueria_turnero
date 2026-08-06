@@ -452,10 +452,6 @@ function PasoConfirmacion({
         Te contactaremos al {telefono} si hace falta reprogramar.
       </p>
 
-      <a href={urlCalendario(turno.id)} className={`${BTN_OUTLINE} mb-6 w-full`}>
-        Agregar a mi calendario
-      </a>
-
       {/* Con mail, el link no se muestra: ya le llegó a la casilla y ahí no se pierde.
           Mostrarlo igual invitaría a copiarlo a mano, que es justo el paso que el mail
           viene a sacar. Sin mail, el link es lo único que tiene, así que va bien
@@ -488,9 +484,16 @@ function PasoConfirmacion({
         </>
       )}
 
+      {/* Va al final y no arriba: lo primero que el cliente necesita saber es que el
+          turno quedó y cómo lo va a gestionar. Guardarlo en el calendario es el paso
+          siguiente, opcional. */}
+      <a href={urlCalendario(turno.id)} className={`${BTN_OUTLINE} mt-6 w-full`}>
+        Agregar a mi calendario
+      </a>
+
       <button
         onClick={onVolverAlInicio}
-        className={`${BTN_GHOST} mt-6 inline-flex`}
+        className={`${BTN_GHOST} mt-4 inline-flex`}
       >
         Volver al inicio
       </button>

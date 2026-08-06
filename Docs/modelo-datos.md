@@ -89,6 +89,7 @@ las dos primeras son tablas de configuración que alimentan el cálculo de dispo
 | `nombre` | varchar, not null | |
 | `duracion_minutos` | int, not null | |
 | `activo` | boolean, default true | Desactivar sin borrar — no puede desaparecer un servicio que ya tiene turnos históricos asociados |
+| `orden` | int, default 0 | Posición en la que se le muestran al cliente, del más pedido al menos. Es un dato propio porque no se deduce de ningún otro: el orden que quiere Ariel (Corte clásico, Corte + Barba, Barba, Color) no coincide ni con el alfabético ni con la duración. Menor va primero, y el nombre desempata para que dos servicios con el mismo valor no queden en un orden que cambie entre consultas. Un servicio nuevo se crea con el máximo + 1, o sea al final |
 | `created_at` / `updated_at` | timestamptz | |
 
 ### `horario_laboral` — HU-14, CU-04

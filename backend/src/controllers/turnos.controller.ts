@@ -4,6 +4,7 @@ import {
   buscarTurnos,
   cancelarTurno,
   cancelarTurnoAdmin,
+  contarNuevosDespuesDe,
   crearTurno,
   editarTurno,
   estaDentroDeVentanaDeCambio,
@@ -439,7 +440,22 @@ export async function getAgenda(req: Request, res: Response) {
   }
 
   const turnos = await listarTurnosEnRango(desdeFecha, hastaFecha)
-  res.json({ turnos: turnos.map(turnoAdminDto) })
+
+  // HU-17 — Además de los del rango visible, cuántos turnos sin ver hay más adelante.
+  // El horizonte es el mismo largo que el rango que está mirando: parado en un día
+  // cuenta la semana siguiente, y parado en una semana cuenta la que viene. Así el
+  // aviso siempre habla de "lo que sigue" en la unidad en la que Ariel está pensando.
+  const largoRangoMs = hastaFecha.getTime() - desdeFecha.getTime() + 86_400_000
+  const horizonte = new Date(
+    hastaFecha.getTime() + Math.max(largoRangoMs, 7 * 86_400_000),
+  )
+  const nuevosMasAdelante = await contarNuevosDespuesDe(hastaFecha, horizonte)
+
+  res.json({
+    turnos: turnos.map(turnoAdminDto),
+    nuevosMasAdelante,
+    hastaMasAdelante: formatearFecha(horizonte),
+  })
 }
 
 // HU-09 — Mover un turno a otro horario, sin la ventana de 60 min del cliente.

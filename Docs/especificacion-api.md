@@ -58,11 +58,28 @@ Response:
 ```json
 {
   "disponibilidad": [
-    { "fecha": "2026-08-04", "horarios": ["10:00", "10:30", "17:00", "17:30"] },
-    { "fecha": "2026-08-05", "horarios": [] }
+    { "fecha": "2026-08-04", "horarios": ["10:00", "10:30"], "estado": "disponible", "motivo": null },
+    { "fecha": "2026-08-05", "horarios": [], "estado": "bloqueado", "motivo": "Cerrado por mudanza" },
+    { "fecha": "2026-08-09", "horarios": [], "estado": "cerrado", "motivo": null },
+    { "fecha": "2026-08-11", "horarios": [], "estado": "completo", "motivo": null }
   ]
 }
 ```
+
+`estado` explica **por qué** un día no tiene horarios, y es lo que permite decirle al
+cliente algo útil en vez del mismo "no hay turnos" para todo:
+
+| estado | significa |
+|---|---|
+| `disponible` | hay horarios para reservar |
+| `cerrado` | ese día de la semana la peluquería no abre (no hay franjas en `horario_laboral`) |
+| `feriado` | feriado con `bloquea = true`; `motivo` trae el nombre del feriado |
+| `bloqueado` | Ariel bloqueó el día completo; `motivo` trae lo que él escribió, si escribió algo |
+| `completo` | atiende, pero no quedó ningún hueco libre |
+
+`motivo` es `null` salvo en `feriado` y `bloqueado`. Un bloqueo parcial (solo unas horas)
+no cambia el estado del día: si quedan huecos sigue siendo `disponible`, y si no queda
+ninguno el día figura como `completo`.
 
 ### Turnos — HU-01 a HU-04, CU-01, CU-02
 
@@ -169,6 +186,19 @@ Sobre `PATCH /api/admin/password`:
 Los turnos en la vista de admin incluyen además `vistoPorAdmin` (HU-17) y `clienteEmail`
 (HU-19). Los que se cargan por `POST /api/admin/turnos` nacen con `vistoPorAdmin: true`:
 no tiene sentido marcarle como nuevo a Ariel algo que acaba de escribir él.
+
+`GET /api/admin/turnos` devuelve, junto a `turnos`, un contador de lo que **no** está en
+pantalla:
+
+```json
+{ "turnos": [ ... ], "nuevosMasAdelante": 3, "hastaMasAdelante": "2026-08-19" }
+```
+
+`nuevosMasAdelante` son los turnos sin ver posteriores a `hasta`, dentro de un horizonte
+del mismo largo que el rango consultado (mínimo una semana). Existe porque la agenda solo
+trae el rango visible: sin esto, un turno que entra para dentro de tres días es invisible
+hasta que Ariel navega hasta ahí. Con la vista diaria el aviso habla de "esta semana"; con
+la semanal, de "la semana que viene".
 
 ### Notificaciones push — HU-18
 

@@ -29,6 +29,10 @@ model Servicio {
   nombre          String
   duracionMinutos Int      @map("duracion_minutos")
   activo          Boolean  @default(true)
+  /// Posición en la que se le muestran al cliente, del más pedido al menos. Es un dato
+  /// propio y no derivable: el orden que quiere Ariel no coincide ni con el alfabético
+  /// ni con la duración. Menor va primero; a igual valor desempata el nombre.
+  orden           Int      @default(0)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

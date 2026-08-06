@@ -2,17 +2,35 @@ import { prisma } from '../config/prisma'
 import { ServicioNoEncontradoError } from './errores'
 import type { Servicio } from '../../generated/prisma/client.ts'
 
+/** Orden en que se muestran: el que Ariel definió (del más pedido al menos), y el nombre
+ * como desempate para que dos servicios con el mismo `orden` —los nuevos nacen en 0— no
+ * queden en un orden arbitrario que cambie entre consultas. */
+const ORDEN_EXHIBICION = [
+  { orden: 'asc' },
+  { nombre: 'asc' },
+] satisfies { orden?: 'asc'; nombre?: 'asc' }[]
+
 /** HU-01 — Servicios activos, para elegir en el flujo de reserva. */
 export async function listarServiciosActivos(): Promise<Servicio[]> {
   return prisma.servicio.findMany({
     where: { activo: true },
-    orderBy: { nombre: 'asc' },
+    orderBy: ORDEN_EXHIBICION,
   })
 }
 
 /** HU-13 — Todos los servicios, incluidos los inactivos (panel de Ariel). */
 export async function listarTodosLosServicios(): Promise<Servicio[]> {
-  return prisma.servicio.findMany({ orderBy: { nombre: 'asc' } })
+  return prisma.servicio.findMany({ orderBy: ORDEN_EXHIBICION })
+}
+
+/** Un servicio nuevo va al final de la lista, no al principio: dejarlo en `orden` 0 lo
+ * pondría delante de los que Ariel ya ordenó. */
+async function proximoOrden(): Promise<number> {
+  const ultimo = await prisma.servicio.findFirst({
+    orderBy: { orden: 'desc' },
+    select: { orden: true },
+  })
+  return (ultimo?.orden ?? 0) + 1
 }
 
 export async function obtenerServicioPorId(id: string): Promise<Servicio> {
@@ -25,7 +43,9 @@ export async function crearServicio(datos: {
   nombre: string
   duracionMinutos: number
 }): Promise<Servicio> {
-  return prisma.servicio.create({ data: datos })
+  return prisma.servicio.create({
+    data: { ...datos, orden: await proximoOrden() },
+  })
 }
 
 export async function actualizarServicio(

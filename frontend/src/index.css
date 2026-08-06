@@ -24,6 +24,11 @@
   --color-borde-suave: #e6ded3;
   --color-miel: #b68235;
   --color-miel-suave: #fff3e4;
+  /* Versión oscurecida del acento, solo para botones sólidos con texto blanco encima.
+     El `miel` normal da 3.4:1 contra blanco, por debajo del 4.5:1 que pide WCAG AA para
+     texto de este tamaño; este llega a 5.6:1. Para bordes y texto sobre crema se sigue
+     usando `miel`, que ahí sí contrasta bien. */
+  --color-miel-fuerte: #8a5f22;
   --color-vino: #201f1d;
   --color-vino-suave: #ece4d4;
   --color-bien: #3f7d4f;

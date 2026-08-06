@@ -96,12 +96,29 @@ export interface OpcionesHorariosDelDia {
   margenMinutos?: number
 }
 
-export async function obtenerHorariosDelDia(
+/** Por qué un día no tiene horarios. Sin esto el frontend solo ve una lista vacía y no
+ * puede distinguir "Ariel no atiende los lunes" de "se llenó": termina mostrando el
+ * mismo cartel genérico para situaciones que piden respuestas distintas del cliente. */
+export type EstadoDia =
+  | 'disponible'
+  | 'cerrado' // no hay franjas laborales ese día de la semana
+  | 'feriado'
+  | 'bloqueado' // Ariel bloqueó el día entero (vacaciones, un trámite…)
+  | 'completo' // atiende, pero no queda ningún hueco libre
+
+export interface DetalleDia {
+  horarios: string[]
+  estado: EstadoDia
+  /** Lo que Ariel escribió al bloquear o el nombre del feriado, si corresponde. */
+  motivo: string | null
+}
+
+export async function obtenerDetalleDelDia(
   servicio: Pick<Servicio, 'duracionMinutos'>,
   fecha: Date,
   ahora: Date,
   opciones: OpcionesHorariosDelDia = {},
-): Promise<string[]> {
+): Promise<DetalleDia> {
   const diaSemana = fecha.getUTCDay()
 
   const [feriado, franjasDb, bloqueos, turnos] = await Promise.all([
@@ -121,7 +138,12 @@ export async function obtenerHorariosDelDia(
     }),
   ])
 
-  if (franjasDb.length === 0 || feriado?.bloquea) return []
+  if (franjasDb.length === 0) {
+    return { horarios: [], estado: 'cerrado', motivo: null }
+  }
+  if (feriado?.bloquea) {
+    return { horarios: [], estado: 'feriado', motivo: feriado.nombre }
+  }
 
   const franjas: Franja[] = franjasDb.map((f) => ({
     horaInicio: f.horaInicio,
@@ -158,7 +180,7 @@ export async function obtenerHorariosDelDia(
     })),
   ]
 
-  return calcularHorariosDelDia({
+  const horarios = calcularHorariosDelDia({
     fecha,
     franjas,
     ocupados,
@@ -167,6 +189,38 @@ export async function obtenerHorariosDelDia(
     ahora,
     margenMinutos: opciones.margenMinutos,
   })
+
+  if (horarios.length > 0) {
+    return { horarios, estado: 'disponible', motivo: null }
+  }
+
+  // Sin horarios: distinguimos "Ariel cerró el día" de "se llenó". Un bloqueo que tapa
+  // el día entero es lo primero; si además dejó un motivo, se lo mostramos al cliente,
+  // que es mucho más útil que un "no hay turnos" a secas.
+  const bloqueoDelDiaCompleto = bloqueos.find(
+    (b) =>
+      (b.horaInicio ? combinarFechaHora(fecha, b.horaInicio) : inicioDelDia) <=
+        inicioDelDia &&
+      (b.horaFin ? combinarFechaHora(fecha, b.horaFin) : finDelDia) >=
+        finDelDia,
+  )
+  if (bloqueoDelDiaCompleto) {
+    return { horarios, estado: 'bloqueado', motivo: bloqueoDelDiaCompleto.motivo }
+  }
+
+  return { horarios, estado: 'completo', motivo: null }
+}
+
+/** Igual que `obtenerDetalleDelDia` pero devolviendo solo los horarios. La usan los
+ * flujos que validan una reserva (crear, reprogramar, editar), a los que el motivo no
+ * les aporta nada. */
+export async function obtenerHorariosDelDia(
+  servicio: Pick<Servicio, 'duracionMinutos'>,
+  fecha: Date,
+  ahora: Date,
+  opciones: OpcionesHorariosDelDia = {},
+): Promise<string[]> {
+  return (await obtenerDetalleDelDia(servicio, fecha, ahora, opciones)).horarios
 }
 
 export async function obtenerServicioActivo(
@@ -179,22 +233,26 @@ export async function obtenerServicioActivo(
   return servicio
 }
 
+export interface DisponibilidadDia extends DetalleDia {
+  fecha: string
+}
+
 export async function calcularDisponibilidad(
   servicioId: string,
   desde: Date,
   hasta: Date,
-): Promise<Array<{ fecha: string; horarios: string[] }>> {
+): Promise<DisponibilidadDia[]> {
   const servicio = await obtenerServicioActivo(servicioId)
   const ahora = ahoraArgentina()
-  const resultado: Array<{ fecha: string; horarios: string[] }> = []
+  const resultado: DisponibilidadDia[] = []
 
   for (
     let fecha = desde;
     fecha.getTime() <= hasta.getTime();
     fecha = new Date(fecha.getTime() + 24 * 60 * MINUTO_MS)
   ) {
-    const horarios = await obtenerHorariosDelDia(servicio, fecha, ahora)
-    resultado.push({ fecha: formatearFecha(fecha), horarios })
+    const detalle = await obtenerDetalleDelDia(servicio, fecha, ahora)
+    resultado.push({ fecha: formatearFecha(fecha), ...detalle })
   }
 
   return resultado

@@ -1,15 +1,20 @@
 import { apiClient } from './client'
 import type { EditarTurno, NuevoTurnoManual, TurnoAdmin } from '../types/api'
 
+export interface Agenda {
+  turnos: TurnoAdmin[]
+  /** HU-17 — Turnos sin ver que caen después del rango que está en pantalla. */
+  nuevosMasAdelante: number
+}
+
 export async function obtenerAgenda(
   desde: string,
   hasta: string,
-): Promise<TurnoAdmin[]> {
-  const { data } = await apiClient.get<{ turnos: TurnoAdmin[] }>(
-    '/admin/turnos',
-    { params: { desde, hasta } },
-  )
-  return data.turnos
+): Promise<Agenda> {
+  const { data } = await apiClient.get<Agenda>('/admin/turnos', {
+    params: { desde, hasta },
+  })
+  return { turnos: data.turnos, nuevosMasAdelante: data.nuevosMasAdelante ?? 0 }
 }
 
 export async function cargarTurnoManual(
