@@ -11,6 +11,7 @@ import {
   enviarPrueba,
   obtenerClavePublica,
   registrarSuscripcion,
+  type ResultadoEnvio,
 } from '../../api/push'
 import { clearToken, setToken } from '../../lib/authStorage'
 import { cambiarTema, type Tema } from '../../lib/tema'
@@ -21,6 +22,7 @@ import {
   esIOS,
   estaInstaladaComoApp,
   pedirPermiso,
+  probarNotificacionLocal,
   soportaPush,
   suscripcionActual,
 } from '../../lib/push'
@@ -136,6 +138,10 @@ function SeccionNotificaciones() {
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
+  // El error crudo del navegador. Sin esto no hay forma de saber por qué falló en un
+  // dispositivo que no tenemos a mano.
+  const [detalleTecnico, setDetalleTecnico] = useState<string | null>(null)
+  const [envios, setEnvios] = useState<ResultadoEnvio[] | null>(null)
 
   const soportado = soportaPush()
   const enIOS = esIOS()
@@ -162,9 +168,16 @@ function SeccionNotificaciones() {
     let permiso: NotificationPermission
     try {
       permiso = await pedirPermiso()
-    } catch {
+    } catch (err) {
+      // El mensaje se parte por plataforma. Antes era uno solo y hablaba de iPhone, así
+      // que en la computadora de Ariel el botón "no hacía nada" y salía un texto sobre
+      // agregar la app a la pantalla de inicio — que fue lo que lo confundió.
+      const detalle = err instanceof Error ? `${err.name}: ${err.message}` : ''
+      setDetalleTecnico(detalle || null)
       setError(
-        'Este dispositivo no nos deja pedir el permiso. En iPhone tiene que ser iOS 16.4 o más nuevo, y el panel abierto desde el ícono de la pantalla de inicio.',
+        enIOS
+          ? 'Este iPhone no nos deja pedir el permiso. Tiene que ser iOS 16.4 o más nuevo, y el panel abierto desde el ícono de la pantalla de inicio.'
+          : 'Este navegador rechazó el pedido de permiso. Suele pasar cuando las notificaciones están bloqueadas para todos los sitios. Probá desde Chrome, o revisá los permisos del navegador.',
       )
       return
     }
@@ -218,15 +231,40 @@ function SeccionNotificaciones() {
     }
   }
 
+  /** Prueba **local**: dibuja la notificación desde el propio navegador, sin pasar por
+   * el servidor ni por la red. Es lo que separa los dos modos de falla — si esta se ve y
+   * la de push no, lo que falla es la entrega (el servicio de push del sistema, el
+   * ahorro de batería, "aplicaciones en suspensión"), no el permiso. */
+  async function probarLocal() {
+    setError(null)
+    setMensaje(null)
+    setDetalleTecnico(null)
+    try {
+      await probarNotificacionLocal()
+      setMensaje(
+        'Si viste la notificación, las del sistema funcionan en este dispositivo.',
+      )
+    } catch (err) {
+      setDetalleTecnico(err instanceof Error ? `${err.name}: ${err.message}` : null)
+      setError('Este dispositivo no pudo mostrar ni siquiera una notificación local.')
+    }
+  }
+
   async function probar() {
     setError(null)
     setMensaje(null)
+    setDetalleTecnico(null)
     try {
-      const enviadas = await enviarPrueba()
+      const resultados = await enviarPrueba()
+      setEnvios(resultados)
+      const aceptados = resultados.filter((r) => r.ok).length
       setMensaje(
-        enviadas > 0
-          ? `Aviso de prueba enviado a ${enviadas} dispositivo${enviadas > 1 ? 's' : ''}.`
-          : 'No hay ningún dispositivo con los avisos activados.',
+        resultados.length === 0
+          ? 'No hay ningún dispositivo con los avisos activados.'
+          : // "Aceptado" y no "enviado": el servicio de push confirma que lo tomó, no
+            // que el celular lo haya mostrado. Decir "enviado" fue lo que nos hizo
+            // creer que andaba cuando en realidad no llegaba.
+            `El servicio de avisos aceptó el mensaje para ${aceptados} de ${resultados.length} dispositivo${resultados.length > 1 ? 's' : ''}. Si no lo ves aparecer, el problema está en el dispositivo, no en el servidor.`,
       )
     } catch {
       setError('No pudimos enviar la prueba.')
@@ -288,6 +326,11 @@ function SeccionNotificaciones() {
               {trabajando ? 'Activando…' : 'Activar avisos en este dispositivo'}
             </Button>
           )}
+          {soportado && (
+            <Button variant="ghost" onClick={() => void probarLocal()}>
+              Probar sin internet
+            </Button>
+          )}
         </div>
       )}
 
@@ -297,8 +340,66 @@ function SeccionNotificaciones() {
           {error}
         </div>
       )}
+      {detalleTecnico && (
+        <p className="text-tinta-tenue mt-2 font-mono text-xs break-all">
+          {detalleTecnico}
+        </p>
+      )}
+
+      {envios && envios.length > 0 && (
+        <div className="border-borde mt-4 border-t pt-3">
+          <p className="text-tinta-tenue mb-2 text-xs tracking-wide uppercase">
+            Resultado por dispositivo
+          </p>
+          <ul className="flex flex-col gap-1">
+            {envios.map((e, i) => (
+              <li key={i} className="text-tinta-suave text-sm">
+                <span className={e.ok ? 'text-bien' : 'text-alerta'}>
+                  {e.ok ? '✓' : '✗'}
+                </span>{' '}
+                {nombreDeDispositivo(e.userAgent)}{' '}
+                <span className="text-tinta-tenue">
+                  ({e.servicio}
+                  {e.estado ? `, ${e.estado}` : ''})
+                </span>
+                {e.error && (
+                  <span className="text-alerta"> — {e.error.slice(0, 80)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Card>
   )
+}
+
+/** El user agent completo es ilegible. Esto saca lo único que a Ariel le sirve para
+ * reconocer cuál de sus dispositivos es cada línea. */
+function nombreDeDispositivo(userAgent: string | null): string {
+  if (!userAgent) return 'Dispositivo sin identificar'
+  const sistema = /Android/i.test(userAgent)
+    ? 'Android'
+    : /iPhone|iPad/i.test(userAgent)
+      ? 'iPhone'
+      : /Windows/i.test(userAgent)
+        ? 'Windows'
+        : /Mac/i.test(userAgent)
+          ? 'Mac'
+          : 'Otro'
+  // El orden importa: Edge y Samsung Internet también dicen "Chrome" en su user agent.
+  const navegador = /Edg\//i.test(userAgent)
+    ? 'Edge'
+    : /SamsungBrowser/i.test(userAgent)
+      ? 'Samsung Internet'
+      : /Firefox/i.test(userAgent)
+        ? 'Firefox'
+        : /Chrome/i.test(userAgent)
+          ? 'Chrome'
+          : /Safari/i.test(userAgent)
+            ? 'Safari'
+            : 'navegador desconocido'
+  return `${navegador} en ${sistema}`
 }
 
 function SeccionUsuario() {

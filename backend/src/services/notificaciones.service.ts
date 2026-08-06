@@ -19,11 +19,15 @@ export function construirNotificacionTurnoNuevo(turno: Turno): {
   title: string
   body: string
   url: string
+  tag: string
 } {
   return {
     title: 'Nuevo turno reservado',
     body: `${turno.clienteNombre} · ${turno.servicioNombreSnapshot} · ${formatearFechaLegible(turno.fecha)} ${formatearHora(turno.horaInicio)}`,
     url: '/admin',
+    // Un tag por turno: el service worker agrupa por este valor, y con uno fijo dos
+    // reservas seguidas colapsaban en una sola notificación.
+    tag: `turno-${turno.id}`,
   }
 }
 

@@ -106,7 +106,20 @@ model PushSuscripcion {
   p256dh   String
   auth     String
 
+  // Diagnóstico. Ariel usa dos celulares y una computadora, así que "avisos activados en
+  // 3 dispositivos" no dice nada útil cuando uno deja de andar: esto permite ver cuál es
+  // cuál y cuándo fue la última vez que el servicio de push aceptó un envío.
+  //
+  // `ultimoEstado` es el código HTTP que devolvió el servicio de push (201 = aceptado).
+  // Ojo: aceptado NO es entregado — el servicio lo toma y después decide si el
+  // dispositivo lo recibe. Es el techo de lo que podemos saber desde el servidor.
+  userAgent      String?   @map("user_agent")
+  ultimoIntentoEn DateTime? @map("ultimo_intento_en")
+  ultimoEstado   Int?      @map("ultimo_estado")
+  ultimoError    String?   @map("ultimo_error")
+
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("push_suscripciones")
 }

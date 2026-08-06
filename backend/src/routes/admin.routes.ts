@@ -12,6 +12,7 @@ import {
 import {
   deleteSuscripcion,
   getClavePublica,
+  getDispositivos,
   postPrueba,
   postSuscripcion,
 } from '../controllers/push.controller'
@@ -53,6 +54,9 @@ adminRouter.get('/admin/push/clave-publica', requireAuth, getClavePublica)
 adminRouter.post('/admin/push/suscripciones', requireAuth, postSuscripcion)
 adminRouter.delete('/admin/push/suscripciones', requireAuth, deleteSuscripcion)
 adminRouter.post('/admin/push/prueba', requireAuth, postPrueba)
+adminRouter.get('/admin/push/dispositivos', requireAuth, getDispositivos)
+// La renovación (POST /api/push/renovar) NO va acá: la llama el service worker sin JWT.
+// Ver push.routes.ts.
 
 adminRouter.get('/admin/servicios', requireAuth, getServiciosAdmin)
 adminRouter.post('/admin/servicios', requireAuth, postServicio)

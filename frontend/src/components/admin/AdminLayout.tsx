@@ -1,10 +1,11 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import type { ComponentType } from 'react'
+import { useEffect, type ComponentType } from 'react'
 import {
   IconoAgenda,
   IconoPersona,
   IconoReloj,
 } from '../ui/Iconos'
+import { registrarServiceWorker, soportaPush } from '../../lib/push'
 
 // Tres destinos, no cinco. "Buscar turno" pasó a ser un modal dentro de la agenda (es
 // una acción sobre la agenda, no una sección aparte) y "Servicios" se juntó con
@@ -23,6 +24,18 @@ const NAV: {
 
 export function AdminLayout() {
   const location = useLocation()
+
+  // El service worker se registra al abrir el panel, no recién al tocar "Activar
+  // avisos". Dos motivos: es lo que hace que un `sw.js` corregido llegue al dispositivo
+  // de Ariel (si no, un arreglo espera hasta la próxima vez que toque ese botón, o sea
+  // quizás nunca), y es lo que mantiene vivo el handler que renueva la suscripción
+  // cuando el navegador la rota por su cuenta.
+  useEffect(() => {
+    if (!soportaPush()) return
+    void registrarServiceWorker().catch((err) => {
+      console.error('[push] no se pudo registrar el service worker', err)
+    })
+  }, [])
 
   return (
     <div className="bg-fondo min-h-screen">
