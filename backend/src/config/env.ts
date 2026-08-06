@@ -26,6 +26,43 @@ export interface ConfigVapid {
   subject: string
 }
 
+// Las claves VAPID son un par de curva P-256 en base64url: la pública es un punto sin
+// comprimir (1 byte de prefijo + 32 de X + 32 de Y = 65) y la privada es el escalar (32).
+const BYTES_CLAVE_PUBLICA = 65
+const BYTES_CLAVE_PRIVADA = 32
+
+function bytesDeBase64Url(valor: string): number {
+  try {
+    return Buffer.from(valor.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
+      .length
+  } catch {
+    return -1
+  }
+}
+
+/** Valida el largo de una clave VAPID.
+ *
+ * Existe porque una clave mal pegada no rompe el arranque: `web-push` recién la valida
+ * al enviar el primer aviso, y como los avisos son fire-and-forget con su propio
+ * `catch`, el error queda enterrado en los logs y el push simplemente nunca llega. Pasó
+ * en producción — la clave pública se había pegado cortada — y no se detectó hasta
+ * revisar los logs a mano. Mejor no arrancar. */
+function validarClaveVapid(
+  nombre: string,
+  valor: string,
+  bytesEsperados: number,
+): void {
+  const bytes = bytesDeBase64Url(valor)
+  if (bytes === bytesEsperados) return
+
+  throw new Error(
+    `${nombre} inválida: decodifica a ${bytes < 0 ? 'algo que no es base64url' : bytes + ' bytes'}, ` +
+      `se esperaban ${bytesEsperados}. Suele ser un copiado incompleto o las dos claves ` +
+      `cruzadas — la pública tiene 87 caracteres y la privada 43. Generá un par nuevo ` +
+      `con \`npx web-push generate-vapid-keys\`.`,
+  )
+}
+
 /** Configuración de Web Push (HU-18), o `null` si no está configurada.
  *
  * Es opcional a propósito: el aviso dentro del panel (HU-17) no depende del push, así
@@ -46,6 +83,10 @@ export function configVapid(): ConfigVapid | null {
         'Ver backend/.env.example.',
     )
   }
+
+  validarClaveVapid('VAPID_PUBLIC_KEY', publicKey, BYTES_CLAVE_PUBLICA)
+  validarClaveVapid('VAPID_PRIVATE_KEY', privateKey, BYTES_CLAVE_PRIVADA)
+
   return { publicKey, privateKey, subject }
 }
 
