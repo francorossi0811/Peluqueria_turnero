@@ -36,6 +36,22 @@
   --color-alerta: #a8541a;
   --color-alerta-suave: #f3ddc4;
 
+  /* Tokens de rol, no de color. Existen porque estos cinco valores estaban escritos a
+     mano en los componentes (`text-white`, `bg-[#5a3b0a]`, `bg-black/50`,
+     `bg-miel-suave/40`) y por eso eran los únicos que NO cambiaban al redefinir la
+     paleta. Los valores de acá son exactamente los que había hardcodeados, así que el
+     tema claro renderiza igual que antes; el tema oscuro los redefine. */
+
+  /* Texto encima de un fondo del color de acento (botón sólido, badge "Nuevo"). */
+  --color-sobre-acento: #ffffff;
+  --color-kicker-fondo: #5a3b0a;
+  --color-kicker-texto: #ffffff;
+  /* Realce de "esto es nuevo": era `miel-suave` al 40% sobre el crema de la página, ya
+     mezclado acá para que no dependa de con qué fondo le toque combinarse. */
+  --color-destacado: #faf1e3;
+  /* Velo detrás de los modales. */
+  --color-velo: rgb(0 0 0 / 0.5);
+
   --font-display: 'Cormorant Garamond', Georgia, serif;
   --font-body: 'Lora', system-ui, sans-serif;
   --font-hero: 'Playfair Display', Georgia, serif;

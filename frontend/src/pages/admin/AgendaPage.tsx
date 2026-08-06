@@ -161,7 +161,7 @@ export function AgendaPage() {
       </div>
 
       {sinVer.length > 0 && (
-        <div className="border-miel bg-miel-suave/40 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2">
+        <div className="border-miel bg-destacado mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2">
           <p className="text-tinta text-sm font-medium">
             {sinVer.length === 1
               ? 'Tenés 1 turno nuevo sin ver.'

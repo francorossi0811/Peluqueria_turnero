@@ -15,10 +15,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // - `ghost`: sin caja. Acciones de escape o poco frecuentes.
 const estilosPorVariante: Record<Variant, string> = {
   primary:
-    'bg-miel-fuerte text-white border border-miel-fuerte hover:bg-miel active:bg-miel',
+    'bg-miel-fuerte text-sobre-acento border border-miel-fuerte hover:bg-miel active:bg-miel',
   // Alias histórico de `primary` — `vino` dejó de ser un acento propio.
   primaryVino:
-    'bg-miel-fuerte text-white border border-miel-fuerte hover:bg-miel active:bg-miel',
+    'bg-miel-fuerte text-sobre-acento border border-miel-fuerte hover:bg-miel active:bg-miel',
   outline: 'border border-borde bg-superficie text-tinta hover:bg-superficie-2',
   ghost: 'text-tinta-suave hover:bg-superficie-2 hover:text-tinta',
   danger: 'border border-borde bg-superficie text-vino hover:bg-vino-suave',

@@ -52,7 +52,7 @@ export function FilaTurno({
     <div
       className={`rounded-lg border p-3 ${
         sinVer
-          ? 'border-miel bg-miel-suave/40 shadow-sm'
+          ? 'border-miel bg-destacado shadow-sm'
           : 'border-borde bg-superficie-2'
       }`}
     >
@@ -70,7 +70,7 @@ export function FilaTurno({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {sinVer && (
-            <span className="bg-miel inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide text-white uppercase">
+            <span className="bg-miel text-sobre-acento inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase">
               Nuevo
             </span>
           )}

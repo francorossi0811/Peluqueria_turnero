@@ -41,7 +41,7 @@ export function FilaBloqueo({
       </div>
 
       {confirmando && (
-        <div className="border-alerta/30 mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+        <div className="border-borde mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
           <p className="text-tinta text-sm">¿Levantar este bloqueo?</p>
           <Button
             variant="danger"

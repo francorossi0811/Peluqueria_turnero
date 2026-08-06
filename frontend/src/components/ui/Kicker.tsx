@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 // Ariel Enrique.dc.html).
 export function Kicker({ children }: { children: ReactNode }) {
   return (
-    <span className="mb-3 inline-block rounded bg-[#5a3b0a] px-2.5 py-1 text-xs font-medium tracking-wider text-white uppercase">
+    <span className="bg-kicker-fondo text-kicker-texto mb-3 inline-block rounded px-2.5 py-1 text-xs font-medium tracking-wider uppercase">
       {children}
     </span>
   )
