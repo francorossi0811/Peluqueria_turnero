@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Kicker } from '../../components/ui/Kicker'
+import { InputHora } from '../../components/ui/InputHora'
 import {
   obtenerHorarioLaboral,
   guardarHorarioLaboral,
@@ -155,22 +156,22 @@ function SeccionHorarioLaboral() {
                   key={f.indice}
                   className="flex flex-wrap items-center gap-2"
                 >
-                  <input
-                    type="time"
+                  <InputHora
+                    compacto
                     value={f.horaInicio}
-                    onChange={(e) =>
-                      actualizarFranja(f.indice, 'horaInicio', e.target.value)
+                    onChange={(valor) =>
+                      actualizarFranja(f.indice, 'horaInicio', valor)
                     }
-                    className="border-borde bg-superficie text-tinta focus:border-miel min-w-0 rounded-md border px-2 py-1 text-sm outline-none"
+                    etiqueta={`apertura del ${nombreDia.toLowerCase()}`}
                   />
                   <span className="text-tinta-tenue">a</span>
-                  <input
-                    type="time"
+                  <InputHora
+                    compacto
                     value={f.horaFin}
-                    onChange={(e) =>
-                      actualizarFranja(f.indice, 'horaFin', e.target.value)
+                    onChange={(valor) =>
+                      actualizarFranja(f.indice, 'horaFin', valor)
                     }
-                    className="border-borde bg-superficie text-tinta focus:border-miel min-w-0 rounded-md border px-2 py-1 text-sm outline-none"
+                    etiqueta={`cierre del ${nombreDia.toLowerCase()}`}
                   />
                   <button
                     onClick={() => eliminarFranja(f.indice)}
