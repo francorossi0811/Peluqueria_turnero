@@ -7,6 +7,7 @@ import { GrillaHorarios } from '../GrillaHorarios'
 import { obtenerServicios } from '../../api/servicios'
 import { obtenerDisponibilidad } from '../../api/disponibilidad'
 import { cargarTurnoManual } from '../../api/agenda'
+import { elegirContacto, soportaElegirContacto } from '../../lib/contactos'
 import { hoyIso, sumarDias } from '../../utils/fecha'
 import type { ErrorApi, Servicio } from '../../types/api'
 
@@ -48,7 +49,9 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
         fecha: fecha!,
         hora: hora!,
         clienteNombre,
-        clienteTelefono,
+        // Vacío significa "no me lo sé", no un teléfono en blanco. Mismo criterio que el
+        // email: se manda `undefined` para no guardar un dato falso en la base.
+        clienteTelefono: clienteTelefono.trim() || undefined,
         clienteEmail: clienteEmail.trim() || undefined,
         origen,
       }),
@@ -77,7 +80,24 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
     },
   })
 
-  const listo = servicio && fecha && hora && clienteNombre && clienteTelefono
+  async function completarDesdeContactos() {
+    try {
+      const contacto = await elegirContacto()
+      if (!contacto) return
+      if (contacto.telefono) setClienteTelefono(contacto.telefono)
+      // El nombre solo se completa si Ariel todavía no escribió uno, para no pisarle lo
+      // que ya venía tipeando.
+      if (contacto.nombre && !clienteNombre.trim())
+        setClienteNombre(contacto.nombre)
+    } catch {
+      // Cancelar el selector nativo también entra por acá. No es un error que valga la
+      // pena mostrar: el campo se puede tipear igual.
+    }
+  }
+
+  // El teléfono ya no bloquea el alta: Ariel suele cargar el turno con el cliente
+  // enfrente y sin saberse el número.
+  const listo = servicio && fecha && hora && clienteNombre
 
   return (
     <Modal titulo="Cargar turno" onClose={onClose}>
@@ -153,14 +173,28 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-                Teléfono
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+                  Teléfono (opcional)
+                </span>
+                {/* Solo aparece donde funciona de verdad: Chrome en Android. En la
+                    computadora del mostrador ni se renderiza, así que no hay un botón
+                    que no haga nada. */}
+                {soportaElegirContacto() && (
+                  <button
+                    type="button"
+                    onClick={completarDesdeContactos}
+                    className="text-miel text-xs font-medium hover:opacity-80"
+                  >
+                    Elegir de mis contactos
+                  </button>
+                )}
+              </div>
               <input
-                required
                 type="tel"
                 value={clienteTelefono}
                 onChange={(e) => setClienteTelefono(e.target.value)}
+                placeholder="Si no lo sabés, dejalo vacío"
                 className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
               />
             </label>

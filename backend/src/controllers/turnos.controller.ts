@@ -71,8 +71,26 @@ const reprogramarSchema = z.object({
 })
 
 // HU-08: 'online' es exclusivo del flujo público, nunca de la carga manual de Ariel.
+//
+// El teléfono se **sobrescribe** para hacerlo opcional. Es la única diferencia de
+// validación entre los dos flujos, y va acá y no en `bodySchema` a propósito: al cliente
+// que reserva por la web se le sigue exigiendo, porque es el único dato con el que Ariel
+// lo puede ubicar si algo cambia. Ariel, en cambio, muchas veces está cargando un turno
+// con la persona sentada enfrente y no se sabe el número de memoria.
+//
+// El `preprocess` es el mismo molde que usa `clienteEmail`: el input vacío del panel
+// llega como `""`, y sin esto no pasaría la validación en vez de significar "no lo sé".
+// Lo que **no** cambia: si escribió algo, tiene que ser un teléfono válido.
 const bodyManualSchema = bodySchema.extend({
   origen: z.enum(['telefono', 'whatsapp']),
+  clienteTelefono: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z
+      .string()
+      .trim()
+      .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
+      .optional(),
+  ),
 })
 
 // HU-09: mismos fecha/hora que reprogramar, pero sin servicioId (no cambia el servicio).

@@ -66,13 +66,17 @@ export type OrigenTurno = 'online' | 'telefono' | 'whatsapp'
 export interface TurnoAdmin extends Turno {
   horaFin: string // "HH:mm"
   clienteNombre: string
-  clienteTelefono: string
+  clienteTelefono: string | null // HU-08: los que carga Ariel a mano pueden no tenerlo
   clienteEmail: string | null // HU-19
   origen: OrigenTurno
   vistoPorAdmin: boolean // HU-17
 }
 
-export interface NuevoTurnoManual extends NuevoTurno {
+// HU-08 — El teléfono deja de heredarse obligatorio: Ariel carga turnos con el cliente
+// enfrente y no se sabe los números de memoria. Para el que reserva por la web
+// (`NuevoTurno`) sigue siendo obligatorio, que es donde de verdad hace falta.
+export interface NuevoTurnoManual extends Omit<NuevoTurno, 'clienteTelefono'> {
+  clienteTelefono?: string
   origen: 'telefono' | 'whatsapp'
 }
 

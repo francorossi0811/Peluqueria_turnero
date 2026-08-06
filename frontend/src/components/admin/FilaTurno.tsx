@@ -61,8 +61,11 @@ export function FilaTurno({
           <p className="text-tinta font-medium">
             {turno.hora}–{turno.horaFin} · {turno.servicio.nombre}
           </p>
+          {/* Sin el condicional queda un " · " colgando cuando Ariel cargó el turno sin
+              teléfono (HU-08). */}
           <p className="text-tinta-suave text-sm">
-            {turno.clienteNombre} · {turno.clienteTelefono}
+            {turno.clienteNombre}
+            {turno.clienteTelefono && ` · ${turno.clienteTelefono}`}
           </p>
           <p className="text-tinta-tenue text-xs">
             {ETIQUETA_ORIGEN[turno.origen]}

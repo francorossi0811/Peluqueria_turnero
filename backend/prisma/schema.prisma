@@ -115,8 +115,13 @@ model Turno {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // ^ se usa directamente como token del link único del cliente — no hay campo aparte.
 
-  clienteNombre   String @map("cliente_nombre")
-  clienteTelefono String @map("cliente_telefono")
+  clienteNombre String @map("cliente_nombre")
+
+  // Obligatorio cuando reserva un cliente por la web (es el único dato con el que Ariel
+  // lo puede ubicar), opcional cuando el turno lo carga Ariel a mano: no se sabe los
+  // teléfonos de memoria y le quedaba trabado el alta. La diferencia se hace en el
+  // schema de validación de cada endpoint, no acá — ver `turnos.controller.ts`.
+  clienteTelefono String? @map("cliente_telefono")
 
   // HU-19 — Opcional a propósito: muchos clientes de Ariel no usan mail. Los que lo
   // dejan reciben la confirmación con el link de gestión; los que no, siguen

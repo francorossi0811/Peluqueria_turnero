@@ -22,7 +22,9 @@ export interface DatosNuevoTurno {
   fecha: Date
   hora: string // "HH:mm"
   clienteNombre: string
-  clienteTelefono: string
+  // HU-08: opcional solo en la carga manual — el flujo público lo sigue exigiendo, y eso
+  // lo garantiza el schema de validación de cada endpoint, no este tipo.
+  clienteTelefono?: string
   clienteEmail?: string // HU-19: opcional, muchos clientes de Ariel no usan mail
   origen?: OrigenTurno // HU-08: admin manda 'telefono'/'whatsapp'; público no manda nada -> 'online'
 }
