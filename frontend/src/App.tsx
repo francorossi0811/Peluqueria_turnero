@@ -7,6 +7,7 @@ import { HorariosServiciosPage } from './pages/admin/HorariosServiciosPage'
 import { CuentaPage } from './pages/admin/CuentaPage'
 import { AdminLayout } from './components/admin/AdminLayout'
 import { RequireAuth } from './components/admin/RequireAuth'
+import { useTemaAdmin } from './lib/useTemaAdmin'
 
 function GestionTurnoRoute() {
   const { id } = useParams<{ id: string }>()
@@ -16,6 +17,10 @@ function GestionTurnoRoute() {
 }
 
 function App() {
+  // Pinta el panel de oscuro y deja el lado del cliente en claro. Va acá y no en
+  // `AdminLayout` porque `/admin/login` cuelga fuera de él — ver el comentario del hook.
+  useTemaAdmin()
+
   return (
     <Routes>
       <Route path="/" element={<ReservarPage />} />

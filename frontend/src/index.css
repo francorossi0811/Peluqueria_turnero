@@ -57,6 +57,53 @@
   --font-hero: 'Playfair Display', Georgia, serif;
 }
 
+/* Tema oscuro del panel de Ariel (usa lentes y el crema le cansa la vista). Se activa
+   con `data-tema="oscuro"` en `<html>`, que pone y saca `useTemaAdmin` según la ruta —
+   o sea que el lado del cliente nunca lo ve.
+
+   Solo se redefinen las variables: los componentes no saben que existe un tema oscuro.
+   Es un oscuro **cálido** a propósito, no gris neutro, para no perder la identidad
+   crema/ámbar que a Ariel le gustó.
+
+   Los tres tokens que más importan y menos se notan:
+   - `vino` en claro vale lo mismo que `tinta` (está neutralizado, ver arriba). Si acá se
+     olvidara, los quince banners de error del panel quedarían texto negro sobre fondo
+     negro, y el "Eliminar" de las franjas horarias sería invisible.
+   - `miel-fuerte` existe en claro solo porque el `miel` normal no contrasta contra texto
+     blanco; acá pasa a ser el mismo `miel`, porque el texto encima ya no es blanco.
+   - `miel-suave` deja de ser suave y pasa a ser un ámbar apagado de fondo. El nombre
+     miente, pero el rol —"realce tenue del acento"— se mantiene, y renombrarlo tocaría
+     cuatro archivos del lado del cliente sin ganar nada. */
+:root[data-tema='oscuro'] {
+  color-scheme: dark;
+
+  --color-fondo: #1b1815;
+  --color-superficie: #24201b;
+  --color-superficie-2: #2d2822;
+  --color-tinta: #f4efe6;
+  --color-tinta-suave: #c6bdae;
+  --color-tinta-tenue: #9c9284;
+  --color-borde: #3d372e;
+  --color-borde-suave: #2d2822;
+  --color-miel: #e3ac52;
+  --color-miel-suave: #3a2d16;
+  --color-miel-fuerte: #e3ac52;
+  --color-vino: #f0e5d5;
+  --color-vino-suave: #35271f;
+  --color-bien: #86c496;
+  --color-bien-suave: #1f2d24;
+  --color-alerta: #e0a05a;
+  --color-alerta-suave: #34261a;
+
+  --color-sobre-acento: #201f1d;
+  --color-kicker-fondo: #3a2d16;
+  --color-kicker-texto: #e3ac52;
+  --color-destacado: #2f2617;
+  /* Más opaco que en claro: sobre un fondo ya oscuro, un velo al 50% no alcanza para
+     separar el modal de lo que hay atrás. */
+  --color-velo: rgb(0 0 0 / 0.7);
+}
+
 body {
   background-color: var(--color-fondo);
   color: var(--color-tinta);

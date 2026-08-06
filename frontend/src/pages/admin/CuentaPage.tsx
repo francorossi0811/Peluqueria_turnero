@@ -13,6 +13,8 @@ import {
   registrarSuscripcion,
 } from '../../api/push'
 import { clearToken, setToken } from '../../lib/authStorage'
+import { cambiarTema, type Tema } from '../../lib/tema'
+import { useTema } from '../../lib/useTemaAdmin'
 import {
   crearSuscripcion,
   desuscribirse,
@@ -39,6 +41,12 @@ export function CuentaPage() {
       </div>
       <div>
         <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
+          Apariencia
+        </h2>
+        <SeccionApariencia />
+      </div>
+      <div>
+        <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
           Avisos de turnos nuevos
         </h2>
         <SeccionNotificaciones />
@@ -56,6 +64,43 @@ export function CuentaPage() {
         <SeccionSalir />
       </div>
     </div>
+  )
+}
+
+const OPCIONES_TEMA: { valor: Tema; etiqueta: string }[] = [
+  { valor: 'oscuro', etiqueta: 'Oscuro' },
+  { valor: 'claro', etiqueta: 'Claro' },
+]
+
+/** Interruptor de tema, solo para el panel — la parte que ven los clientes queda siempre
+ * en claro. El cambio se aplica al instante y se guarda en este dispositivo. */
+function SeccionApariencia() {
+  const tema = useTema()
+
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-tinta-suave text-sm">
+        Cómo se ve el panel en este dispositivo. Lo que ven tus clientes no
+        cambia.
+      </p>
+      {/* Mismo pill que el selector Día/Semana de la agenda. */}
+      <div className="border-borde flex rounded-md border p-1">
+        {OPCIONES_TEMA.map(({ valor, etiqueta }) => (
+          <button
+            key={valor}
+            onClick={() => cambiarTema(valor)}
+            aria-pressed={tema === valor}
+            className={`rounded px-3 py-1 text-sm font-medium transition ${
+              tema === valor
+                ? 'bg-miel-suave text-miel'
+                : 'text-tinta-suave hover:text-tinta'
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+    </Card>
   )
 }
 
