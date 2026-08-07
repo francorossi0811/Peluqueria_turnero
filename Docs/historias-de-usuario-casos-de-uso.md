@@ -154,7 +154,10 @@ Como Ariel, quiero ver la semana entera con los días en columnas y las horas ha
 - **Toco un hueco y cargo un turno ahí mismo**, con el día y la hora ya puestos.
 - Los ratos en los que no abro (por ejemplo las 9 de la mañana un martes, que solo abro el sábado) se ven rayados y no se pueden tocar: mostrarlos como libres sería mentir.
 - Los horarios que ya pasaron tampoco se tocan — miro semanas anteriores para saber quién vino, no para cargar turnos ahí.
-- Cada turno muestra el nombre y el servicio.
+- Cada turno muestra el nombre **en mayúsculas y en blanco**, para leerlo de lejos: uso lentes. El color del turno lo dan el fondo y el borde, no la letra.
+- El color dice el estado: ámbar reservado, verde realizado, rojo ausente. Un turno que todavía no vi lleva un anillo alrededor.
+- Los feriados se ven en la grilla: el día lleva el nombre del feriado arriba, y el rato en que no atiendo queda rayado — en un feriado de medio día, la tarde entera.
+- Un turno ya reservado en la tarde de un feriado de medio día **se sigue viendo**. El feriado deja de ofrecer horarios nuevos, no borra los que ya estaban.
 
 *Lo que todavía no trae:* la marca del cliente (viene con las fichas de clientes) y el medio de pago (Etapa 4). La grilla ya tiene el lugar previsto para los dos.
 
@@ -165,6 +168,7 @@ Como Ariel, quiero que los feriados se carguen solos y que por defecto se tomen 
 - Puedo cambiar cada feriado a **día completo** o a **no atiendo**.
 - **Mi decisión no se pisa**: si vuelvo a actualizar la lista de feriados, lo que elegí queda.
 - Solo veo los feriados que caen en días que trabajo. Uno que cae domingo o lunes no me cambia nada, así que no me lo preguntan.
+- Tampoco veo los que ya pasaron: sobre un feriado de marzo, en agosto no hay nada que decidir.
 - Si un feriado se decreta a mitad de año, tengo un botón para volver a buscar la lista.
 - Cuando un feriado es de medio día, el cliente ve por qué hay menos horarios que de costumbre.
 

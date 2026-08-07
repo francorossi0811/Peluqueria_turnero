@@ -17,6 +17,7 @@ import {
 } from '../../api/agenda'
 import { eliminarBloqueo, obtenerBloqueos } from '../../api/bloqueos'
 import { obtenerHorarioLaboral } from '../../api/horarioLaboral'
+import { obtenerFeriados } from '../../api/feriados'
 import { useAvisosPendientes } from '../../lib/useAvisosPendientes'
 import {
   hoyIso,
@@ -126,6 +127,15 @@ export function AgendaPage() {
     queryFn: () => obtenerBloqueos(desde, hasta),
   })
 
+  // Los feriados de la semana, para que la grilla no ofrezca como libre la tarde de un
+  // feriado de medio día. Mismo `staleTime` largo que el horario laboral: cambian una vez
+  // al año, y la agenda se refresca cada 30 segundos.
+  const feriadosQuery = useQuery({
+    queryKey: ['feriados'],
+    queryFn: () => obtenerFeriados(),
+    staleTime: 60 * 60 * 1000,
+  })
+
   const cancelarMutation = useMutation({
     mutationFn: (id: string) => cancelarTurnoAdmin(id),
     onSuccess: () => {
@@ -168,6 +178,7 @@ export function AgendaPage() {
   const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes()
   const sinVer = turnos.filter((t) => !t.vistoPorAdmin)
   const nuevosMasAdelante = agendaQuery.data?.nuevosMasAdelante ?? 0
+  const idsMasAdelante = agendaQuery.data?.idsMasAdelante ?? []
 
   // Pestaña, favicon e ícono de la app. Se suman los de más adelante: para Ariel "tengo
   // 3 turnos nuevos" es uno solo aunque estén en semanas distintas.
@@ -260,15 +271,28 @@ export function AgendaPage() {
             {vista === 'dia' ? 'esta semana' : 'la semana que viene'}, fuera de
             lo que estás viendo.
           </p>
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (vista === 'dia') setVista('semana')
-              else setFecha((f) => sumarDias(f, 7))
-            }}
-          >
-            {vista === 'dia' ? 'Ver la semana' : 'Ir a esa semana'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (vista === 'dia') setVista('semana')
+                else setFecha((f) => sumarDias(f, 7))
+              }}
+            >
+              {vista === 'dia' ? 'Ver la semana' : 'Ir a esa semana'}
+            </Button>
+            {/* Marcarlos desde acá, sin navegar. Antes había que ir hasta esa semana solo
+                para apagar el aviso, que es trabajo que no le aporta nada a Ariel. */}
+            <Button
+              variant="outline"
+              disabled={marcarVistosMutation.isPending}
+              onClick={() => marcarVistosMutation.mutate(idsMasAdelante)}
+            >
+              {marcarVistosMutation.isPending
+                ? 'Marcando…'
+                : 'Marcar como vistos'}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -288,6 +312,7 @@ export function AgendaPage() {
           turnos={turnos}
           bloqueos={bloqueosQuery.data}
           franjas={franjas}
+          feriados={feriadosQuery.data ?? []}
           hoy={hoyIso()}
           minutosAhora={minutosAhora}
           onElegirHueco={(f, h) => setHuecoElegido({ fecha: f, hora: h })}

@@ -4,7 +4,7 @@ import {
   buscarTurnos,
   cancelarTurno,
   cancelarTurnoAdmin,
-  contarNuevosDespuesDe,
+  idsNuevosDespuesDe,
   crearTurno,
   editarTurno,
   estaDentroDeVentanaDeCambio,
@@ -467,11 +467,14 @@ export async function getAgenda(req: Request, res: Response) {
   const horizonte = new Date(
     hastaFecha.getTime() + Math.max(largoRangoMs, 7 * 86_400_000),
   )
-  const nuevosMasAdelante = await contarNuevosDespuesDe(hastaFecha, horizonte)
+  const idsMasAdelante = await idsNuevosDespuesDe(hastaFecha, horizonte)
 
   res.json({
     turnos: turnos.map(turnoAdminDto),
-    nuevosMasAdelante,
+    // Los ids y no solo el contador: sin ellos el panel puede avisar que hay turnos
+    // nuevos más adelante pero no dejar marcarlos como vistos sin navegar hasta ahí.
+    idsMasAdelante,
+    nuevosMasAdelante: idsMasAdelante.length,
     hastaMasAdelante: formatearFecha(horizonte),
   })
 }

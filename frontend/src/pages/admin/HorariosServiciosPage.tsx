@@ -20,7 +20,7 @@ import {
   actualizarServicio,
   obtenerServiciosAdmin,
 } from '../../api/servicios'
-import { diaSemana, fechaLegible } from '../../utils/fecha'
+import { diaSemana, fechaLegible, hoyIso } from '../../utils/fecha'
 import type {
   ErrorApi,
   Feriado,
@@ -56,12 +56,9 @@ export function HorariosServiciosPage() {
         </p>
       </div>
 
-      <div>
-        <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
-          Horario laboral
-        </h2>
-        <SeccionHorarioLaboral />
-      </div>
+      {/* Orden pedido por Ariel: primero lo que ofrece, después los feriados, y al final
+          las franjas horarias — que es lo que menos toca. */}
+      <SeccionServicios />
 
       <div>
         <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
@@ -70,7 +67,12 @@ export function HorariosServiciosPage() {
         <SeccionFeriados />
       </div>
 
-      <SeccionServicios />
+      <div>
+        <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
+          Horario laboral
+        </h2>
+        <SeccionHorarioLaboral />
+      </div>
     </div>
   )
 }
@@ -281,8 +283,13 @@ function SeccionFeriados() {
   // están cerrados— así que no se muestran: son 6 de los 16 del año, y pedirle una
   // decisión sobre ellos es pedirle que decida sobre nada.
   const diasLaborales = new Set(horarioQuery.data.map((f) => f.diaSemana))
-  const feriados = query.data.filter((f: Feriado) =>
-    diasLaborales.has(diaSemana(f.fecha)),
+  const hoy = hoyIso()
+  const feriados = query.data.filter(
+    (f: Feriado) =>
+      // Los que caen en días que no trabaja no le cambian nada, y los que ya pasaron
+      // tampoco: sobre un feriado de marzo, en agosto no hay nada que decidir. Se muestran
+      // solo los que vienen, que es lo único sobre lo que puede actuar.
+      diasLaborales.has(diaSemana(f.fecha)) && f.fecha >= hoy,
   )
 
   // Se cargan dos años (el actual y el siguiente, porque en diciembre ya se reserva para
@@ -313,7 +320,7 @@ function SeccionFeriados() {
 
       {feriados.length === 0 ? (
         <p className="text-tinta-suave">
-          No hay feriados cargados en los días que trabajás.
+          No quedan feriados por delante en los días que trabajás.
         </p>
       ) : (
         Object.entries(porAnio).map(([anio, delAnio]) => (

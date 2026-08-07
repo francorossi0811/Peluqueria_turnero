@@ -115,22 +115,27 @@ export async function marcarTurnosComoVistos(ids: string[]): Promise<number> {
   return count
 }
 
-/** HU-17 — Cuántos turnos sin ver hay más adelante, fuera de lo que Ariel está mirando.
+/** HU-17 — Los turnos sin ver que hay más adelante, fuera de lo que Ariel está mirando.
  *
  * La agenda solo trae el rango visible, así que un turno que entra para dentro de tres
- * días es invisible hasta que Ariel navega hasta ahí. Esto cuenta los que quedan después
- * del rango que tiene en pantalla, para poder avisarle que están. */
-export async function contarNuevosDespuesDe(
+ * días es invisible hasta que Ariel navega hasta ahí.
+ *
+ * Devuelve los **ids** y no un contador para que pueda marcarlos como vistos desde donde
+ * está, sin tener que ir hasta esa semana solo para apagar el aviso. Son los turnos sin
+ * ver de los próximos días: en la práctica un puñado, no una lista que valga paginar. */
+export async function idsNuevosDespuesDe(
   hasta: Date,
   limite: Date,
-): Promise<number> {
-  return prisma.turno.count({
+): Promise<string[]> {
+  const turnos = await prisma.turno.findMany({
     where: {
       vistoPorAdmin: false,
       estado: 'reservado',
       fecha: { gt: hasta, lte: limite },
     },
+    select: { id: true },
   })
+  return turnos.map((t) => t.id)
 }
 
 export async function obtenerTurno(id: string): Promise<Turno> {

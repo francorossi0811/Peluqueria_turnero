@@ -1,5 +1,10 @@
 import { DIAS_CORTOS, diaSemana } from '../../utils/fecha'
-import type { Bloqueo, FranjaHorario, TurnoAdmin } from '../../types/api'
+import type {
+  Bloqueo,
+  Feriado,
+  FranjaHorario,
+  TurnoAdmin,
+} from '../../types/api'
 
 // HU-23 — La semana como grilla, que es la forma en que Ariel viene leyendo su agenda en
 // la planilla: los días como columnas, el tiempo hacia abajo, y los huecos a la vista.
@@ -31,6 +36,10 @@ interface GrillaSemanaProps {
   turnos: TurnoAdmin[]
   bloqueos: Bloqueo[]
   franjas: FranjaHorario[]
+  /** Los feriados que caen en la semana (HU-24). Sin esto la grilla mostraba la tarde de
+   * un feriado de medio día como huecos libres, que es el mismo error que mostrar como
+   * libre un día cerrado. */
+  feriados: Feriado[]
   /** Fecha de hoy en ISO, para resaltar la columna y ubicar la línea de "ahora". */
   hoy: string
   /** Minutos desde medianoche, o `null` si no hace falta la línea de ahora. */
@@ -77,6 +86,15 @@ function franjasDeLaSemana(
   return unificados
 }
 
+/** Cómo se anuncia el feriado arriba de la columna. `dia_completo` no dice nada: ese día
+ * Ariel trabaja normal y el feriado no le cambia la agenda. */
+function etiquetaFeriado(feriados: Feriado[], dia: string): string | null {
+  const feriado = feriados.find((f) => f.fecha === dia)
+  if (!feriado || feriado.modalidad === 'dia_completo') return null
+  const sufijo = feriado.modalidad === 'cerrado' ? 'cerrado' : 'medio día'
+  return `${feriado.nombre} · ${sufijo}`
+}
+
 const CLASES_ESTADO: Record<string, string> = {
   reservado: 'bg-miel-suave text-miel border-miel/40',
   realizado: 'bg-bien-suave text-bien border-bien/40',
@@ -88,6 +106,7 @@ export function GrillaSemana({
   turnos,
   bloqueos,
   franjas,
+  feriados,
   hoy,
   minutosAhora,
   onElegirHueco,
@@ -132,6 +151,13 @@ export function GrillaSemana({
               >
                 {Number(dia.slice(8, 10))}
               </p>
+              {/* El feriado se nombra acá arriba. Sin esto, Ariel ve media columna
+                  rayada y no tiene forma de saber por qué. */}
+              {etiquetaFeriado(feriados, dia) && (
+                <p className="text-alerta mt-0.5 truncate text-[10px] leading-tight">
+                  {etiquetaFeriado(feriados, dia)}
+                </p>
+              )}
             </div>
           ))}
         </div>
@@ -144,6 +170,7 @@ export function GrillaSemana({
             turnos={turnos}
             bloqueos={bloqueos}
             franjas={franjas}
+            feriados={feriados}
             hoy={hoy}
             minutosAhora={minutosAhora}
             onElegirHueco={onElegirHueco}
@@ -170,6 +197,7 @@ function TramoGrilla({
   turnos,
   bloqueos,
   franjas,
+  feriados,
   hoy,
   minutosAhora,
   onElegirHueco,
@@ -220,9 +248,22 @@ function TramoGrilla({
         // toda la semana: el sábado abre a las 09:00 y cierra 20:30, el resto va de 10:00
         // a 20:00. Sin este chequeo, de martes a viernes las 09:00 y las 20:00 se verían
         // como huecos libres y clickeables con la peluquería cerrada.
-        const franjasDelDia = franjas
+        const todasLasFranjas = franjas
           .filter((f) => f.diaSemana === diaSemana(dia))
           .map((f) => ({ inicio: aMinutos(f.horaInicio), fin: aMinutos(f.horaFin) }))
+          .sort((a, b) => a.inicio - b.inicio)
+
+        // El feriado recorta el día igual que lo hace el backend en
+        // `franjasSegunFeriado`: cerrado no deja nada, medio día deja la primera franja.
+        // Si la grilla no lo aplicara, mostraría como libre un rato en el que ningún
+        // cliente puede reservar — y Ariel cargaría un turno ahí creyendo que se puede.
+        const feriado = feriados.find((f) => f.fecha === dia)
+        const franjasDelDia =
+          feriado?.modalidad === 'cerrado'
+            ? []
+            : feriado?.modalidad === 'medio_dia'
+              ? todasLasFranjas.slice(0, 1)
+              : todasLasFranjas
         const abierto = (desde: number) =>
           franjasDelDia.some(
             (f) => desde >= f.inicio && desde + PASO_MINUTOS <= f.fin,
@@ -324,7 +365,12 @@ function TramoGrilla({
                     height: t.servicio.duracionMinutos / MINUTOS_POR_PX,
                   }}
                 >
-                  <span className="block truncate text-xs leading-tight font-semibold">
+                  {/* Mayúsculas y `text-tinta` (blanco en el tema oscuro, que es el que
+                      usa Ariel; casi negro en el claro). El nombre es lo único que
+                      necesita leer de lejos, y usa lentes: el color del estado ya lo dan
+                      el fondo y el borde, así que el texto puede ir al máximo contraste
+                      en vez de teñirse. */}
+                  <span className="text-tinta block truncate text-xs leading-tight font-bold uppercase">
                     {t.clienteNombre}
                   </span>
                   {/* El servicio, chico y secundario. Es lo que la planilla no podía

@@ -5,6 +5,8 @@ export interface Agenda {
   turnos: TurnoAdmin[]
   /** HU-17 — Turnos sin ver que caen después del rango que está en pantalla. */
   nuevosMasAdelante: number
+  /** Ids de esos turnos, para poder marcarlos como vistos sin navegar hasta esa semana. */
+  idsMasAdelante: string[]
 }
 
 export async function obtenerAgenda(
@@ -14,7 +16,12 @@ export async function obtenerAgenda(
   const { data } = await apiClient.get<Agenda>('/admin/turnos', {
     params: { desde, hasta },
   })
-  return { turnos: data.turnos, nuevosMasAdelante: data.nuevosMasAdelante ?? 0 }
+  const idsMasAdelante = data.idsMasAdelante ?? []
+  return {
+    turnos: data.turnos,
+    nuevosMasAdelante: data.nuevosMasAdelante ?? idsMasAdelante.length,
+    idsMasAdelante,
+  }
 }
 
 export async function cargarTurnoManual(
