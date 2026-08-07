@@ -8,6 +8,7 @@ import { ModalEditarTurno } from '../../components/admin/ModalEditarTurno'
 import { ModalCargarTurno } from '../../components/admin/ModalCargarTurno'
 import { ModalBloquear } from '../../components/admin/ModalBloquear'
 import { ModalBuscarTurno } from '../../components/admin/ModalBuscarTurno'
+import { GrillaSemana } from '../../components/admin/GrillaSemana'
 import {
   cancelarTurnoAdmin,
   marcarEstadoTurno,
@@ -21,7 +22,6 @@ import {
   hoyIso,
   sumarDias,
   fechaLegible,
-  diaSemana,
   domingoDeLaSemana,
 } from '../../utils/fecha'
 import type { TurnoAdmin } from '../../types/api'
@@ -72,6 +72,10 @@ export function AgendaPage() {
   const [modalBloquear, setModalBloquear] = useState(false)
   const [modalBuscar, setModalBuscar] = useState(false)
   const [turnoEditar, setTurnoEditar] = useState<TurnoAdmin | null>(null)
+  const [huecoElegido, setHuecoElegido] = useState<{
+    fecha: string
+    hora: string
+  } | null>(null)
 
   // Qué días trabaja Ariel, según lo que tenga cargado en "Horarios y servicios".
   // `staleTime` alto porque esto cambia una vez cada muchos meses, y la agenda se
@@ -84,7 +88,6 @@ export function AgendaPage() {
   const diasLaborales = [
     ...new Set((horarioQuery.data ?? []).map((f) => f.diaSemana)),
   ]
-  const esDiaLaboral = (dia: string) => diasLaborales.includes(diaSemana(dia))
 
   const { desde, hasta } =
     vista === 'semana'
@@ -157,6 +160,12 @@ export function AgendaPage() {
 
   const dias = diasEnRango(desde, hasta)
   const turnos = agendaQuery.data?.turnos ?? []
+  const franjas = horarioQuery.data ?? []
+
+  // La línea de "ahora" de la grilla. Se calcula en cada render, que con el refetch de la
+  // agenda cada 30 segundos alcanza y sobra: no justifica un timer propio.
+  const ahora = new Date()
+  const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes()
   const sinVer = turnos.filter((t) => !t.vistoPorAdmin)
   const nuevosMasAdelante = agendaQuery.data?.nuevosMasAdelante ?? 0
 
@@ -270,7 +279,23 @@ export function AgendaPage() {
         <p className="text-vino">No pudimos cargar la agenda.</p>
       )}
 
-      {agendaQuery.data && bloqueosQuery.data && (
+      {/* HU-23 — La semana va en grilla, que es como Ariel viene leyendo su agenda: los
+          huecos a la vista y la semana entera de un golpe. La vista Día sigue siendo la
+          lista, que es la que sirve en el celular y con la que opera el día a día. */}
+      {agendaQuery.data && bloqueosQuery.data && vista === 'semana' && (
+        <GrillaSemana
+          dias={dias}
+          turnos={turnos}
+          bloqueos={bloqueosQuery.data}
+          franjas={franjas}
+          hoy={hoyIso()}
+          minutosAhora={minutosAhora}
+          onElegirHueco={(f, h) => setHuecoElegido({ fecha: f, hora: h })}
+          onElegirTurno={setTurnoEditar}
+        />
+      )}
+
+      {agendaQuery.data && bloqueosQuery.data && vista === 'dia' && (
         <div className="flex flex-col gap-6">
           {dias.map((dia) => {
             // Los que ya se resolvieron (realizado / ausente) caen al fondo: lo que le
@@ -289,25 +314,8 @@ export function AgendaPage() {
               (b) => b.fechaInicio <= dia && b.fechaFin >= dia,
             )
 
-            // Un día laboral se muestra siempre, aunque esté vacío: "el miércoles no
-            // tenés nada" es información, y antes se escondía. Un día no laboral solo
-            // aparece si pasa algo en él — típicamente un bloqueo que Ariel cargó.
-            if (
-              vista === 'semana' &&
-              !esDiaLaboral(dia) &&
-              turnosDelDia.length === 0 &&
-              bloqueosDelDia.length === 0
-            ) {
-              return null
-            }
-
             return (
               <div key={dia}>
-                {vista === 'semana' && (
-                  <p className="text-tinta-tenue mb-2 text-xs font-medium tracking-wide uppercase">
-                    {fechaLegible(dia)}
-                  </p>
-                )}
                 {turnosDelDia.length === 0 && bloqueosDelDia.length === 0 && (
                   <p className="text-tinta-suave text-sm">Sin turnos.</p>
                 )}
@@ -357,6 +365,15 @@ export function AgendaPage() {
       )}
       {modalCargar && (
         <ModalCargarTurno onClose={() => setModalCargar(false)} />
+      )}
+      {/* Mismo modal, abierto desde un hueco de la grilla: llega con el día y la hora ya
+          puestos, así cargar un turno sobre un espacio libre es un solo toque. */}
+      {huecoElegido && (
+        <ModalCargarTurno
+          fechaInicial={huecoElegido.fecha}
+          horaInicial={huecoElegido.hora}
+          onClose={() => setHuecoElegido(null)}
+        />
       )}
       {modalBloquear && (
         <ModalBloquear

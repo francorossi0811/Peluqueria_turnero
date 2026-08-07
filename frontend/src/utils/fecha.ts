@@ -42,7 +42,8 @@ export function domingoDeLaSemana(fechaIso: string): string {
   return sumarDias(fechaIso, -diaSemana(fechaIso))
 }
 
-const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+/** Indexados por `getDay()` (0 = domingo), misma convención que `horario_laboral`. */
+export const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 export function etiquetaDiaCorta(fechaIso: string): string {
   const fecha = fechaDesdeIso(fechaIso)

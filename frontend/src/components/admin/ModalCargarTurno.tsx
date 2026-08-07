@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Modal } from '../ui/Modal'
@@ -15,12 +15,20 @@ const DIAS_A_MOSTRAR = 14
 
 interface ModalCargarTurnoProps {
   onClose: () => void
+  /** Día y hora del hueco que Ariel tocó en la grilla semanal (HU-23). Ver abajo por qué
+   * la hora es una preferencia y no un valor fijo. */
+  fechaInicial?: string
+  horaInicial?: string
 }
 
-export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
+export function ModalCargarTurno({
+  onClose,
+  fechaInicial,
+  horaInicial,
+}: ModalCargarTurnoProps) {
   const queryClient = useQueryClient()
   const [servicio, setServicio] = useState<Servicio | null>(null)
-  const [fecha, setFecha] = useState<string | null>(null)
+  const [fecha, setFecha] = useState<string | null>(fechaInicial ?? null)
   const [hora, setHora] = useState<string | null>(null)
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
@@ -95,6 +103,20 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
     }
   }
 
+  // Cuando el modal se abre desde un hueco de la grilla ya sabemos qué día y qué hora
+  // quiere Ariel, pero **la hora no se puede dar por buena**: la disponibilidad depende
+  // de la duración del servicio, y el servicio se elige después. Un corte de 20 min entra
+  // en un hueco donde un corte + barba de 35 no.
+  //
+  // Por eso la hora entra como *preferencia*: se aplica sola si sigue libre para el
+  // servicio elegido, y si no, el hueco queda sin elegir y Ariel ve la grilla normal.
+  // Nunca se manda al backend una hora que va a rechazar.
+  useEffect(() => {
+    if (!horaInicial || hora || fecha !== fechaInicial) return
+    const dia = disponibilidadQuery.data?.find((d) => d.fecha === fecha)
+    if (dia?.horarios.includes(horaInicial)) setHora(horaInicial)
+  }, [horaInicial, fechaInicial, fecha, hora, disponibilidadQuery.data])
+
   // El teléfono ya no bloquea el alta: Ariel suele cargar el turno con el cliente
   // enfrente y sin saberse el número.
   const listo = servicio && fecha && hora && clienteNombre
@@ -113,7 +135,7 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
                 (x) => x.id === e.target.value,
               )
               setServicio(s ?? null)
-              setFecha(null)
+              setFecha(fechaInicial ?? null)
               setHora(null)
             }}
             className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
