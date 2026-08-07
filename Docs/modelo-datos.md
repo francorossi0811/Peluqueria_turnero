@@ -183,7 +183,7 @@ seguridad.
 |---|---|---|
 | `id` | uuid, PK, default `gen_random_uuid()` | Se usa directamente como **token del link único** que recibe el cliente — no adivinable, sin necesidad de un campo separado |
 | `cliente_nombre` | varchar, not null | |
-| `cliente_telefono` | varchar, not null | |
+| `cliente_telefono` | varchar, **null** | Obligatorio cuando reserva el cliente por la web (HU-01) y opcional cuando el turno lo carga Ariel (HU-08). La diferencia la impone la validación de cada endpoint, no la columna: no hay forma de expresar "obligatorio según quién lo cree" en el esquema |
 | `cliente_email` | varchar, null | Opcional (HU-19): muchos clientes de Ariel no usan mail. Si está, recibe la confirmación con el link y el `.ics` |
 | `servicio_id` | uuid, FK → `servicios.id`, not null | |
 | `servicio_nombre_snapshot` | varchar, not null | "Foto" del servicio al momento de reservar |
@@ -198,6 +198,36 @@ seguridad.
 | `turno_origen_id` | uuid, null, FK → `turnos.id` | Si nació de una reprogramación, apunta al turno viejo (HU-04) |
 | `bloqueo_cancelacion_id` | uuid, null, FK → `bloqueos_horario.id` | Si fue cancelado porque Ariel bloqueó ese rango (CU-03), queda registrado el motivo puntual |
 | `created_at` / `updated_at` | timestamptz | |
+
+---
+
+### `push_suscripciones` — HU-18
+
+Una fila por dispositivo con los avisos activados. Ariel usa dos celulares y una
+computadora, así que son varias a la vez.
+
+**Sin FK a `administradores`, a propósito.** Hay un solo administrador; agregar la
+relación "por las dudas" sería generalidad especulativa. Si algún día hay empleados, se
+agrega en esa misma etapa.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | uuid, PK, default `gen_random_uuid()` | |
+| `endpoint` | text, not null, **unique** | La URL que da el navegador para empujarle una notificación. La unicidad es lo que hace idempotente el alta: si el mismo dispositivo se vuelve a suscribir, se actualiza en vez de duplicarse |
+| `p256dh` | text, not null | Clave pública del navegador, para cifrar el mensaje |
+| `auth` | text, not null | Secreto de autenticación del navegador |
+| `user_agent` | text, null | Para saber **cuál** de los dispositivos de Ariel es cada fila. Sin esto, "avisos activados en 3 dispositivos" no ayuda a diagnosticar cuando uno deja de andar |
+| `ultimo_intento_en` | timestamptz, null | Cuándo se intentó enviar por última vez |
+| `ultimo_estado` | int, null | Código HTTP que devolvió el servicio de push. **201 = aceptado, no entregado**: el servicio toma el mensaje y después decide si el dispositivo lo recibe. Es el techo de lo que el servidor puede saber |
+| `ultimo_error` | text, null | Mensaje del último fallo, si hubo |
+| `created_at` / `updated_at` | timestamptz | |
+
+Los códigos **404 y 410** significan que la suscripción ya no existe (se desinstaló la
+aplicación, se revocó el permiso). Ante ellos la fila se borra: si no, se acumulan
+suscripciones muertas para siempre. Un **401 o 403** es distinto — casi siempre significa
+que las claves VAPID del servidor no son las que firmaron esa suscripción, típicamente
+después de rotarlas; esa fila se conserva y hay que volver a activar los avisos en el
+dispositivo.
 
 ---
 

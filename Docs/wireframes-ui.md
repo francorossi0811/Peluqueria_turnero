@@ -50,7 +50,7 @@ disponibilidad en dos lugares distintos de la interfaz.
 | 5 | Bloquear horario (modal, con confirmación) | HU-11, CU-03 |
 | 6 | Buscar turno (modal, para reenviar un link perdido) | Caso borde "cliente pierde su link único" |
 | 7 | Horarios y servicios (horario laboral + feriados + servicios) | HU-13, HU-14 |
-| 8 | Mi cuenta (usuario + avisos + contraseña + cerrar sesión) | HU-16, HU-18 |
+| 8 | Mi cuenta (usuario + apariencia + avisos + contraseña + cerrar sesión) | HU-16, HU-18, HU-21 |
 
 **Editar turno (HU-09)** y **marcar Realizado/Ausente (HU-12)** no tienen pantalla propia:
 son acciones inline sobre una fila de la agenda diaria/semanal (pantalla 2), no un flujo
@@ -79,6 +79,68 @@ Dos decisiones detrás de eso:
 
 Las rutas viejas (`/admin/servicios`, `/admin/horario`, `/admin/buscar`) redirigen en vez
 de desaparecer, porque Ariel puede tener alguna guardada en favoritos.
+
+---
+
+## 2 bis. Ajustes de interfaz después del uso real (v3)
+
+Cambios que salieron de que Ariel usara la aplicación de verdad, no del diseño en papel.
+
+### Panel en modo oscuro (HU-21)
+
+Ariel usa lentes y el fondo crema le cansa la vista en una jornada larga. **Solo cambia el
+panel**: el lado del cliente queda como estaba, porque ese diseño ya estaba aprobado.
+
+Es la misma interfaz con otros valores de color, no un rediseño: misma tipografía, mismo
+ámbar de marca, mismos componentes. Es un oscuro **cálido** y no gris neutro, para no
+perder la identidad crema/ámbar. Por defecto viene oscuro, con un interruptor en "Mi
+cuenta" para volver al claro; la elección se recuerda por dispositivo.
+
+Tres detalles que decidieron la implementación:
+
+- **El color se define en un solo lugar y los componentes no se enteran.** Toda la paleta
+  vive en variables; el tema oscuro las redefine. Por eso el cambio son unas cuarenta
+  líneas y no una reescritura de las ocho pantallas.
+- **Cuidado con los colores escritos a mano.** Cinco valores estaban puestos directamente
+  en los componentes en vez de pasar por la paleta, y eran justo los únicos que no
+  cambiaban de tema. Pasaron a ser tokens con nombre de rol (`sobre-acento`, `destacado`,
+  `velo`).
+- **Los banners de error eran la trampa.** En claro, el color de error vale lo mismo que
+  el del texto normal; sin redefinirlo también, quedaban negro sobre negro. Se verificó
+  que los veinte pares de color del panel cumplen contraste AA.
+
+### La semana, de martes a sábado (HU-07)
+
+La vista semanal mostraba siete días corridos desde donde estuviera parado, así que
+siempre entraban el domingo y el lunes, que no trabaja. Ahora va del primer al último día
+laboral, tomados del horario configurado — no de una lista fija. Anclada en domingo, para
+que parado un domingo o un lunes vea la semana que **empieza**.
+
+### Las horas, siempre en 24 h
+
+Ariel veía "10:00 a.m." donde el resto de la aplicación dice "10:00". El campo de hora
+nativo del navegador elige el formato según el idioma **del navegador**, no del sitio, y
+no hay forma de forzarlo desde la página. Se reemplazó por dos listas desplegables (hora y
+minutos), que además en el celular abren la rueda de selección, más rápida que tipear.
+
+Los campos de fecha siguen siendo los nativos: el calendario desplegable se entiende igual
+en cualquier idioma.
+
+### Teléfono opcional al cargar un turno (HU-08)
+
+Deja de bloquear el alta. Se agrega "Elegir de mis contactos", que solo aparece donde el
+navegador lo soporta —Chrome en Android— y en el resto directamente no se renderiza, para
+no dejar un botón que no hace nada.
+
+### Avisos que no dependen del celular (HU-20)
+
+Contador en la pestaña entre paréntesis, punto rojo en el ícono de la pestaña, y punto
+sobre el ícono de la aplicación instalada. Es el canal que funciona siempre, a diferencia
+del aviso push, que depende del sistema operativo de cada dispositivo.
+
+En "Mi cuenta", la sección de avisos pasa a mostrar el resultado **por dispositivo** y
+suma una prueba local, que dibuja la notificación sin pasar por internet. Sirve para
+distinguir "no llega" de "no se muestra", que antes era imposible de separar a distancia.
 
 ---
 

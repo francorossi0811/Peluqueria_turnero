@@ -58,31 +58,32 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
   - Etapa 1 — sesión deslizante que no vence mientras Ariel use el panel, y cambio de contraseña desde "Mi cuenta" (HU-15, HU-16).
   - Etapa 2 — agenda que se actualiza sola con los turnos nuevos marcados, y aviso al celular por Web Push (HU-17, HU-18).
   - Etapa 3 — mail de confirmación al cliente con su link, y "agregar al calendario" (.ics) (HU-02, HU-19).
-- 🚧 **v3 en curso** — son los cambios que pidió Ariel después de usar la v1 de verdad. Ver abajo.
+- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapas 2 (WhatsApp) y 3 (clientes) por validar. Ver abajo.
 - ⚠️ Pendiente de configuración (no de código): para que los mails salgan de verdad hay que crear una cuenta gratuita en Brevo y cargar `BREVO_API_KEY`. Sin eso el mail se imprime por consola y todo lo demás funciona igual.
 
 ## v3 — lo que pidió Ariel
 
 Plan completo en `~/.claude/plans/tingly-meandering-mitten.md`. Se decidió arrancar por los arreglos chicos (todo local, sin depender de trámites externos) y dejar WhatsApp para después.
 
-### Etapa 1 — arreglos y cambios chicos (en curso, rama `v3-ajustes-de-ariel`)
+### Etapa 1 — arreglos y cambios chicos ✅ terminada (rama `v3-ajustes-de-ariel`, sin mergear)
 
-Hecho y verificado:
+Todo hecho y verificado en el navegador:
 
 - **Panel en modo oscuro**, con interruptor en "Mi cuenta" (Ariel usa lentes). Se resuelve redefiniendo las variables CSS bajo `:root[data-tema='oscuro']`; los componentes no saben que existe. El atributo lo pone `useTemaAdmin` en `<html>` — **no** en `AdminLayout`, porque `/admin/login` cuelga fuera del layout, la regla de `body` es global, y `color-scheme` solo sirve en la raíz. El lado del cliente queda siempre en crema.
 - **Agenda de martes a sábado**, derivada de `horario_laboral`.
 - **Horas siempre en 24 h** (`components/ui/InputHora.tsx`). `<input type="time">` no se puede forzar: usa el idioma del navegador, no el `lang` del documento. Por eso son dos `<select>`.
 - **Teléfono opcional en la carga manual**, más "Elegir de mis contactos" (Contact Picker API — existe **solo en Chrome sobre Android**, por eso va detrás de un feature check y no se renderiza en otros lados).
+- **Arreglos del push** (HU-18): `pushsubscriptionchange` + `POST /api/push/renovar` (sin auth a propósito — el service worker no tiene el JWT y el evento corre con el panel cerrado; la autorización es conocer el endpoint viejo), `skipWaiting()` + `clients.claim()`, `badge` monocromo, `requireInteraction`, `tag` por turno, `TTL`/`urgency`, y baja de la suscripción vieja antes de suscribir.
+- **Push observable**: `enviarATodos` devuelve resultado por dispositivo en vez de un contador, loguea status y host, y lo persiste en columnas nuevas de `push_suscripciones`. Bloque de diagnóstico en "Mi cuenta" con prueba **local** (`showNotification()` directo, sin red) que separa "falla el canal del sistema" de "falla la entrega".
+- **Contador en la pestaña** (HU-20), punto en el favicon y `setAppBadge`.
+- **Documentación**: HU-20 y HU-21 nuevas, enmiendas a HU-01/07/08/18, tabla `push_suscripciones` en modelo-datos (faltaba desde la v2), API y wireframes.
 
-Pendiente:
+**Sobre el bug de las notificaciones de Ariel: quedó diagnosticado.** Franco probó en un Android con Chrome y llegan. Eso descarta el backend, las claves VAPID y el cifrado del payload: el problema es Samsung Internet en el celular de Ariel. **Instalarle Chrome es la solución** — y de paso le habilita el selector de contactos. Los arreglos de arriba se hicieron igual porque eran defectos reales.
 
-- Arreglos del service worker: falta `pushsubscriptionchange`, `skipWaiting()` + `clients.claim()`, `badge`, `requireInteraction`, y el `tag` es fijo (dos turnos seguidos colapsan en una sola notificación).
-- Backend de push observable: hoy `enviarATodos` cuenta aceptaciones del servicio de push, **no entregas** — el "enviado a 1 dispositivo" que ve Ariel no significa que le llegó. Faltan logs de status y host, columnas de diagnóstico en `push_suscripciones`, y `POST /api/push/renovar` (sin auth a propósito: el service worker no tiene el JWT).
-- Bloque de diagnóstico en "Mi cuenta", con una prueba **local** (`registration.showNotification()` directo) que separa "falla el canal del sistema" de "falla la entrega". Y arreglar el `catch` de `CuentaPage.tsx` que muestra un mensaje sobre iPhone en cualquier plataforma — eso es lo que confundió a Ariel en su computadora.
-- Contador en la pestaña + punto rojo en el favicon + `setAppBadge`.
-- Documentación (HU-20, enmiendas a HU-01/07/08/18, modelo de datos, API, wireframes).
+Dos cosas para no olvidar al entregar:
 
-**Paso 0 antes de tocar el código de push: instalarle Chrome a Ariel** (tiene un Android viejo con Samsung Internet). Es gratis, tarda dos minutos y puede resolver el problema entero — y de paso habilita el selector de contactos.
+- La migración `hacer_telefono_opcional` (`DROP NOT NULL`) y `diagnostico_push` están aplicadas **solo en desarrollo**. Hay que correr `migrate deploy` en producción.
+- ⚠️ `diagnostico_push` lleva `DEFAULT CURRENT_TIMESTAMP` escrito a mano en el `updated_at`: Prisma lo genera sin default y la migración falla sobre una tabla con filas. Es exactamente el motivo del ritual de leer el SQL antes de aplicar.
 
 ### Etapa 2 — WhatsApp como canal principal (a validar antes de arrancar)
 

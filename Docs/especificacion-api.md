@@ -99,8 +99,14 @@ reprogramar, porque reprogramar genera un turno nuevo y por lo tanto un link nue
 
 `clienteTelefono` se valida contra la regla de `backend/src/utils/validaciones.ts`:
 dígitos, espacios, guiones, paréntesis y un `+` inicial, con entre 8 y 15 dígitos. Lo que
-no la cumple responde `400 PARAMETROS_INVALIDOS`. Vale igual para la carga manual de
-Ariel (`POST /api/admin/turnos`), que extiende el mismo schema.
+no la cumple responde `400 PARAMETROS_INVALIDOS`.
+
+**Obligatorio acá, opcional en `POST /api/admin/turnos`** (HU-08). El cliente que reserva
+por la web tiene que dejarlo, porque es el único dato con el que Ariel lo puede ubicar;
+Ariel, en cambio, carga turnos con la persona enfrente y sin saberse el número. El schema
+de la carga manual **sobrescribe** ese campo en vez de que el público lo afloje, así que
+la regla estricta sigue siendo la del flujo público. Vacío significa "no lo sé" y se
+guarda como `null`; si viene algo, tiene que ser válido igual.
 
 **POST `/api/turnos`** — body:
 ```json
@@ -205,13 +211,39 @@ la semanal, de "la semana que viene".
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/admin/push/clave-publica` | `{ "clavePublica": "<VAPID>" }`. `503 PUSH_NO_CONFIGURADO` si el servidor no tiene claves VAPID |
-| POST | `/api/admin/push/suscripciones` | Body: el `PushSubscription.toJSON()` del navegador. Idempotente por `endpoint` |
+| POST | `/api/admin/push/suscripciones` | Body: el `PushSubscription.toJSON()` del navegador. Idempotente por `endpoint`. Guarda el `User-Agent` para poder identificar el dispositivo |
 | DELETE | `/api/admin/push/suscripciones` | `{ "endpoint": "..." }` |
-| POST | `/api/admin/push/prueba` | Manda un aviso de prueba → `{ "enviadas": n }` |
+| POST | `/api/admin/push/prueba` | Manda un aviso de prueba → `{ "dispositivos": [...] }` |
+| GET | `/api/admin/push/dispositivos` | Los dispositivos registrados y el resultado de su último envío |
+| POST | **`/api/push/renovar`** | **Sin autenticación** — ver abajo. `{ endpointViejo, suscripcion }` → `200 { ok: true }`, o `404 SUSCRIPCION_NO_ENCONTRADA` |
 
 La clave pública se sirve por API y no se compila dentro del frontend a propósito: una
 copia de build-time se desincroniza de la del servidor sin que nadie lo note, y genera
 suscripciones a las que después no se les puede enviar nada.
+
+**`/prueba` devuelve el detalle por dispositivo, no un contador**, y la distinción
+importa:
+
+```json
+{ "dispositivos": [
+  { "servicio": "fcm.googleapis.com", "userAgent": "…", "estado": 201, "ok": true,  "error": null },
+  { "servicio": "fcm.googleapis.com", "userAgent": null,  "estado": 403, "ok": false, "error": "…" }
+] }
+```
+
+`ok: true` significa que el servicio de push **aceptó** el mensaje, no que el celular lo
+haya mostrado — de ahí en más decide el sistema operativo del dispositivo. El contador
+anterior (`{ "enviadas": n }`) decía lo mismo en los dos casos, y por eso una suscripción
+rota con claves VAPID viejas quedó invisible durante semanas.
+
+**`POST /api/push/renovar` no lleva autenticación, y es deliberado.** Lo llama el service
+worker desde el evento `pushsubscriptionchange`, que se dispara cuando el navegador rota
+la suscripción por su cuenta: ese evento corre **sin el JWT de Ariel** y puede ocurrir con
+el panel cerrado, así que ni un header de autorización ni un mensaje a la página son
+opciones. La autorización es **conocer `endpointViejo`**: es una URL larga que asigna el
+servicio de push y no se puede adivinar, el mismo criterio con el que el id de un turno
+funciona como token del link del cliente. Si ese endpoint no está en la base, responde 404
+y **no crea nada** — sin ese chequeo sería un alta abierta de suscripciones arbitrarias.
 
 ### Servicios — HU-13
 

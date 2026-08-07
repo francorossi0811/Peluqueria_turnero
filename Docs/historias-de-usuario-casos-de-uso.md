@@ -25,7 +25,7 @@ Como cliente, quiero reservar un turno eligiendo servicio, día y horario, para 
 - Solo se muestran horarios realmente disponibles (considerando la duración del servicio elegido).
 - Al confirmar, recibo un link único para administrar mi turno.
 - No necesito crear cuenta ni contraseña.
-- El teléfono es obligatorio y se valida de verdad: entre 8 y 15 dígitos, admitiendo espacios, guiones, paréntesis y un `+` inicial. Es el único dato con el que Ariel me puede ubicar si algo cambia, así que no puede quedar en cualquier cosa. El email es opcional, pero si lo dejo tiene que tener formato válido.
+- El teléfono es obligatorio y se valida de verdad: entre 8 y 15 dígitos, admitiendo espacios, guiones, paréntesis y un `+` inicial. Es el único dato con el que Ariel me puede ubicar si algo cambia, así que no puede quedar en cualquier cosa. El email es opcional, pero si lo dejo tiene que tener formato válido. (Solo es obligatorio **acá**: cuando el turno lo carga Ariel a mano, ver HU-08, puede quedar vacío.)
 
 **HU-02 — Recibir confirmación**
 Como cliente, quiero recibir una confirmación clara de mi turno, para saber que quedó agendado correctamente.
@@ -56,11 +56,17 @@ Como Ariel, quiero ver todos los turnos del día de un vistazo, para organizarme
 
 **HU-07 — Ver agenda semanal**
 Como Ariel, quiero ver la semana completa, para planificar con anticipación (ej. si quiero tomarme una tarde libre).
+- La semana va del primer al último día que trabajo. Hoy eso es martes a sábado; domingo y lunes no aparecen porque no abro.
+- Esos días salen del horario laboral que tengo configurado (HU-14), no están fijos en el sistema: si algún día empiezo a abrir los lunes, la agenda lo suma sola.
+- Un día laboral sin turnos igual se muestra, con "Sin turnos". Que un miércoles esté vacío es información, no algo para esconder.
+- Un día que no trabajo aparece igual si tiene algo cargado, por ejemplo un bloqueo.
 
 **HU-08 — Cargar turno manual**
 Como Ariel, quiero cargar un turno a mano cuando un cliente me escribe o llama, para los que no usan la web directamente.
 - Mismas validaciones de disponibilidad que una reserva online (no se pueden pisar turnos).
 - Puedo marcar el origen (teléfono / WhatsApp) para saber de dónde vino.
+- **El teléfono es opcional acá**, al revés que en la reserva del cliente (HU-01). Muchas veces cargo el turno con la persona enfrente y no me sé el número de memoria; que fuera obligatorio me trababa el alta por un dato que puedo completar después. Si escribo algo, igual tiene que ser un teléfono válido.
+- En el celular puedo elegir el número de mi agenda de contactos en vez de tipearlo. Es una comodidad: donde el navegador no lo permite, el botón directamente no aparece y el campo se escribe a mano.
 
 **HU-09 — Editar turno**
 Como Ariel, quiero poder mover un turno a otro horario, para acomodar imprevistos sin tener que cancelarlo y perder los datos del cliente.
@@ -105,7 +111,27 @@ Como Ariel, quiero que me llegue un aviso al celular cuando entra una reserva, p
 - El aviso trae el cliente, el servicio, el día y la hora.
 - Solo avisa de las reservas que entran por la web, no de las que cargo yo.
 - Se activa desde "Mi cuenta", por dispositivo, y se puede desactivar y probar desde ahí mismo.
+- Cada turno genera su propio aviso: dos reservas seguidas no se pisan entre sí.
+- Si el navegador cambia la suscripción por su cuenta, el sistema la renueva solo. Antes eso me dejaba sin avisos sin que nada lo dijera: el panel seguía mostrando "activados".
+- **El aviso al celular no es el único canal, y a propósito.** Depende del servicio de notificaciones del sistema operativo, del ahorro de batería y de qué navegador use cada dispositivo — cosas que la aplicación no controla. Por eso existe también HU-20, que funciona siempre.
+- La pantalla de prueba distingue **aceptado** de **entregado**: el servidor solo puede saber que el servicio de push tomó el mensaje. Si no aparece en el celular, el problema está en el dispositivo, y el panel lo dice con esas palabras en vez de un "enviado" que engaña.
+- Hay una **prueba local**, que dibuja la notificación sin pasar por internet. Sirve para separar los dos problemas posibles: si la local se ve y la otra no, falla la entrega; si no se ve ninguna, falla el permiso o el sistema.
 - (En iPhone, Apple solo permite estos avisos si el sitio está agregado a la pantalla de inicio; el panel explica cómo hacerlo cuando detecta ese caso.)
+
+**HU-20 — Ver los avisos sin depender del celular**
+Como Ariel, quiero darme cuenta de que entraron turnos nuevos con solo mirar la pestaña del navegador, para no depender de que el aviso del celular funcione.
+- La pestaña muestra la cantidad entre paréntesis, como WhatsApp: "(3) La Peluquería…".
+- El ícono de la pestaña lleva un punto rojo mientras haya turnos sin ver.
+- Con el panel instalado como aplicación, el punto aparece también sobre el ícono en el celular.
+- Todo vuelve a la normalidad solo cuando marco los turnos como vistos.
+- El panel sigue consultando aunque la pestaña esté en segundo plano (más espaciado, para no cargar el servidor de más): si dejara de consultar, el contador nunca se actualizaría, que es justo cuando hace falta.
+
+**HU-21 — Ver el panel con fondo oscuro**
+Como Ariel, quiero poder poner el panel en fondo oscuro con letras claras, porque uso lentes y el fondo claro me cansa la vista en una jornada larga.
+- Es la opción por defecto, así no tengo que configurarlo en ninguno de mis dispositivos.
+- Hay un interruptor en "Mi cuenta" para volver al claro, y la elección se recuerda en ese dispositivo.
+- **Solo cambia el panel.** Lo que ven los clientes queda siempre como está, porque el diseño ya estaba aprobado.
+- Se mantiene la estética: misma tipografía, mismo ámbar de marca, mismos componentes. Cambian los valores de color, no el diseño.
 
 ### Cliente (continuación)
 
