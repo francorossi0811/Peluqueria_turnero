@@ -44,7 +44,8 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
 - El cliente puede dejar un **email opcional** al reservar: si lo deja, recibe la confirmación con su link único y el turno adjunto para el calendario. Si no lo dejó, la pantalla de confirmación se lo ofrece ahí mismo (`POST /api/turnos/:id/enviar-confirmacion`, **un solo uso por turno** — el id del turno es el token, así que sin ese límite sería un relay de mails abierto).
 - El **teléfono se valida** (8 a 15 dígitos, con espacios/guiones/paréntesis y un `+` inicial) en el frontend y en el backend. La regla vive en `utils/validaciones.ts`, duplicada a propósito en los dos lados: la del backend es la que decide. **Es obligatorio cuando reserva un cliente por la web** (es el único dato con el que Ariel lo ubica) y **opcional cuando el turno lo carga Ariel a mano**, porque no se sabe los números de memoria. La diferencia se hace sobrescribiendo el campo en `bodyManualSchema` (`turnos.controller.ts`), no aflojando `bodySchema`. Si escribió algo, tiene que ser válido igual.
 - **Los días que trabaja Ariel salen de la tabla `horario_laboral`** ("sin filas = cerrado"), nunca de una constante en el código. Hoy da martes a sábado. La vista "Semana" de la agenda va del primer al último día laboral, anclada en domingo — si Ariel abre los lunes desde el panel, la agenda lo sigue sola.
-- **Fuera de alcance:** precios, sistema de deudas por ausencias, multi-peluquero. Los avisos a Ariel (push) y el mail al cliente son reales. **WhatsApp deja de estar fuera de alcance en la v3** — ver abajo.
+- La confirmación al cliente sale **por WhatsApp** (HU-22), con el mail como **respaldo**: se manda el mail solo si no hay teléfono, si el número no se puede pasar a E.164, o si el envío falla. El teléfono se **guarda como lo escribió la persona** y se normaliza recién al momento de enviar (`utils/telefono.ts`), nunca al entrar.
+- **Fuera de alcance:** precios, sistema de deudas por ausencias, multi-peluquero. Los avisos a Ariel (push), el mail y el WhatsApp al cliente son reales. **WhatsApp dejó de estar fuera de alcance en la v3** — ver abajo.
 
 ## Estado actual del proyecto
 
@@ -58,7 +59,7 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
   - Etapa 1 — sesión deslizante que no vence mientras Ariel use el panel, y cambio de contraseña desde "Mi cuenta" (HU-15, HU-16).
   - Etapa 2 — agenda que se actualiza sola con los turnos nuevos marcados, y aviso al celular por Web Push (HU-17, HU-18).
   - Etapa 3 — mail de confirmación al cliente con su link, y "agregar al calendario" (.ics) (HU-02, HU-19).
-- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapas 2 (WhatsApp) y 3 (clientes) por validar. Ver abajo.
+- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapa 2 (WhatsApp) ✅ código terminado y verificado en local con el adaptador de consola; **falta hacer los trámites con Meta para probarlo con mensajes reales**. Etapa 3 (clientes) por validar. Ver abajo.
 - ⚠️ Pendiente de configuración (no de código): para que los mails salgan de verdad hay que crear una cuenta gratuita en Brevo y cargar `BREVO_API_KEY`. Sin eso el mail se imprime por consola y todo lo demás funciona igual.
 
 ## v3 — lo que pidió Ariel
@@ -85,16 +86,33 @@ Dos cosas para no olvidar al entregar:
 - La migración `hacer_telefono_opcional` (`DROP NOT NULL`) y `diagnostico_push` están aplicadas **solo en desarrollo**. Hay que correr `migrate deploy` en producción.
 - ⚠️ `diagnostico_push` lleva `DEFAULT CURRENT_TIMESTAMP` escrito a mano en el `updated_at`: Prisma lo genera sin default y la migración falla sobre una tabla con filas. Es exactamente el motivo del ritual de leer el SQL antes de aplicar.
 
-### Etapa 2 — WhatsApp como canal principal (a validar antes de arrancar)
+### Etapa 2 — WhatsApp como canal principal ✅ código terminado (HU-22)
 
-Ariel quiere que la confirmación del turno, con el link de gestión adentro, llegue por WhatsApp en vez de mail. Lo investigado, para no volver a averiguarlo:
+La confirmación del turno, con el link de gestión adentro, sale por WhatsApp; el mail quedó como respaldo. Todo verificado en local con el adaptador de consola.
 
-- **Coexistence** (Meta, mayo 2026, ya en todos los países) permite el **mismo número** en la app de WhatsApp Business **y** en la Cloud API a la vez, sin perder chats. Ariel ya usa la app de negocio, así que no cambia de número ni pierde nada. Era el bloqueante histórico.
+**Cómo quedó armado:**
+
+- `backend/src/services/whatsapp/` — adaptador con el **mismo molde que `services/mail/`**: interfaz, Cloud API por `fetch` nativo (cero dependencias HTTP) y consola. Se elige por la presencia de `WHATSAPP_TOKEN`.
+- `backend/src/utils/telefono.ts` — `aE164()`, la traducción de salida. **No toca `validaciones.ts`**: el número se sigue guardando como lo escribió la persona, porque Ariel lo lee para llamar.
+- `notificaciones.service.ts` — intenta WhatsApp y cae al mail. **Los 4 call sites del controller no se tocaron.**
+- ⚠️ **El adaptador de consola no cuenta como enviado** (`whatsappEstaConfigurado()` al final de `intentarConfirmacionPorWhatsapp`). Sin ese detalle, desplegar esto antes de terminar los trámites con Meta apagaría el mail en silencio, que hoy es el único canal que funciona.
+
+**Las dos trampas que se encontraron probando, no razonando:**
+
+- ⚠️ **`libphonenumber-js` sola NO alcanza.** Solo agrega el `9` de celular cuando encuentra el `15`: `0351 15 459 3325` → `+5493514593325` ✅, pero **`351 459 3325` → `+543514593325`** (fijo) ❌ — y ese es justo el formato del placeholder de nuestro formulario. Hay que agregar el `9` a mano. Si sale sin él, WhatsApp acepta el número y el mensaje no llega nunca.
+- ⚠️ Se importa la metadata **`max`** y no la `min` (la del import por defecto): `min` solo mira la longitud y da por válido cualquier argentino de 10 dígitos aunque la característica no exista.
+- Se asume **celular** ante un argentino de 10 dígitos sin `0` ni `15`. Es ambiguo de verdad, pero un fijo no tiene WhatsApp: agregarle el `9` es lo único que le da chance de llegar.
+
+**Lo investigado, para no volver a averiguarlo:**
+
+- **Coexistence** (Meta, mayo 2026, ya en todos los países) permite el **mismo número** en la app de WhatsApp Business **y** en la Cloud API a la vez, sin perder chats. Era el bloqueante histórico.
 - **No hay abono de plataforma**; se paga por mensaje. Las plantillas *utility* son **gratis dentro de la ventana de 24 h** que abre el cliente al escribir primero.
-- **No hace falta verificar el negocio con Meta**: sin verificar el tope son 250 conversaciones **por día**, y Ariel atiende ~230 clientes **por mes**.
-- El link entra como **botón de URL dinámica** con una variable al final: `https://…/turno/{{1}}`.
-- Arquitectura: adaptador en `backend/src/services/whatsapp/`, mismo molde que `services/mail/`. `notificaciones.service.ts` ya es el único punto de salida de avisos. **El mail no se borra: pasa a ser el respaldo.**
-- ⚠️ Lo más subestimado: **normalizar a E.164**. La regla actual dice explícitamente que no normaliza; WhatsApp necesita `5493514593325` exacto, con el quilombo argentino del `0`, el `15` y el `9`.
+- **No hace falta verificar el negocio con Meta**: sin verificar el tope son 250 conversaciones **por día**, y Ariel atiende ~230 clientes **por mes**. La **plantilla** es otro trámite distinto y ese sí hace falta — es el formato aprobado para poder escribirle primero a alguien.
+- El link entra como **botón de URL dinámica** con una variable al final: `https://…/turno/{{1}}`. Solo viaja el id del turno; la base es parte de la plantilla.
+
+**Pendiente, y no es código:** cuenta de Meta Business con WABA en la Cloud API, Coexistence activado sobre el número de Ariel, las plantillas `turno_confirmado` y `turno_reprogramado` aprobadas (categoría *utility*), y `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` en Render.
+
+**Fuera de alcance dentro de WhatsApp:** los webhooks de estado de Meta (entregado/leído/rebotado), el recordatorio previo al turno, y la respuesta automática al cliente que escribe primero. ⚠️ Sin webhooks, **el respaldo por mail cubre el envío que falla, no el que rebota**: Meta responde cuando acepta el mensaje, no cuando lo entrega.
 
 ### Etapa 3 — reemplazar las planillas de Drive (necesita su propia ronda de diseño)
 

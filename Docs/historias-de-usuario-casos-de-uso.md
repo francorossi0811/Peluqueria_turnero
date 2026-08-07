@@ -30,9 +30,9 @@ Como cliente, quiero reservar un turno eligiendo servicio, día y horario, para 
 **HU-02 — Recibir confirmación**
 Como cliente, quiero recibir una confirmación clara de mi turno, para saber que quedó agendado correctamente.
 - La confirmación muestra fecha, hora, servicio y el link único. El link queda siempre visible y se puede copiar, haya dejado email o no.
-- Si dejo mi email (es opcional), me llega la confirmación por mail con el link y el turno adjunto para el calendario — así no dependo de copiar el link a mano.
+- **Me llega la confirmación por WhatsApp al número que dejé, con el link adentro** (HU-22). Es el canal principal desde la v3.
+- Si dejo mi email (es opcional) y el WhatsApp no se pudo mandar, me llega por mail con el link y el turno adjunto para el calendario — así no dependo de copiar el link a mano.
 - Si no lo dejé al reservar, la misma pantalla de confirmación me lo ofrece ahí: cargo el mail y lo recibo, sin volver a empezar (ver HU-19).
-- (El aviso por WhatsApp no existe ni simulado: quedó fuera de alcance. Ver §5.)
 
 **HU-03 — Cancelar turno**
 Como cliente, quiero poder cancelar mi turno usando mi link único, para liberar el horario si no puedo asistir, sin tener que llamar a Ariel.
@@ -133,13 +133,25 @@ Como Ariel, quiero poder poner el panel en fondo oscuro con letras claras, porqu
 - **Solo cambia el panel.** Lo que ven los clientes queda siempre como está, porque el diseño ya estaba aprobado.
 - Se mantiene la estética: misma tipografía, mismo ámbar de marca, mismos componentes. Cambian los valores de color, no el diseño.
 
+**HU-22 — Recibir la confirmación por WhatsApp**
+Como cliente, quiero que la confirmación con mi link me llegue por WhatsApp, porque es donde miro los mensajes — no uso el mail.
+- Llega al número que dejé al reservar, con el servicio, la fecha y la hora.
+- Trae un botón que abre directamente mi turno, para cancelar o reprogramar sin buscar nada.
+- También me llega si el turno lo cargó Ariel a mano y le di mi número: es la única forma de que yo tenga el link.
+- Si reprogramo, me llega la confirmación nueva con el link nuevo.
+- **Si no se pudo mandar** (no dejé teléfono, el número no se entiende, o el envío falló), me llega por mail como antes. Nunca me quedo sin confirmación por los dos lados a la vez.
+
+*Notas de implementación, porque son las dos cosas que pueden fallar en silencio:*
+- *El número se traduce al formato internacional antes de mandarlo. En Argentina eso significa resolver el `0`, el `15` y el `9` de celular: `351 459 3325` tiene que salir como `5493514593325`. Si sale sin el `9`, WhatsApp lo acepta igual y el mensaje no llega nunca.*
+- *WhatsApp responde cuando **acepta** el mensaje, no cuando lo **entrega**. O sea que un número que existe pero no tiene WhatsApp se ve igual que un envío exitoso, y en ese caso el respaldo por mail no se dispara. Distinguirlos requiere los webhooks de estado de Meta, que no están hechos.*
+
 ### Cliente (continuación)
 
 **HU-19 — Agregar el turno a mi calendario**
 Como cliente, quiero agregar el turno al calendario de mi celular, para que me lo recuerde y para no depender de guardar un link.
 - El botón está en la pantalla de confirmación y también al abrir el link de gestión.
 - El evento incluye el link para cancelar o reprogramar en su descripción.
-- Si dejé mi email, el turno viene además adjunto en el mail de confirmación (HU-02).
+- Si dejé mi email **y la confirmación salió por mail** (ver HU-22: el mail es el respaldo de WhatsApp), el turno viene además adjunto ahí (HU-02). El botón de la pantalla de confirmación está siempre, así que el calendario nunca depende del canal por el que me avisaron.
 - Si reprogramo, el evento del calendario se actualiza en lugar de duplicarse.
 - El evento avisa solo 2 horas antes, sin depender de cómo tenga configurado el calendario cada uno. Dos horas dejan margen para reacomodarse y siguen estando fuera de la ventana de 60 minutos, así que todavía puedo cancelar o reprogramar online.
 - Si reservé **sin** dejar email, la pantalla de confirmación me lo ofrece ahí mismo y me manda el link con el turno adjunto. Se puede una sola vez por turno: el id del turno es el token de acceso, así que sin ese límite cualquiera con el link podría hacer que el sistema mande mails a direcciones arbitrarias. El email queda guardado, así que una reprogramación posterior también me llega.
@@ -213,11 +225,13 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
 
 ## 5. Fuera de alcance en v1 (recordatorio)
 
-Precios · Deudas por ausencia · Multi-peluquero · **Cualquier aviso por WhatsApp al cliente** · Recuperación autoservicio del link para clientes sin email · Recordatorio automático mandado por el sistema (HU-05: lo cubre en parte la alarma del evento de calendario de HU-19)
+Precios · Deudas por ausencia · Multi-peluquero · Recuperación autoservicio del link para clientes sin email · Recordatorio automático mandado por el sistema (HU-05: lo cubre en parte la alarma del evento de calendario de HU-19)
 
-*Sobre WhatsApp:* antes figuraba como "simulado en la interfaz", con un cartel en la pantalla de confirmación diciendo que el mensaje llegaría cuando Ariel tuviera cuenta de negocio. Ese cartel se sacó: la integración con WhatsApp Business API no se va a hacer, así que prometerla en la interfaz era mentirle al cliente. WhatsApp sigue siendo el canal de contacto con Ariel, pero a mano, no desde el sistema.
+*Sobre WhatsApp:* **dejó de estar fuera de alcance en la v3** (HU-22). Durante la v1 y la v2 lo estuvo, y por un motivo concreto: la API de WhatsApp Business exigía dedicarle un número a la API, o sea que Ariel tenía que dejar de usar su número de siempre en la app de WhatsApp Business. Eso se cayó con *Coexistence* (Meta, mayo de 2026), que permite el mismo número en los dos lados a la vez sin perder los chats. Antes de eso, el aviso al cliente figuró un tiempo como "simulado en la interfaz", con un cartel prometiendo un mensaje que nunca iba a llegar; ese cartel se sacó porque era mentirle al cliente. Ahora el mensaje es real.
 
-*Salieron de esta lista: que Ariel cambie su contraseña desde el panel (HU-16) y el envío del link por mail (HU-02, HU-19), ambos ya implementados.*
+*Sigue fuera de alcance dentro de WhatsApp:* los **webhooks de estado** de Meta (saber si el mensaje se entregó, se leyó o rebotó), el **recordatorio previo al turno**, y la **respuesta automática** al cliente que escribe primero.
+
+*Salieron de esta lista: que Ariel cambie su contraseña desde el panel (HU-16), el envío del link por mail (HU-02, HU-19) y la confirmación por WhatsApp (HU-22), todos ya implementados.*
 
 ---
 

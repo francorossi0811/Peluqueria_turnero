@@ -10,8 +10,13 @@
 6. **Servicios externos salientes** — las únicas llamadas que el backend hace hacia afuera:
    - **Web Push** (VAPID, librería `web-push`) para avisarle a Ariel al celular cuando entra un turno (HU-18). Opcional: sin claves configuradas, el resto funciona igual.
    - **Envío de mail** para la confirmación al cliente (HU-19), detrás de una interfaz `Mailer` con dos implementaciones: Brevo en producción y una que escribe por consola en desarrollo (o mientras no haya cuenta creada). Cambiar de proveedor es agregar un archivo.
+   - **WhatsApp** (Cloud API de Meta) para la confirmación al cliente (HU-22), que desde la v3 es el canal principal. Mismo molde que el mail: interfaz `Whatsapp` en `services/whatsapp/`, con la Cloud API en producción y una implementación de consola en desarrollo. Se habla por `fetch` nativo, sin dependencia HTTP.
 
-No hay una tercera integración saliente: **WhatsApp Business API quedó descartada**, no diferida. El aviso al cliente por WhatsApp estuvo un tiempo "simulado" con un cartel en la pantalla de confirmación, y ese cartel se sacó — anunciar en la interfaz una integración que no se va a construir es peor que no tenerla. El mail cubre el mismo objetivo (que el link llegue solo a algún lado) sin cuenta de negocio ni aprobación de Meta.
+**Por qué WhatsApp pasó de descartado a construido.** Durante la v1 y la v2 figuró como descartado —no diferido— y el motivo era real: la API exigía dedicarle un número, o sea que Ariel tenía que dejar de usar el suyo en la app de WhatsApp Business. *Coexistence* (Meta, mayo de 2026) permite el mismo número en los dos lados a la vez sin perder los chats, y eso sacó el único bloqueante que importaba. El mail no se quitó: pasó a ser el respaldo.
+
+**Los dos avisos al cliente están detrás del mismo punto de salida.** `notificaciones.service.ts` es el único lugar que decide por dónde sale la confirmación, y los controllers siguen llamando a una sola función. Por eso agregar WhatsApp no tocó ninguno de los cuatro lugares que la disparan.
+
+**El teléfono se normaliza al salir, no al entrar.** `utils/validaciones.ts` acepta el número como lo escribe la persona y lo guarda tal cual, porque Ariel lo lee para llamar; `utils/telefono.ts` lo traduce a E.164 recién al momento de mandar el mensaje. Separarlo así evita que un requisito de un proveedor externo cambie lo que se ve en la agenda. Se usa `libphonenumber-js` y no una expresión regular propia porque sacar el `15` de un celular argentino exige saber dónde termina la característica, y las argentinas van de 2 a 4 dígitos.
 
 ## Decisiones y por qué
 
