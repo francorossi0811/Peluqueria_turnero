@@ -16,7 +16,8 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
 - **No pushear ni mergear sin que Franco lo pida explícitamente.**
 - **Todo contra la base de desarrollo.** Antes de correr cualquier migración o script, verificar el host de `DATABASE_URL`: desarrollo es `ep-cool-field-acf4s3g8`. Si no coincide, parar y preguntar.
 - Render sirve **producción** y Vercel le apunta ahí. El entorno local (`localhost:3000` + `localhost:5173`) va contra **desarrollo**; `frontend/.env` tiene que decir `http://localhost:3000/api`.
-- Cuando se entregue, la migración del teléfono (`DROP NOT NULL`) hay que aplicarla en producción con `migrate deploy`. No es automático.
+- Cuando se entregue, hay dos migraciones que aplicar en producción con `migrate deploy` (`hacer_telefono_opcional` y `diagnostico_push`). No es automático, y sin ellas el backend nuevo falla al guardar un turno sin teléfono.
+- ⚠️ **Las suscripciones push viven en la base a la que apuntaba el backend cuando se tocó "Activar".** Cambiar `DATABASE_URL` en Render deja huérfanos todos los dispositivos registrados hasta ese momento: el envío sale, pero a una lista vacía o vieja. Ya pasó — ver la nota del final de la Etapa 1.
 
 ## Antes de hacer nada
 
@@ -64,7 +65,9 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
 
 ## v3 — lo que pidió Ariel
 
-Plan completo en `~/.claude/plans/tingly-meandering-mitten.md`. Se decidió arrancar por los arreglos chicos (todo local, sin depender de trámites externos) y dejar WhatsApp para después.
+Se decidió arrancar por los arreglos chicos (todo local, sin depender de trámites externos) y dejar WhatsApp para después.
+
+El plan original está en `~/.claude/plans/tingly-meandering-mitten.md`, pero **quedó viejo**: describe como pendiente todo lo que ya está hecho. Para saber en qué estado están las cosas, vale esta sección, no ese archivo.
 
 ### Etapa 1 — arreglos y cambios chicos ✅ terminada (rama `v3-ajustes-de-ariel`, sin mergear)
 
@@ -80,6 +83,13 @@ Todo hecho y verificado en el navegador:
 - **Documentación**: HU-20 y HU-21 nuevas, enmiendas a HU-01/07/08/18, tabla `push_suscripciones` en modelo-datos (faltaba desde la v2), API y wireframes.
 
 **Sobre el bug de las notificaciones de Ariel: quedó diagnosticado.** Franco probó en un Android con Chrome y llegan. Eso descarta el backend, las claves VAPID y el cifrado del payload: el problema es Samsung Internet en el celular de Ariel. **Instalarle Chrome es la solución** — y de paso le habilita el selector de contactos. Los arreglos de arriba se hicieron igual porque eran defectos reales.
+
+**Y hay un segundo caso, distinto, que también quedó explicado.** A Franco no le llegaban avisos a su iPhone aunque a su amigo sí. No era iOS: **una suscripción push pertenece a la base de datos que estaba activa cuando se registró**. Su iPhone se suscribió mientras Render apuntaba a desarrollo; cuando volvió a producción, ese dispositivo dejó de estar en la lista que lee el envío. Se arregla desactivando y volviendo a activar los avisos desde la app deployada.
+
+De ahí salen dos cosas que conviene tener presentes:
+
+- ⚠️ **Defecto conocido, sin arreglar:** el panel dice "avisos activados" mirando **solo el navegador** (`suscripcionActual()` en `lib/push.ts`), nunca al backend. Los dos estados pueden estar desincronizados y la pantalla no lo delata. El endpoint `GET /api/admin/push/dispositivos` ya devuelve lo que hace falta para reconciliarlo; falta usarlo en la UI.
+- Un **403** al enviar significa claves VAPID que no coinciden con las que firmaron esa suscripción — típico después de rotarlas. Esa fila no se borra sola (a diferencia de 404/410) y el dispositivo tiene que volver a activarse a mano.
 
 Dos cosas para no olvidar al entregar:
 
