@@ -32,10 +32,25 @@ export interface ResultadoEnvio {
 }
 
 export interface DispositivoPush {
+  /** Hash del endpoint, para reconocer cuál de todos es este dispositivo. */
+  huella: string
   servicio: string
   userAgent: string | null
   ultimoEstado: number | null
   ultimoIntentoEn: string | null
+}
+
+/** La misma huella que calcula el backend (`huellaDeEndpoint` en `push.service.ts`), para
+ * poder cruzar la suscripción de este navegador contra la lista que conoce el servidor. */
+export async function huellaDeEndpoint(endpoint: string): Promise<string> {
+  const hash = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(endpoint),
+  )
+  return [...new Uint8Array(hash)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16)
 }
 
 /** Manda una notificación de prueba y devuelve qué pasó con cada dispositivo. */

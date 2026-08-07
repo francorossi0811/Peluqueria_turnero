@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import webpush from 'web-push'
 import { configVapid } from '../config/env'
 import { prisma } from '../config/prisma'
@@ -202,14 +203,31 @@ async function registrarIntento(
   }
 }
 
+/** Identificador estable de una suscripción, para que el panel pueda reconocer **la suya**
+ * dentro de la lista de dispositivos.
+ *
+ * Es un hash y no el endpoint entero a propósito: la URL del endpoint funciona como
+ * credencial —conocerla es lo que autoriza `POST /api/push/renovar`, ver `sw.js`— así que
+ * no hay motivo para mandarla de vuelta al navegador solo para comparar. */
+export function huellaDeEndpoint(endpoint: string): string {
+  return createHash('sha256').update(endpoint).digest('hex').slice(0, 16)
+}
+
 /** Los dispositivos suscriptos, para el bloque de diagnóstico del panel. */
 export async function listarSuscripciones(): Promise<
-  { servicio: string; userAgent: string | null; ultimoEstado: number | null; ultimoIntentoEn: Date | null }[]
+  {
+    huella: string
+    servicio: string
+    userAgent: string | null
+    ultimoEstado: number | null
+    ultimoIntentoEn: Date | null
+  }[]
 > {
   const filas = await prisma.pushSuscripcion.findMany({
     orderBy: { createdAt: 'asc' },
   })
   return filas.map((s) => ({
+    huella: huellaDeEndpoint(s.endpoint),
     servicio: hostDe(s.endpoint),
     userAgent: s.userAgent,
     ultimoEstado: s.ultimoEstado,

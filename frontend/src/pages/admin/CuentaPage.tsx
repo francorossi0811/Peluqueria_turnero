@@ -9,7 +9,9 @@ import { cambiarPassword, obtenerMe } from '../../api/auth'
 import {
   eliminarSuscripcion,
   enviarPrueba,
+  huellaDeEndpoint,
   obtenerClavePublica,
+  obtenerDispositivos,
   registrarSuscripcion,
   type ResultadoEnvio,
 } from '../../api/push'
@@ -133,8 +135,16 @@ function SeccionSalir() {
   )
 }
 
+/** El estado real de los avisos en este dispositivo.
+ *
+ * `desincronizado` es el que faltaba: el navegador tiene una suscripción, pero el backend
+ * no la conoce. Pasa cuando la suscripción se registró contra otra base de datos, y hasta
+ * ahora se veía igual que "activado" — o sea que la pantalla decía que iban a llegar
+ * avisos que no iban a llegar. */
+type EstadoAvisos = 'activado' | 'apagado' | 'desincronizado'
+
 function SeccionNotificaciones() {
-  const [suscripto, setSuscripto] = useState<boolean | null>(null)
+  const [suscripto, setSuscripto] = useState<EstadoAvisos | null>(null)
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
@@ -150,12 +160,41 @@ function SeccionNotificaciones() {
   // que se pueda pedir desde una pestaña de Safari.
   const bloqueadoPorIOS = enIOS && !instalada
 
+  // ⚠️ Acá había un defecto real, y le costó a Franco una tarde de depuración: el estado
+  // salía **solo** de `suscripcionActual()`, o sea de lo que sabe el navegador, sin
+  // preguntarle nunca al backend. Los dos pueden estar desincronizados —una suscripción
+  // pertenece a la base que estaba activa cuando se registró, así que cambiar
+  // `DATABASE_URL` en Render deja huérfanos todos los dispositivos— y la pantalla seguía
+  // diciendo "avisos activados" mientras no llegaba nada.
   useEffect(() => {
     if (!soportado) {
-      setSuscripto(false)
+      setSuscripto('apagado')
       return
     }
-    void suscripcionActual().then((s) => setSuscripto(Boolean(s)))
+
+    void (async () => {
+      const local = await suscripcionActual()
+      if (!local) {
+        setSuscripto('apagado')
+        return
+      }
+
+      try {
+        const [dispositivos, huella] = await Promise.all([
+          obtenerDispositivos(),
+          huellaDeEndpoint(local.endpoint),
+        ])
+        setSuscripto(
+          dispositivos.some((d) => d.huella === huella)
+            ? 'activado'
+            : 'desincronizado',
+        )
+      } catch {
+        // Si no se puede consultar al servidor no inventamos un problema: se muestra lo
+        // que sabe el navegador, que es lo que se mostraba antes de este arreglo.
+        setSuscripto('activado')
+      }
+    })()
   }, [soportado])
 
   async function activar() {
@@ -198,7 +237,7 @@ function SeccionNotificaciones() {
       const clave = await obtenerClavePublica()
       const suscripcion = await crearSuscripcion(clave)
       await registrarSuscripcion(suscripcion)
-      setSuscripto(true)
+      setSuscripto('activado')
       setMensaje('Listo, ya te van a llegar los avisos a este dispositivo.')
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 503) {
@@ -222,7 +261,7 @@ function SeccionNotificaciones() {
     try {
       const endpoint = await desuscribirse()
       if (endpoint) await eliminarSuscripcion(endpoint)
-      setSuscripto(false)
+      setSuscripto('apagado')
       setMensaje('Listo, no vas a recibir más avisos en este dispositivo.')
     } catch {
       setError('No pudimos desactivar los avisos. Probá de nuevo.')
@@ -302,9 +341,21 @@ function SeccionNotificaciones() {
         </div>
       )}
 
+      {suscripto === 'desincronizado' && (
+        <div className="border-alerta bg-alerta-suave text-alerta mt-4 rounded-md border px-3 py-2 text-sm">
+          <p className="font-semibold">
+            Este dispositivo figura activado, pero el servidor no lo conoce.
+          </p>
+          <p className="mt-1">
+            No te van a llegar los avisos hasta que lo vuelvas a activar. Tocá
+            "Desactivar avisos" y después "Activar" de nuevo.
+          </p>
+        </div>
+      )}
+
       {soportado && !bloqueadoPorIOS && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          {suscripto ? (
+          {suscripto === 'activado' || suscripto === 'desincronizado' ? (
             <>
               <Button
                 variant="outline"
