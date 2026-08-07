@@ -16,6 +16,7 @@ import {
 } from '../../api/agenda'
 import { eliminarBloqueo, obtenerBloqueos } from '../../api/bloqueos'
 import { obtenerHorarioLaboral } from '../../api/horarioLaboral'
+import { useAvisosPendientes } from '../../lib/useAvisosPendientes'
 import {
   hoyIso,
   sumarDias,
@@ -98,7 +99,15 @@ export function AgendaPage() {
     // pidiendo disponibilidad cada 30 segundos y quemando el plan gratuito de Render.
     // `refetchIntervalInBackground` queda en false (default): una pestaña de fondo deja
     // de pedir, y de paso no mantiene la sesión viva sola para siempre.
-    refetchInterval: 30_000,
+    // Con la pestaña visible, cada 30 s. Oculta, cada 3 minutos en vez de nada: el
+    // contador del título y el badge sirven justamente cuando Ariel no está mirando esta
+    // pestaña, así que dejar de pedir del todo los volvía inútiles. Son ~20 requests por
+    // hora de fondo, irrelevante para el plan gratuito de Render.
+    //
+    // Efecto que vale nombrar: un panel abierto renueva su sesión para siempre. Es la
+    // sesión deslizante que ya decidimos en la v2, no un accidente.
+    refetchInterval: () => (document.hidden ? 180_000 : 30_000),
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   })
 
@@ -150,6 +159,10 @@ export function AgendaPage() {
   const turnos = agendaQuery.data?.turnos ?? []
   const sinVer = turnos.filter((t) => !t.vistoPorAdmin)
   const nuevosMasAdelante = agendaQuery.data?.nuevosMasAdelante ?? 0
+
+  // Pestaña, favicon e ícono de la app. Se suman los de más adelante: para Ariel "tengo
+  // 3 turnos nuevos" es uno solo aunque estén en semanas distintas.
+  useAvisosPendientes(sinVer.length + nuevosMasAdelante)
 
   return (
     <div>
