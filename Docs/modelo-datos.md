@@ -38,7 +38,7 @@ erDiagram
         date fecha
         varchar nombre
         varchar fuente
-        boolean bloquea
+        enum modalidad
         timestamptz created_at
     }
 
@@ -145,14 +145,25 @@ vacaciones (rango de fechas, horas en `null` = día completo).
 | `fecha` | date, unique, not null | |
 | `nombre` | varchar | ej. "Día de la Independencia" |
 | `fuente` | varchar | de dónde se importó (para trazabilidad del sync) |
-| `bloquea` | boolean, default true | Si es `true`, ese día no se ofrece disponibilidad (comportamiento por defecto al importar el feriado). Ariel puede "destaparlo" desde el panel poniéndolo en `false` si decide atender igual, sin borrar el registro del feriado |
+| `modalidad` | enum (`cerrado`, `medio_dia`, `dia_completo`), default `medio_dia` | Qué hace Ariel ese día (HU-24). El default **no** es cerrar: en un feriado atiende medio día, y cerrar sería inventarle una decisión que no tomó |
 | `created_at` | timestamptz | |
 
-Se sincroniza desde una fuente externa de feriados de Argentina (la integración concreta
-se define en la etapa de backend, no en este documento). A efectos del cálculo de
-disponibilidad, un feriado con `bloquea = true` se trata igual que un bloqueo de día
-completo; con `bloquea = false` el día se calcula con el `horario_laboral` normal, como si
-no fuera feriado.
+Se sincroniza desde **Nager.Date** (`date.nager.at`, gratuita y sin credenciales), que
+devuelve el nombre en español. A efectos del cálculo de disponibilidad:
+
+- `cerrado` — se trata igual que un bloqueo de día completo.
+- `dia_completo` — el día se calcula con el `horario_laboral` normal, como si no fuera feriado.
+- `medio_dia` — se recorta a la **primera franja** del día. Se dice "primera franja" y no
+  "la mañana" a propósito: sale de `horario_laboral`, así que si Ariel cambia sus horarios
+  la regla lo sigue sola.
+
+⚠️ **La sincronización nunca toca `modalidad`.** Es la única columna que refleja una
+decisión de Ariel: un `upsert` que reescriba la fila entera se la borra sin avisar. El
+`update` se limita a `nombre` y `fuente`; el default solo actúa al crear. Tampoco se borran
+los feriados que dejan de venir de la fuente, por el mismo motivo.
+
+Un feriado solo tiene efecto en los días que Ariel trabaja: si `horario_laboral` no tiene
+franjas para ese día de la semana, el día ya estaba cerrado y la modalidad no cambia nada.
 
 ### `administradores` — HU-15, HU-16
 

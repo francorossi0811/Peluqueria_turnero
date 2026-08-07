@@ -44,6 +44,7 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
 - La sesión del admin dura 7 días y se renueva sola mientras use el panel; cambiar la contraseña invalida los tokens emitidos antes (HU-15, HU-16).
 - El cliente puede dejar un **email opcional** al reservar: si lo deja, recibe la confirmación con su link único y el turno adjunto para el calendario. Si no lo dejó, la pantalla de confirmación se lo ofrece ahí mismo (`POST /api/turnos/:id/enviar-confirmacion`, **un solo uso por turno** — el id del turno es el token, así que sin ese límite sería un relay de mails abierto).
 - El **teléfono se valida** (8 a 15 dígitos, con espacios/guiones/paréntesis y un `+` inicial) en el frontend y en el backend. La regla vive en `utils/validaciones.ts`, duplicada a propósito en los dos lados: la del backend es la que decide. **Es obligatorio cuando reserva un cliente por la web** (es el único dato con el que Ariel lo ubica) y **opcional cuando el turno lo carga Ariel a mano**, porque no se sabe los números de memoria. La diferencia se hace sobrescribiendo el campo en `bodyManualSchema` (`turnos.controller.ts`), no aflojando `bodySchema`. Si escribió algo, tiene que ser válido igual.
+- **En un feriado Ariel trabaja medio día por defecto** (la primera franja del día). Puede pasarlo a día completo o a cerrado desde el panel. Vive en `feriados.modalidad` (enum de tres, default `medio_dia`), y solo tiene efecto en los días que trabaja. Los feriados se cargan solos desde Nager.Date, y la sincronización **nunca pisa la modalidad** que eligió Ariel.
 - **Los días que trabaja Ariel salen de la tabla `horario_laboral`** ("sin filas = cerrado"), nunca de una constante en el código. Hoy da martes a sábado. La vista "Semana" de la agenda va del primer al último día laboral, anclada en domingo — si Ariel abre los lunes desde el panel, la agenda lo sigue sola.
 - La confirmación al cliente sale **por WhatsApp** (HU-22), con el mail como **respaldo**: se manda el mail solo si no hay teléfono, si el número no se puede pasar a E.164, o si el envío falla. El teléfono se **guarda como lo escribió la persona** y se normaliza recién al momento de enviar (`utils/telefono.ts`), nunca al entrar.
 - **Fuera de alcance:** precios, sistema de deudas por ausencias, multi-peluquero. Los avisos a Ariel (push), el mail y el WhatsApp al cliente son reales. **WhatsApp dejó de estar fuera de alcance en la v3** — ver abajo.
@@ -60,7 +61,7 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
   - Etapa 1 — sesión deslizante que no vence mientras Ariel use el panel, y cambio de contraseña desde "Mi cuenta" (HU-15, HU-16).
   - Etapa 2 — agenda que se actualiza sola con los turnos nuevos marcados, y aviso al celular por Web Push (HU-17, HU-18).
   - Etapa 3 — mail de confirmación al cliente con su link, y "agregar al calendario" (.ics) (HU-02, HU-19).
-- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapa 2 (WhatsApp) ✅ código terminado y verificado en local con el adaptador de consola; **falta hacer los trámites con Meta para probarlo con mensajes reales**. Etapa 3 (clientes) por validar. Ver abajo.
+- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapa 2 (WhatsApp) ✅ código terminado; **falta hacer los trámites con Meta para probarlo con mensajes reales**. Etapa 3, primera mitad (feriados + grilla semanal) ✅ terminada. Segunda mitad (fichas de clientes) por validar. Ver abajo.
 - ⚠️ Pendiente de configuración (no de código): para que los mails salgan de verdad hay que crear una cuenta gratuita en Brevo y cargar `BREVO_API_KEY`. Sin eso el mail se imprime por consola y todo lo demás funciona igual.
 
 ## v3 — lo que pidió Ariel
@@ -124,13 +125,38 @@ La confirmación del turno, con el link de gestión adentro, sale por WhatsApp; 
 
 **Fuera de alcance dentro de WhatsApp:** los webhooks de estado de Meta (entregado/leído/rebotado), el recordatorio previo al turno, y la respuesta automática al cliente que escribe primero. ⚠️ Sin webhooks, **el respaldo por mail cubre el envío que falla, no el que rebota**: Meta responde cuando acepta el mensaje, no cuando lo entrega.
 
-### Etapa 3 — reemplazar las planillas de Drive (necesita su propia ronda de diseño)
+### Etapa 3 — feriados y agenda en grilla ✅ código terminado (HU-23, HU-24)
 
-Ariel lleva dos planillas: una de clientes (con código de colores) y una de recaudación diaria. Franco va a pasar una foto antes de planear esto.
+Franco pasó la foto de la planilla de Drive: **una hoja por semana** (pestañas "Semana 1…5"), columna de hora + columna de nombre por cada día de martes a sábado, filas cada **20 minutos** — el mismo `PASO_MINUTOS` que ya usaba el backend.
 
-- El código de colores **mezcla dos ejes distintos**: amarillo/naranja describe al *cliente* (si falta seguido o no), azul/violeta describe *un pago puntual* (Mercado Pago / tarjeta). Como una celda tiene un solo color, hoy pierde información. En el modelo van separados: una marca en el cliente, y un medio de pago por turno.
-- **No integrar Drive por OAuth**: lo que le sirve de Drive es el acceso multiplataforma, y la app web ya lo es. Corresponde una sección "Clientes" en el panel + exportación a CSV.
-- ⚠️ **La contabilidad necesita precios, que están fuera de alcance por escrito.** No es migrar una planilla: es un módulo nuevo con historias de usuario nuevas. Es una decisión de alcance de Franco, no asumirla.
+**Feriados (HU-24).** La tabla, el endpoint y la pantalla ya existían desde la v1; faltaba la fuente. Ahora se sincronizan solos desde **Nager.Date**.
+
+- ⚠️ **Regla de negocio nueva, no estaba en ningún documento:** en un feriado Ariel trabaja **medio día por defecto**, y puede pasarlo a día completo o a cerrado. Por eso `feriados.bloquea` (booleano) pasó a `modalidad` (enum de tres). El default es `medio_dia`, no `cerrado`.
+- "Medio día" se implementa como **la primera franja de `horario_laboral`**, no como "la mañana": si Ariel cambia horarios, la regla lo sigue sola.
+- Lo de "solo los días que trabaja" **no necesitó código**: el `if (franjasDb.length === 0) return 'cerrado'` de `obtenerDetalleDelDia` ya corre antes que el chequeo del feriado. Hay un test que lo fija.
+- ⚠️ **El upsert nunca toca `modalidad`.** Es la única columna que refleja una decisión de Ariel; reescribir la fila entera se la borraría en silencio.
+- Sincroniza al arrancar solo **el año que no tenga filas** (Render duerme y levanta muchas veces por día), más un botón "Actualizar feriados" en el panel para el feriado decretado a mitad de año.
+- La pantalla **esconde los feriados que caen en días que no trabaja**: son 6 de 16, y decidir sobre ellos es decidir sobre nada.
+
+**Grilla semanal (HU-23).** La vista "Semana" pasó de lista a grilla; la vista "Día" no se tocó.
+
+- ⚠️ **El eje vertical es tiempo continuo, no filas.** El alto sale de la duración, así que un turno de 35 min mide 35 minutos y la grilla ya sirve para cualquier duración futura sin tocar el componente. Las líneas de 20 min son fondo de lectura.
+- El alto usa la **duración del snapshot**, no la del servicio actual — verificado midiendo el DOM. Es la regla de "el turno guarda una copia" funcionando.
+- Dos defectos encontrados **mirando la pantalla, no compilando**: las celdas fuera del horario de *ese* día se veían como huecos libres (el sábado abre 09:00 y cierra 20:30, el resto no), y los huecos de días pasados abrían un modal donde no se podía elegir nada. Los dos arreglados.
+- Tocar un hueco abre `ModalCargarTurno` con día y hora puestos. La hora entra como **preferencia**, no como valor fijo: la disponibilidad depende de la duración del servicio, que se elige después.
+
+**Estado de avisos (el defecto que estaba anotado como conocido).** `CuentaPage` cruzaba solo lo que sabe el navegador. Ahora compara contra `GET /api/admin/push/dispositivos` usando una **huella** (hash del endpoint, no el endpoint — es una credencial) y muestra un tercer estado: "este dispositivo cree que está activado pero el servidor no lo conoce".
+
+### Etapa 3 (segunda mitad) — fichas de clientes, a validar
+
+- **Identidad por teléfono normalizado** (`utils/telefono.ts`, ya existe desde la Etapa 2): dos reservas con el mismo número son la misma persona, sin adivinar nombres. Ariel le pone **su** apodo a la ficha — en la planilla usa "Flaco", "Jubilado bici", "Roja", no el nombre que tipea el cliente.
+- **No integrar Drive por OAuth**: lo que le sirve de Drive es el acceso multiplataforma, y la app web ya lo es. Va una sección "Clientes" en el panel + exportación a CSV. Decidido con Franco.
+- ⚠️ **Las etiquetas del cliente van configurables**, no un booleano de "problemático": Ariel las administra desde el panel ("Suele cancelar", "VIP", "No atender"). La planilla usa un color para eso porque es lo único que Sheets permite; no hay motivo para heredar esa limitación.
+- El código de colores de la planilla **mezcla dos ejes**: amarillo/naranja describe al *cliente*, azul/violeta describe *un pago puntual*. Van separados: etiqueta en el cliente, medio de pago por turno.
+
+### Etapa 4 — cobros
+
+⚠️ **Necesita precios, que están fuera de alcance por escrito.** No es migrar una planilla: es un módulo nuevo con historias de usuario nuevas. Franco lo movió acá a propósito.
 
 ## Forma de trabajo
 

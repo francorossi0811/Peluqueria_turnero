@@ -77,7 +77,10 @@ cliente algo útil en vez del mismo "no hay turnos" para todo:
 | `bloqueado` | Ariel bloqueó el día completo; `motivo` trae lo que él escribió, si escribió algo |
 | `completo` | atiende, pero no quedó ningún hueco libre |
 
-`motivo` es `null` salvo en `feriado` y `bloqueado`. Un bloqueo parcial (solo unas horas)
+`motivo` es `null` salvo en `feriado`, `bloqueado` y —desde HU-24— en un día
+`disponible` o `completo` que sea **feriado de medio día**: ahí trae el nombre del feriado
+y el horario recortado ("Día del Trabajador: atendemos de 10:00 a 13:00."), porque si no el
+cliente ve la mitad de los horarios de siempre y no entiende por qué. Un bloqueo parcial (solo unas horas)
 no cambia el estado del día: si quedan huecos sigue siendo `disponible`, y si no queda
 ninguno el día figura como `completo`.
 
@@ -214,7 +217,7 @@ la semanal, de "la semana que viene".
 | POST | `/api/admin/push/suscripciones` | Body: el `PushSubscription.toJSON()` del navegador. Idempotente por `endpoint`. Guarda el `User-Agent` para poder identificar el dispositivo |
 | DELETE | `/api/admin/push/suscripciones` | `{ "endpoint": "..." }` |
 | POST | `/api/admin/push/prueba` | Manda un aviso de prueba → `{ "dispositivos": [...] }` |
-| GET | `/api/admin/push/dispositivos` | Los dispositivos registrados y el resultado de su último envío |
+| GET | `/api/admin/push/dispositivos` | Los dispositivos registrados y el resultado de su último envío. Cada uno trae una `huella` (hash del endpoint) para que el panel reconozca **el suyo** — sin eso no puede detectar que el navegador cree estar suscripto y el servidor no lo conoce. Es un hash y no el endpoint entero porque la URL del endpoint funciona como credencial (ver `/api/push/renovar`) |
 | POST | **`/api/push/renovar`** | **Sin autenticación** — ver abajo. `{ endpointViejo, suscripcion }` → `200 { ok: true }`, o `404 SUSCRIPCION_NO_ENCONTRADA` |
 
 La clave pública se sirve por API y no se compila dentro del frontend a propósito: una
@@ -290,10 +293,19 @@ endpoint idempotente:
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/admin/feriados?anio=` | Feriados cargados para ese año |
-| PATCH | `/api/admin/feriados/:id` | `{ "bloquea": false }` — Ariel "destapa" un feriado puntual para atender igual |
+| PATCH | `/api/admin/feriados/:id` | `{ "modalidad": "cerrado" \| "medio_dia" \| "dia_completo" }` — qué hace Ariel ese día (HU-24) |
+| POST | `/api/admin/feriados/sincronizar?anio=` | Vuelve a traer los feriados de la fuente externa. Devuelve `{ anio, importados }`, o `502 FUENTE_NO_DISPONIBLE` si la fuente no responde |
 
-La sincronización con la fuente externa de feriados corre como job de backend (no como
-endpoint disparado por el usuario); se detalla en la etapa de implementación del backend.
+La carga inicial corre **al arrancar el backend**, para el año actual y el siguiente (en
+diciembre ya se reserva para enero), y **solo para el año que no tenga ninguna fila**: el
+plan gratuito de Render duerme y levanta muchas veces por día, y sin esa guarda le
+pegaríamos a una API pública gratuita en cada arranque en frío sin motivo.
+
+El `POST …/sincronizar` es la contracara de esa guarda, y es la razón por la que existe un
+endpoint disparado por el usuario donde antes este documento decía que iba a ser un job:
+sin él, un feriado decretado a mitad de año no entraría nunca. Un cron no existe en el plan
+gratuito de Render, y que Ariel decida cuándo refrescar es más predecible que adivinar un
+intervalo.
 
 ---
 
@@ -311,9 +323,12 @@ endpoint disparado por el usuario); se detalla en la etapa de implementación de
 
 ## 5. Fuera de alcance de este documento
 
-Paginación de listados largos, rate limiting, versionado de la API (`/api/v1`) y el
-detalle de la sincronización de feriados con la fuente externa — se definen en la etapa
-de implementación del backend si hacen falta, no cambian el contrato ya descripto acá.
+Paginación de listados largos, rate limiting y versionado de la API (`/api/v1`) — se
+definen en la etapa de implementación del backend si hacen falta, no cambian el contrato ya
+descripto acá.
+
+La sincronización de feriados salió de esta lista: quedó especificada arriba, en la sección
+Feriados.
 
 ---
 

@@ -58,8 +58,8 @@ Como Ariel, quiero ver todos los turnos del día de un vistazo, para organizarme
 Como Ariel, quiero ver la semana completa, para planificar con anticipación (ej. si quiero tomarme una tarde libre).
 - La semana va del primer al último día que trabajo. Hoy eso es martes a sábado; domingo y lunes no aparecen porque no abro.
 - Esos días salen del horario laboral que tengo configurado (HU-14), no están fijos en el sistema: si algún día empiezo a abrir los lunes, la agenda lo suma sola.
-- Un día laboral sin turnos igual se muestra, con "Sin turnos". Que un miércoles esté vacío es información, no algo para esconder.
-- Un día que no trabajo aparece igual si tiene algo cargado, por ejemplo un bloqueo.
+- Esa semana se ve como **grilla** (HU-23), no como lista: días en columnas y el tiempo hacia abajo.
+- La vista "Día" sigue siendo una lista, que es con la que opero en el celular.
 
 **HU-08 — Cargar turno manual**
 Como Ariel, quiero cargar un turno a mano cuando un cliente me escribe o llama, para los que no usan la web directamente.
@@ -144,6 +144,29 @@ Como cliente, quiero que la confirmación con mi link me llegue por WhatsApp, po
 *Notas de implementación, porque son las dos cosas que pueden fallar en silencio:*
 - *El número se traduce al formato internacional antes de mandarlo. En Argentina eso significa resolver el `0`, el `15` y el `9` de celular: `351 459 3325` tiene que salir como `5493514593325`. Si sale sin el `9`, WhatsApp lo acepta igual y el mensaje no llega nunca.*
 - *WhatsApp responde cuando **acepta** el mensaje, no cuando lo **entrega**. O sea que un número que existe pero no tiene WhatsApp se ve igual que un envío exitoso, y en ese caso el respaldo por mail no se dispara. Distinguirlos requiere los webhooks de estado de Meta, que no están hechos.*
+
+**HU-23 — Ver la semana como grilla, con los huecos a la vista**
+Como Ariel, quiero ver la semana entera con los días en columnas y las horas hacia abajo, para saber de un vistazo **dónde tengo huecos** — que es lo que venía haciendo en una planilla aparte.
+- Los días que trabajo son las columnas; el tiempo va hacia abajo, con una línea cada 20 minutos.
+- **Un turno ocupa exactamente lo que dura.** Uno de 35 minutos se ve más largo que uno de 20: en la planilla los dos ocupaban una celda igual y eso se perdía.
+- El corte entre la mañana y la tarde se dibuja, como la franja que usaba de referencia en la planilla.
+- El día de hoy va resaltado y una línea marca la hora actual, para ubicarme sin leer.
+- **Toco un hueco y cargo un turno ahí mismo**, con el día y la hora ya puestos.
+- Los ratos en los que no abro (por ejemplo las 9 de la mañana un martes, que solo abro el sábado) se ven rayados y no se pueden tocar: mostrarlos como libres sería mentir.
+- Los horarios que ya pasaron tampoco se tocan — miro semanas anteriores para saber quién vino, no para cargar turnos ahí.
+- Cada turno muestra el nombre y el servicio.
+
+*Lo que todavía no trae:* la marca del cliente (viene con las fichas de clientes) y el medio de pago (Etapa 4). La grilla ya tiene el lugar previsto para los dos.
+
+**HU-24 — En los feriados trabajo medio día**
+Como Ariel, quiero que los feriados se carguen solos y que por defecto se tomen como **medio día**, porque es lo que hago casi siempre, y poder cambiarlo cuando no.
+- Los feriados de Argentina se cargan solos, sin que yo los tipee.
+- Por defecto atiendo **medio día**: solo el primer tramo del día (hoy, de 10 a 13).
+- Puedo cambiar cada feriado a **día completo** o a **no atiendo**.
+- **Mi decisión no se pisa**: si vuelvo a actualizar la lista de feriados, lo que elegí queda.
+- Solo veo los feriados que caen en días que trabajo. Uno que cae domingo o lunes no me cambia nada, así que no me lo preguntan.
+- Si un feriado se decreta a mitad de año, tengo un botón para volver a buscar la lista.
+- Cuando un feriado es de medio día, el cliente ve por qué hay menos horarios que de costumbre.
 
 ### Cliente (continuación)
 
