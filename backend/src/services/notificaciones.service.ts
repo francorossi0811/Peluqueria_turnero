@@ -1,18 +1,25 @@
 import type { Turno } from '../../generated/prisma/client.ts'
-import { frontendUrl } from '../config/env'
+import { configWhatsapp, frontendUrl, type ConfigWhatsapp } from '../config/env'
 import {
   combinarFechaHora,
   formatearFechaLegible,
   formatearHora,
 } from '../utils/fechaHora'
 import { generarIcs, type EventoIcs } from '../utils/ics'
+import { aE164 } from '../utils/telefono'
 import { obtenerMailer } from './mail'
 import { enviarATodos } from './push.service'
+import {
+  obtenerWhatsapp,
+  whatsappEstaConfigurado,
+  type MensajePlantilla,
+} from './whatsapp'
 
-// Punto único de salida de avisos: push a Ariel (HU-18) y mail al cliente (HU-19).
+// Punto único de salida de avisos: push a Ariel (HU-18), y al cliente la confirmación por
+// WhatsApp (HU-21) con el mail (HU-19) como respaldo.
 // Todo lo de acá es "fire and forget": se llama con `void` desde los controllers,
-// después de haber respondido. Un servicio de push o de mail caído no puede hacer
-// fallar una reserva que ya quedó guardada en la base.
+// después de haber respondido. Un servicio de push, de WhatsApp o de mail caído no puede
+// hacer fallar una reserva que ya quedó guardada en la base.
 
 /** Función pura — separada para poder testearla sin tocar red ni base. */
 export function construirNotificacionTurnoNuevo(turno: Turno): {
@@ -148,22 +155,122 @@ function escaparHtml(valor: string): string {
     .replace(/"/g, '&quot;')
 }
 
-/** HU-19 — Le manda al cliente la confirmación con el link de gestión y el .ics.
+/** HU-21 — Función pura: las variables de la plantilla de WhatsApp, sin tocar red.
  *
- * No hace nada si el cliente no dejó mail: es un campo opcional a propósito, porque
- * muchos clientes de Ariel no usan mail. Nunca lanza: se llama con `void` después de
- * responder, y un proveedor de mail caído no puede hacer fallar una reserva ya
- * guardada. */
+ * El cuerpo del mensaje no está acá — vive aprobado del lado de Meta, y lo único que
+ * viaja son estos tres valores y el id del turno para el botón. La dirección y el texto
+ * de "hasta 60 minutos antes" son parte de la plantilla, por eso no se repiten.
+ *
+ * La config entra por parámetro (en vez de leerla adentro) para que la función siga
+ * siendo pura y testeable, igual que `construirMailConfirmacion`. */
+export function construirMensajeWhatsappConfirmacion(
+  turno: Turno,
+  esReprogramacion: boolean,
+  destino: string,
+  config: Pick<
+    ConfigWhatsapp,
+    'plantillaConfirmado' | 'plantillaReprogramado' | 'idioma'
+  >,
+): MensajePlantilla {
+  return {
+    para: destino,
+    plantilla: esReprogramacion
+      ? config.plantillaReprogramado
+      : config.plantillaConfirmado,
+    idioma: config.idioma,
+    variablesCuerpo: [
+      turno.clienteNombre,
+      turno.servicioNombreSnapshot,
+      `${formatearFechaLegible(turno.fecha)} a las ${formatearHora(turno.horaInicio)}`,
+    ],
+    // Solo el id: la base del link (`https://…/turno/`) es parte de la plantilla aprobada.
+    variableBotonUrl: turno.id,
+  }
+}
+
+/** HU-21 — Intenta la confirmación por WhatsApp. Devuelve si quedó **realmente** enviada,
+ * que es lo que decide si hace falta el mail de respaldo.
+ *
+ * Devuelve `false` sin drama en los cuatro casos en que no hay canal: el turno no tiene
+ * teléfono (carga manual de Ariel, HU-08), el teléfono no se puede interpretar, no hay
+ * credenciales de Meta, o el envío falló.
+ *
+ * ⚠️ El `return whatsappEstaConfigurado()` del final no es un detalle. Sin credenciales el
+ * adaptador es el de consola: dejó el mensaje en el log —que es justo lo que hace
+ * verificable esto en desarrollo— pero no lo mandó nadie. Si eso contara como enviado,
+ * desplegar esta etapa antes de terminar los trámites con Meta apagaría el mail de
+ * confirmación en silencio. */
+async function intentarConfirmacionPorWhatsapp(
+  turno: Turno,
+  esReprogramacion: boolean,
+): Promise<boolean> {
+  if (!turno.clienteTelefono) return false
+
+  const destino = aE164(turno.clienteTelefono)
+  if (!destino) {
+    console.warn(
+      `[notificaciones] el teléfono del turno ${turno.id} no se pudo pasar a E.164; ` +
+        'se intenta por mail.',
+    )
+    return false
+  }
+
+  try {
+    await obtenerWhatsapp().enviarPlantilla(
+      construirMensajeWhatsappConfirmacion(
+        turno,
+        esReprogramacion,
+        destino,
+        configWhatsapp(),
+      ),
+    )
+  } catch (err) {
+    console.error(
+      '[notificaciones] no se pudo enviar la confirmación por WhatsApp:',
+      err,
+    )
+    return false
+  }
+
+  return whatsappEstaConfigurado()
+}
+
+/** Le manda al cliente la confirmación con el link de gestión.
+ *
+ * Primero WhatsApp (HU-21), que es el canal que Ariel pidió y el que sus clientes usan de
+ * verdad; el mail (HU-19) queda como respaldo para cuando no hay a dónde mandar el
+ * WhatsApp o el envío falla. Si el cliente no dejó ninguno de los dos datos, no pasa nada:
+ * los dos campos son opcionales a propósito.
+ *
+ * Lo que **no** cubre el respaldo es el rebote posterior: Meta responde aceptando el
+ * mensaje, no entregándolo, así que un número que existe pero no tiene WhatsApp se ve
+ * igual que un envío exitoso. Distinguirlos necesita los webhooks de estado, que quedan
+ * fuera de esta etapa.
+ *
+ * Nunca lanza: se llama con `void` después de responder, y un proveedor caído no puede
+ * hacer fallar una reserva ya guardada. */
 export async function enviarConfirmacionDeTurno(
   turno: Turno,
   opciones: { esReprogramacion?: boolean } = {},
+): Promise<void> {
+  const esReprogramacion = Boolean(opciones.esReprogramacion)
+
+  if (await intentarConfirmacionPorWhatsapp(turno, esReprogramacion)) return
+
+  await enviarConfirmacionPorMail(turno, esReprogramacion)
+}
+
+/** HU-19 — El mail de confirmación con el link de gestión y el .ics adjunto. */
+async function enviarConfirmacionPorMail(
+  turno: Turno,
+  esReprogramacion: boolean,
 ): Promise<void> {
   if (!turno.clienteEmail) return
 
   try {
     const { asunto, html, texto } = construirMailConfirmacion(
       turno,
-      Boolean(opciones.esReprogramacion),
+      esReprogramacion,
     )
 
     await obtenerMailer().enviar({
