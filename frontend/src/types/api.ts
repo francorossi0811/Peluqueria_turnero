@@ -121,11 +121,15 @@ export interface FranjaHorario {
   horaFin: string // "HH:mm"
 }
 
+/** Qué hace Ariel en un feriado (HU-24). `medio_dia` es el default: atiende solo la
+ * primera franja del día. No es un booleano porque la regla tiene tres estados. */
+export type ModalidadFeriado = 'cerrado' | 'medio_dia' | 'dia_completo'
+
 export interface Feriado {
   id: number
   fecha: string // "YYYY-MM-DD"
   nombre: string
-  bloquea: boolean
+  modalidad: ModalidadFeriado
 }
 
 export interface ErrorApi {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   calcularHorariosDelDia,
+  franjasSegunFeriado,
   type Franja,
   type Intervalo,
 } from './disponibilidad.service'
@@ -159,5 +160,39 @@ describe('calcularHorariosDelDia', () => {
       ahora,
     })
     expect(horarios).not.toContain('10:20')
+  })
+})
+
+describe('franjasSegunFeriado', () => {
+  it('deja el día entero cuando Ariel decidió trabajarlo completo', () => {
+    expect(franjasSegunFeriado(FRANJAS, 'dia_completo')).toEqual(FRANJAS)
+  })
+
+  it('no toca nada cuando el día no es feriado', () => {
+    expect(franjasSegunFeriado(FRANJAS, null)).toEqual(FRANJAS)
+  })
+
+  it('medio día deja solo la primera franja', () => {
+    // La regla es "la primera franja", no "la mañana": si Ariel cambia sus horarios en
+    // el panel, esto lo sigue sin tocar código.
+    expect(franjasSegunFeriado(FRANJAS, 'medio_dia')).toEqual([FRANJAS[0]])
+  })
+
+  it('elige la franja más temprana aunque vengan desordenadas', () => {
+    // `horario_laboral` no garantiza orden: son filas de una tabla, no una lista.
+    const alReves = [FRANJAS[1], FRANJAS[0]]
+    expect(franjasSegunFeriado(alReves, 'medio_dia')).toEqual([FRANJAS[0]])
+  })
+
+  it('con una sola franja, medio día es el día entero', () => {
+    const unaSola = [FRANJAS[0]]
+    expect(franjasSegunFeriado(unaSola, 'medio_dia')).toEqual(unaSola)
+  })
+
+  it('un día sin franjas sigue sin franjas: el feriado no puede abrir nada', () => {
+    // Es lo que hace que la regla valga "solo los días que trabaja". Un feriado que cae
+    // domingo o lunes no convierte ese día en laborable.
+    expect(franjasSegunFeriado([], 'medio_dia')).toEqual([])
+    expect(franjasSegunFeriado([], 'dia_completo')).toEqual([])
   })
 })

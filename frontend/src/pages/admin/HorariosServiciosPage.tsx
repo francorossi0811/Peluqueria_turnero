@@ -9,18 +9,23 @@ import {
   obtenerHorarioLaboral,
   guardarHorarioLaboral,
 } from '../../api/horarioLaboral'
-import { obtenerFeriados, actualizarFeriado } from '../../api/feriados'
+import {
+  obtenerFeriados,
+  actualizarFeriado,
+  sincronizarFeriados,
+} from '../../api/feriados'
 import { FilaServicio } from '../../components/admin/FilaServicio'
 import { ModalServicio } from '../../components/admin/ModalServicio'
 import {
   actualizarServicio,
   obtenerServiciosAdmin,
 } from '../../api/servicios'
-import { fechaLegible } from '../../utils/fecha'
+import { diaSemana, fechaLegible } from '../../utils/fecha'
 import type {
   ErrorApi,
   Feriado,
   FranjaHorario,
+  ModalidadFeriado,
   ServicioAdmin,
 } from '../../types/api'
 
@@ -209,6 +214,14 @@ function SeccionHorarioLaboral() {
   )
 }
 
+// HU-24 — Las tres cosas que Ariel puede hacer en un feriado. El orden va de menos a más
+// trabajo, que es como lo piensa: cierro, abro medio día, abro todo el día.
+const MODALIDADES: { valor: ModalidadFeriado; etiqueta: string }[] = [
+  { valor: 'cerrado', etiqueta: 'No atiendo' },
+  { valor: 'medio_dia', etiqueta: 'Medio día' },
+  { valor: 'dia_completo', etiqueta: 'Día completo' },
+]
+
 function SeccionFeriados() {
   const queryClient = useQueryClient()
 
@@ -217,54 +230,133 @@ function SeccionFeriados() {
     queryFn: () => obtenerFeriados(),
   })
 
+  // Para saber qué feriados le cambian algo a Ariel hace falta saber qué días trabaja.
+  // Mismo `staleTime` largo que en la agenda: esto cambia una vez cada muchos meses.
+  const horarioQuery = useQuery({
+    queryKey: ['horario-laboral'],
+    queryFn: obtenerHorarioLaboral,
+    staleTime: 60 * 60 * 1000,
+  })
+
   const mutation = useMutation({
-    mutationFn: ({ id, bloquea }: { id: number; bloquea: boolean }) =>
-      actualizarFeriado(id, bloquea),
+    mutationFn: ({
+      id,
+      modalidad,
+    }: {
+      id: number
+      modalidad: ModalidadFeriado
+    }) => actualizarFeriado(id, modalidad),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['feriados'] })
       void queryClient.invalidateQueries({ queryKey: ['disponibilidad'] })
     },
   })
 
-  if (query.isPending) return <p className="text-tinta-suave">Cargando…</p>
-  if (query.isError) {
+  const sincronizarMutation = useMutation({
+    mutationFn: () => sincronizarFeriados(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['feriados'] })
+      void queryClient.invalidateQueries({ queryKey: ['disponibilidad'] })
+    },
+  })
+
+  const botonActualizar = (
+    <Button
+      variant="outline"
+      disabled={sincronizarMutation.isPending}
+      onClick={() => sincronizarMutation.mutate()}
+    >
+      {sincronizarMutation.isPending ? 'Buscando…' : 'Actualizar feriados'}
+    </Button>
+  )
+
+  if (query.isPending || horarioQuery.isPending) {
+    return <p className="text-tinta-suave">Cargando…</p>
+  }
+  if (query.isError || horarioQuery.isError) {
     return <p className="text-vino">No pudimos cargar los feriados.</p>
   }
-  if (query.data.length === 0) {
-    return <p className="text-tinta-suave">No hay feriados cargados.</p>
-  }
+
+  // Los feriados que caen en días que Ariel no trabaja no cambian nada —esos días ya
+  // están cerrados— así que no se muestran: son 6 de los 16 del año, y pedirle una
+  // decisión sobre ellos es pedirle que decida sobre nada.
+  const diasLaborales = new Set(horarioQuery.data.map((f) => f.diaSemana))
+  const feriados = query.data.filter((f: Feriado) =>
+    diasLaborales.has(diaSemana(f.fecha)),
+  )
+
+  // Se cargan dos años (el actual y el siguiente, porque en diciembre ya se reserva para
+  // enero) y `fechaLegible` no incluye el año: sin agrupar, quedan dos "1 de enero"
+  // idénticos y no hay forma de saber cuál es cuál.
+  const porAnio = feriados.reduce<Record<string, Feriado[]>>((acc, f) => {
+    const anio = f.fecha.slice(0, 4)
+    ;(acc[anio] ??= []).push(f)
+    return acc
+  }, {})
 
   return (
-    <div className="flex flex-col gap-2">
-      {query.data.map((f: Feriado) => (
-        <Card
-          key={f.id}
-          className="flex flex-wrap items-center justify-between gap-3"
-        >
-          <div>
-            <p className="text-tinta font-medium">{f.nombre}</p>
-            <p className="text-tinta-suave text-sm">{fechaLegible(f.fecha)}</p>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-tinta-suave text-sm">
+          En los feriados atendés <strong>medio día</strong> salvo que digas otra
+          cosa. Solo aparecen los que caen en días que trabajás.
+        </p>
+        {botonActualizar}
+      </div>
+
+      {sincronizarMutation.isError && (
+        <p className="text-vino text-sm">
+          No pudimos consultar el calendario de feriados. Probá de nuevo en un
+          rato.
+        </p>
+      )}
+
+      {feriados.length === 0 ? (
+        <p className="text-tinta-suave">
+          No hay feriados cargados en los días que trabajás.
+        </p>
+      ) : (
+        Object.entries(porAnio).map(([anio, delAnio]) => (
+          <div key={anio} className="flex flex-col gap-2">
+            <p className="text-tinta-tenue mt-2 text-xs font-semibold tracking-wide uppercase">
+              {anio}
+            </p>
+            {delAnio.map((f) => (
+              <Card
+                key={f.id}
+                className="flex flex-wrap items-center justify-between gap-3"
+              >
+                <div>
+                  <p className="text-tinta font-medium">{f.nombre}</p>
+                  <p className="text-tinta-suave text-sm">
+                    {fechaLegible(f.fecha)}
+                  </p>
+                </div>
+                {/* Mismo pill que la agenda y "Apariencia": tres opciones a la vista
+                    es más claro que un botón que va rotando entre estados. */}
+                <div className="border-borde flex rounded-md border p-1">
+                  {MODALIDADES.map((m) => (
+                    <button
+                      key={m.valor}
+                      disabled={mutation.isPending}
+                      onClick={() =>
+                        mutation.mutate({ id: f.id, modalidad: m.valor })
+                      }
+                      className={`rounded px-3 py-1 text-sm font-medium transition ${
+                        f.modalidad === m.valor
+                          ? 'bg-miel-suave text-miel'
+                          : 'text-tinta-suave hover:text-tinta'
+                      }`}
+                    >
+                      {m.etiqueta}
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            ))}
           </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase ${
-                f.bloquea
-                  ? 'bg-alerta-suave text-alerta'
-                  : 'bg-bien-suave text-bien'
-              }`}
-            >
-              {f.bloquea ? 'No atiende' : 'Atiende igual'}
-            </span>
-            <Button
-              variant="outline"
-              disabled={mutation.isPending && mutation.variables?.id === f.id}
-              onClick={() => mutation.mutate({ id: f.id, bloquea: !f.bloquea })}
-            >
-              {f.bloquea ? 'Atender igual' : 'Volver a bloquear'}
-            </Button>
-          </div>
-        </Card>
-      ))}
+        ))
+      )}
     </div>
   )
 }

@@ -24,6 +24,14 @@ enum OrigenTurno {
   whatsapp
 }
 
+// Qué hace Ariel en un feriado. Reemplaza al `bloquea` booleano, que solo sabía decir
+// "atiende" o "no atiende": la regla real tiene tres estados y el default no es cerrar.
+enum ModalidadFeriado {
+  cerrado
+  medio_dia
+  dia_completo
+}
+
 model Servicio {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   nombre          String
@@ -71,8 +79,12 @@ model Feriado {
   fecha     DateTime @unique @db.Date
   nombre    String?
   fuente    String? // de dónde se importó
-  bloquea   Boolean  @default(true) // false = Ariel decidió atender igual ese feriado
-  createdAt DateTime @default(now()) @map("created_at")
+  // En un feriado Ariel trabaja medio día por defecto (la primera franja del día), y
+  // decide si lo cambia. Por eso el default no es `cerrado`: cerrar sería inventarle una
+  // decisión que no tomó. Solo tiene efecto en los días que trabaja — un feriado que cae
+  // domingo o lunes no cambia nada, porque `horario_laboral` no tiene franjas ahí.
+  modalidad ModalidadFeriado @default(medio_dia)
+  createdAt DateTime         @default(now()) @map("created_at")
 
   @@map("feriados")
 }

@@ -7,7 +7,10 @@ import {
   seSolapan,
 } from '../utils/fechaHora'
 import { ServicioNoDisponibleError } from './errores'
-import type { Servicio } from '../../generated/prisma/client.ts'
+import type {
+  ModalidadFeriado,
+  Servicio,
+} from '../../generated/prisma/client.ts'
 
 // Grilla de horarios candidatos y antelación mínima para reservar (no documentadas en
 // las HU/CU — decisión tomada para esta función, no confundir con la ventana de 60 min
@@ -109,8 +112,34 @@ export type EstadoDia =
 export interface DetalleDia {
   horarios: string[]
   estado: EstadoDia
-  /** Lo que Ariel escribió al bloquear o el nombre del feriado, si corresponde. */
+  /** Lo que Ariel escribió al bloquear, o el nombre del feriado.
+   *
+   * Ojo: **puede venir con `estado: 'disponible'`**. Un feriado de medio día es un día
+   * que atiende, pero con menos horario del habitual, y el cliente necesita entender por
+   * qué ve tan pocos huecos. Antes `motivo` solo aparecía cuando no había nada. */
   motivo: string | null
+}
+
+/** Aplica la modalidad del feriado sobre las franjas del día (HU-24).
+ *
+ * Función pura y separada para poder testear la regla sin base de datos, que es donde
+ * están los casos que importan.
+ *
+ * `medio_dia` es el default de la tabla porque es lo que Ariel hace de verdad, y se
+ * resuelve como **la primera franja del día** — no como "la mañana". La diferencia
+ * importa: si algún día cambia sus horarios, la regla lo sigue sola sin tocar código.
+ * Si el día tiene una sola franja, medio día y día completo son lo mismo, que es la
+ * respuesta correcta. */
+export function franjasSegunFeriado(
+  franjas: Franja[],
+  modalidad: ModalidadFeriado | null,
+): Franja[] {
+  if (modalidad !== 'medio_dia' || franjas.length === 0) return franjas
+
+  const primera = franjas.reduce((min, f) =>
+    f.horaInicio < min.horaInicio ? f : min,
+  )
+  return [primera]
 }
 
 export async function obtenerDetalleDelDia(
@@ -138,17 +167,27 @@ export async function obtenerDetalleDelDia(
     }),
   ])
 
+  // Este chequeo va primero a propósito, y es lo que hace que la regla del feriado valga
+  // "solo los días que Ariel trabaja": un feriado que cae domingo o lunes no cambia nada,
+  // porque esos días no tienen franjas y el día ya estaba cerrado.
   if (franjasDb.length === 0) {
     return { horarios: [], estado: 'cerrado', motivo: null }
   }
-  if (feriado?.bloquea) {
+  if (feriado?.modalidad === 'cerrado') {
     return { horarios: [], estado: 'feriado', motivo: feriado.nombre }
   }
 
-  const franjas: Franja[] = franjasDb.map((f) => ({
-    horaInicio: f.horaInicio,
-    horaFin: f.horaFin,
-  }))
+  const franjas = franjasSegunFeriado(
+    franjasDb.map((f) => ({ horaInicio: f.horaInicio, horaFin: f.horaFin })),
+    feriado?.modalidad ?? null,
+  )
+
+  // Un feriado de medio día no impide reservar, pero recorta el día: sin decirlo, el
+  // cliente ve la mitad de los horarios de siempre y no entiende por qué.
+  const motivoFeriado =
+    feriado && feriado.modalidad === 'medio_dia'
+      ? `${feriado.nombre ?? 'Feriado'}: atendemos de ${formatearHora(franjas[0].horaInicio)} a ${formatearHora(franjas[0].horaFin)}.`
+      : null
 
   // Un bloqueo con hora en null cubre desde el inicio/hasta el cierre real de ese día
   // (mín/máx de las franjas), no medianoche — así lo define modelo-datos.md.
@@ -191,7 +230,7 @@ export async function obtenerDetalleDelDia(
   })
 
   if (horarios.length > 0) {
-    return { horarios, estado: 'disponible', motivo: null }
+    return { horarios, estado: 'disponible', motivo: motivoFeriado }
   }
 
   // Sin horarios: distinguimos "Ariel cerró el día" de "se llenó". Un bloqueo que tapa
@@ -208,7 +247,9 @@ export async function obtenerDetalleDelDia(
     return { horarios, estado: 'bloqueado', motivo: bloqueoDelDiaCompleto.motivo }
   }
 
-  return { horarios, estado: 'completo', motivo: null }
+  // Si además era feriado de medio día, el motivo explica por qué se llenó tan rápido:
+  // no es que Ariel tenga el día lleno, es que ese día atiende la mitad.
+  return { horarios, estado: 'completo', motivo: motivoFeriado }
 }
 
 /** Igual que `obtenerDetalleDelDia` pero devolviendo solo los horarios. La usan los

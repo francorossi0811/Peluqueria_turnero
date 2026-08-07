@@ -25,7 +25,11 @@ import {
   getHorarioLaboral,
   putHorarioLaboral,
 } from '../controllers/horarioLaboral.controller'
-import { getFeriados, patchFeriado } from '../controllers/feriados.controller'
+import {
+  getFeriados,
+  patchFeriado,
+  postSincronizarFeriados,
+} from '../controllers/feriados.controller'
 import {
   deleteBloqueo,
   getBloqueos,
@@ -66,6 +70,11 @@ adminRouter.get('/admin/horario-laboral', requireAuth, getHorarioLaboral)
 adminRouter.put('/admin/horario-laboral', requireAuth, putHorarioLaboral)
 
 adminRouter.get('/admin/feriados', requireAuth, getFeriados)
+adminRouter.post(
+  '/admin/feriados/sincronizar',
+  requireAuth,
+  postSincronizarFeriados,
+)
 adminRouter.patch('/admin/feriados/:id', requireAuth, patchFeriado)
 
 adminRouter.get('/admin/bloqueos', requireAuth, getBloqueos)
