@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import {
   login,
@@ -22,6 +22,7 @@ function mensajeDeError(err: unknown): string {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [olvide, setOlvide] = useState(false)
@@ -47,6 +48,11 @@ export function LoginPage() {
     mutationFn: () => login(email, password),
     onSuccess: (token) => {
       setToken(token)
+      // ⚠️ Entrar es cambiar de identidad, y la caché de queries no sabe de identidades:
+      // sin esto, `['me']` (y la agenda, y los clientes) siguen mostrando los datos de la
+      // cuenta anterior hasta que cada query se refresque sola. Al cambiar de cuenta se
+      // veía el perfil del anterior, que además es filtrar datos entre cuentas.
+      queryClient.clear()
       // `replace` y no un push: el login no tiene que quedar en el historial. Si queda,
       // la flechita de atrás lo trae de vuelta y parece que la sesión se cayó.
       navigate('/admin', { replace: true })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -116,6 +116,7 @@ function SeccionApariencia() {
  * buscarlo, que es lo correcto para algo que en la práctica casi nunca quiere hacer. */
 function SeccionSalir() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3">
@@ -126,6 +127,10 @@ function SeccionSalir() {
         variant="outline"
         onClick={() => {
           clearToken()
+          // Salir tiene que dejar el dispositivo sin rastros de la cuenta: la caché de
+          // queries sobrevive a la navegación (no hay recarga), así que sin esto los
+          // datos del que se fue le quedan a la vista al que entre después.
+          queryClient.clear()
           // `replace`: el back después de salir no tiene que apuntar a un panel que ya
           // no se puede ver. Sin esto rebota igual (lo ataja `RequireAuth`), pero el
           // rebote se ve, y es el mismo parpadeo que el resto de este arreglo saca.
