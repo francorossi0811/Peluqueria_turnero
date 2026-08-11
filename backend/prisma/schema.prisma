@@ -32,6 +32,20 @@ enum ModalidadFeriado {
   dia_completo
 }
 
+// HU-27 — Cómo le pagó el cliente ese turno.
+//
+// Enum y no una tabla configurable, al revés que `etiquetas`: allá el texto que escribe
+// Ariel *es* el contenido, acá el conjunto es cerrado y estable, y el desglose por medio
+// necesita categorías fijas para poder sumarse. Una tabla para cuatro valores que no
+// cambian sería generalidad especulativa; si algún día aparece otro medio, agregarlo es
+// una migración de una línea.
+enum MedioPago {
+  efectivo
+  transferencia
+  mercado_pago
+  tarjeta
+}
+
 model Servicio {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   nombre          String
@@ -41,6 +55,29 @@ model Servicio {
   /// propio y no derivable: el orden que quiere Ariel no coincide ni con el alfabético
   /// ni con la duración. Menor va primero; a igual valor desempata el nombre.
   orden           Int      @default(0)
+
+  /// HU-27 — Cuánto sale, en pesos enteros. Es un dato **interno**: Ariel lo carga y lo
+  /// ve en su panel, y el cliente no lo ve en ningún momento (el endpoint público mapea
+  /// campo por campo, ver `getServiciosPublico`).
+  ///
+  /// Entero y no decimal porque Ariel no cobra centavos, y así no hay redondeo de punto
+  /// flotante en ninguna suma. Nullable porque `null` es un estado real —"todavía no le
+  /// puse precio"—: un `0` por default sería un dato falso, y el modal de cobro lo
+  /// mostraría como si fuera el precio.
+  precio          Int?
+
+  /// La foto que ve el cliente en la landing. Ruta pública dentro de `frontend/public`
+  /// (`/imagenes/servicio-corte.jpg`); `null` = cae a una foto de stock.
+  ///
+  /// ⚠️ Vive acá y no en un mapa `nombre → foto` en el frontend, que es como estaba: el
+  /// nombre del servicio lo edita Ariel desde el panel (HU-13), así que renombrar
+  /// "Corte clásico" le borraba la foto en silencio y nada lo avisaba. Atada a la fila,
+  /// el nombre puede cambiar todas las veces que quiera.
+  ///
+  /// Al revés que `precio`, esta columna **sí** sale por la API pública: es justamente
+  /// lo que se dibuja del lado del cliente.
+  foto            String?
+
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -89,10 +126,114 @@ model Feriado {
   @@map("feriados")
 }
 
+// HU-25 — La ficha del cliente. La identidad es el **teléfono normalizado**, no el
+// nombre: dos reservas con el mismo número son la misma persona, y el nombre que tipea
+// el cliente cambia de una vez a la otra ("Juan", "juan perez", "Juan P.").
+//
+// El turno sigue guardando `clienteNombre`/`clienteTelefono` tal como se escribieron
+// (ver más abajo). Esta tabla no los reemplaza: es la identidad estable a la que se
+// enganchan, y `Turno.clienteId` es el vínculo. Por eso corregir un teléfono mal tipeado
+// no despega el historial de la ficha.
+model Cliente {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // E.164 sin el `+` (`5493514593325`), tal como lo devuelve `utils/telefono.ts`. Único:
+  // es lo que hace que la ficha se encuentre sola en la segunda reserva, sin que Ariel
+  // tenga que unir nada a mano.
+  telefonoE164 String @unique @map("telefono_e164")
+
+  /// El nombre que Ariel le pone: en su planilla usa "Flaco", "Jubilado bici", "Roja".
+  /// Null hasta que se lo pone; ahí manda sobre `nombre` en toda la interfaz.
+  apodo String?
+
+  /// Cómo se presentó la última vez que reservó. Se pisa en cada turno nuevo a propósito:
+  /// es el nombre con el que el cliente se identifica hoy, no un histórico.
+  nombre String
+
+  /// Observaciones de Ariel sobre esa persona ("le gusta el degradé bajo", "viene con el
+  /// nene"). Es lo que hace que esto sea una ficha y no un contador de visitas.
+  notas String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  turnos    Turno[]
+  etiquetas ClienteEtiqueta[]
+
+  @@map("clientes")
+}
+
+// HU-25 — Las insignias que Ariel se arma solo. Un círculo de color con el texto que él
+// le escriba ("Suele cancelar", "VIP", "Paga con Mercado Pago").
+//
+// Configurables y no un booleano de "problemático": la planilla usa un color para eso
+// porque es lo único que Sheets permite, y no hay motivo para heredar esa limitación.
+model Etiqueta {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre String @unique
+
+  /// Identidad estable para las etiquetas que pone el sistema solo (hoy solo
+  /// `cliente_nuevo`). `null` en las que crea Ariel a mano.
+  ///
+  /// Existe para separar **qué etiqueta es** de **cómo se llama**: Ariel puede renombrarla
+  /// a "Primera vez" y cambiarle el color cuando quiera, y el automatismo la sigue
+  /// encontrando. Buscarla por nombre haría que renombrarla la rompiera en silencio.
+  clave String? @unique
+
+  /// Hexadecimal `#rrggbb`. Lo elige Ariel libremente: la insignia es un círculo pleno,
+  /// no texto sobre un fondo de color, así que ningún valor la vuelve ilegible (la
+  /// interfaz le dibuja un anillo para que un color oscuro se recorte sobre el tema
+  /// oscuro).
+  color String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  clientes ClienteEtiqueta[]
+
+  @@map("etiquetas")
+}
+
+// Muchos a muchos: un cliente puede ser "VIP" y "Suele cancelar" a la vez.
+model ClienteEtiqueta {
+  clienteId  String @map("cliente_id") @db.Uuid
+  etiquetaId String @map("etiqueta_id") @db.Uuid
+
+  cliente  Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  etiqueta Etiqueta @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+
+  @@id([clienteId, etiquetaId])
+  @@map("cliente_etiquetas")
+}
+
+// Qué puede hacer cada cuenta del panel (HU-26).
+//
+// La diferencia real es chica y conviene que se note acá: todo lo que hace el panel *es*
+// gestionar la peluquería, así que lo único que el `admin` no puede es administrar
+// cuentas — ver quiénes hay, crear una, y resetearle la contraseña a otro. No hay una
+// tercera cosa escondida.
+enum RolAdmin {
+  super_admin
+  admin
+}
+
 model Administrador {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  usuario      String   @unique
-  passwordHash String   @map("password_hash")
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// El nombre que se muestra en el panel. Dejó de ser la credencial cuando el login pasó
+  /// a ser por email (HU-26): son dos cosas distintas y estaban mezcladas en esta columna.
+  usuario String @unique
+
+  /// Con lo que se entra, y a dónde va el link de "me olvidé la contraseña".
+  ///
+  /// Nullable en el esquema y **obligatorio en la práctica**: una fila sin email no puede
+  /// loguearse. Es nullable porque la columna se agregó sobre una base con una cuenta ya
+  /// creada, y ponerle un email inventado para satisfacer un NOT NULL habría sido escribir
+  /// un dato falso en la única fila que importaba. Lo carga el seed desde `ADMIN_EMAIL`.
+  email String? @unique
+
+  rol RolAdmin @default(admin)
+
+  passwordHash String @map("password_hash")
 
   // HU-16 — Cuándo cambió la contraseña por última vez. Los tokens emitidos antes de
   // esta fecha dejan de valer (ver tokenPrecedeAlCambioDePassword en auth.service.ts),
@@ -131,7 +272,15 @@ model PushSuscripcion {
   ultimoError    String?   @map("ultimo_error")
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // El `@default(now())` no es decorativo y no se puede sacar. La migración
+  // `diagnostico_push` tuvo que escribir `DEFAULT CURRENT_TIMESTAMP` a mano, porque Prisma
+  // genera `@updatedAt` sin default y agregar una columna NOT NULL sin default falla sobre
+  // una tabla que ya tiene filas. Ese default quedó viviendo en la base y no en el
+  // esquema, así que **cada diff posterior emitía un `DROP DEFAULT`** que había que borrar
+  // a mano — pasó en `fichas_de_clientes` y volvió a pasar acá. Declararlo lo alinea y
+  // corta la deriva para siempre.
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("push_suscripciones")
 }
@@ -153,6 +302,16 @@ model Turno {
   // arreglándose por WhatsApp con Ariel, como hasta ahora.
   clienteEmail String? @map("cliente_email")
 
+  // HU-25 — La ficha a la que pertenece este turno. Null cuando no hay teléfono (Ariel
+  // puede cargar un turno sin él, HU-08): sin número no hay identidad, y una ficha vacía
+  // por cada turno suelto sería peor que no tenerla. Se completa solo en cuanto le carga
+  // el teléfono.
+  //
+  // Los campos `clienteNombre`/`clienteTelefono` de arriba **no** se van: siguen siendo
+  // la copia de lo que se escribió al reservar, igual que el snapshot del servicio.
+  clienteId String?  @map("cliente_id") @db.Uuid
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
   servicioId String   @map("servicio_id") @db.Uuid
   servicio   Servicio @relation(fields: [servicioId], references: [id])
 
@@ -167,6 +326,29 @@ model Turno {
   estado            EstadoTurno @default(reservado)
   origen            OrigenTurno @default(online)
   motivoCancelacion String?     @map("motivo_cancelacion")
+
+  // HU-27 — El cobro. Columnas acá y no una tabla `pagos`: hay un pago por turno, sin
+  // pagos parciales ni historial, así que una tabla aparte sería estado que se puede
+  // desincronizar del turno para conseguir exactamente lo mismo. Mismo criterio con el
+  // que el token de reset de HU-26 no tiene tabla.
+  //
+  // Los tres van juntos: o están los tres o no está ninguno. `null` en los tres significa
+  // "todavía no se registró el cobro", que es un estado legítimo —Ariel puede marcar
+  // Realizado y cargar el cobro después, igual que el teléfono en HU-25— y es el estado
+  // en el que quedan todos los turnos anteriores a esta etapa. La pantalla de Cobros los
+  // muestra aparte: un total al que le faltan turnos sin decirlo es peor que no tenerlo.
+  medioPago MedioPago? @map("medio_pago")
+
+  /// Pesos enteros. **No es un snapshot del precio al reservar**, a diferencia de
+  /// `servicioDuracionSnapshot`: la duración se congela porque decide la disponibilidad y
+  /// cambiarla movería turnos ya agendados, pero el precio no afecta nada hasta que se
+  /// cobra. Con inflación, un turno reservado hace tres semanas se cobra al precio de
+  /// hoy. Se copia del precio del servicio al momento de cobrar y Ariel lo puede pisar
+  /// (descuento, jubilado, changa), que es la otra mitad de por qué se guarda el monto y
+  /// no una referencia al servicio.
+  montoCobrado Int? @map("monto_cobrado")
+
+  cobradoEn DateTime? @map("cobrado_en")
 
   // HU-17 — Si Ariel ya vio este turno en el panel. Los que carga él mismo nacen en
   // `true` (no tiene sentido avisarle de lo que acaba de tipear). Vive en la base y no

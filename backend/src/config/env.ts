@@ -92,7 +92,10 @@ export function configVapid(): ConfigVapid | null {
 
 /** URL pública del frontend, para armar links en los mails (HU-19). Sin barra final. */
 export function frontendUrl(): string {
-  return (process.env.FRONTEND_URL ?? 'http://localhost:5173').replace(/\/$/, '')
+  return (process.env.FRONTEND_URL ?? 'http://localhost:5173').replace(
+    /\/$/,
+    '',
+  )
 }
 
 export interface ConfigWhatsapp {
@@ -101,6 +104,7 @@ export interface ConfigWhatsapp {
   phoneNumberId: string | null
   plantillaConfirmado: string
   plantillaReprogramado: string
+  plantillaCancelado: string
   idioma: string
   version: string
 }
@@ -136,6 +140,8 @@ export function configWhatsapp(): ConfigWhatsapp {
       process.env.WHATSAPP_PLANTILLA_CONFIRMADO || 'turno_confirmado',
     plantillaReprogramado:
       process.env.WHATSAPP_PLANTILLA_REPROGRAMADO || 'turno_reprogramado',
+    plantillaCancelado:
+      process.env.WHATSAPP_PLANTILLA_CANCELADO || 'turno_cancelado',
     idioma: process.env.WHATSAPP_IDIOMA || 'es_AR',
     version: process.env.WHATSAPP_API_VERSION || 'v23.0',
   }

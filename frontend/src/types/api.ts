@@ -1,19 +1,30 @@
 // Tipos que espejan los contratos de Docs/especificacion-api.md
 
+// ⚠️ HU-27 — Este es el servicio que ve el **cliente**, y por eso no tiene `precio`: el
+// precio es interno de Ariel y el endpoint público no lo manda. Agregárselo acá sería
+// empezar a esperarlo en el flujo de reserva.
 export interface Servicio {
   id: string
   nombre: string
   duracionMinutos: number
+  /** La foto de la landing. Viene de la base y **no** de un mapa por nombre en el
+   * frontend: el nombre lo edita Ariel y renombrar un servicio le borraba la foto en
+   * silencio. `null` = cae a una foto de stock. */
+  foto: string | null
 }
 
-// Vista de admin: incluye los inactivos y el propio estado.
+// Vista de admin: incluye los inactivos, el propio estado y el precio (HU-27).
 export interface ServicioAdmin extends Servicio {
   activo: boolean
+  /** Pesos enteros. `null` = todavía no le puso precio, que no es lo mismo que `0`. */
+  precio: number | null
 }
 
 export interface DatosServicio {
   nombre: string
   duracionMinutos: number
+  /** `null` es cómo se le saca el precio a un servicio que ya tenía uno. */
+  precio?: number | null
 }
 
 export type EstadoTurno =
@@ -62,6 +73,27 @@ export interface Reprogramacion {
 
 export type OrigenTurno = 'online' | 'telefono' | 'whatsapp'
 
+/** HU-25 — Una insignia: un círculo de color con el nombre que le puso Ariel. */
+export interface Etiqueta {
+  id: string
+  nombre: string
+  color: string // "#rrggbb"
+  /** Identidad estable de las etiquetas que pone el sistema solo (`cliente_nuevo`), aparte
+   * del nombre — así renombrarla no rompe el automatismo. `null` en las de Ariel. */
+  clave?: string | null
+}
+
+/** HU-25 — La ficha, tal como viaja dentro de un turno. Lo justo para dibujar el apodo y
+ * las insignias sin tener que pedir nada más. */
+export interface ClienteDeTurno {
+  id: string
+  telefono: string
+  apodo: string | null
+  nombre: string
+  notas: string | null
+  etiquetas: Etiqueta[]
+}
+
 // Vista de admin: además de lo público, incluye datos de contacto y origen.
 export interface TurnoAdmin extends Turno {
   horaFin: string // "HH:mm"
@@ -70,6 +102,89 @@ export interface TurnoAdmin extends Turno {
   clienteEmail: string | null // HU-19
   origen: OrigenTurno
   vistoPorAdmin: boolean // HU-17
+  /** HU-25 — `null` cuando el turno no tiene teléfono: sin número no hay identidad, y por
+   * lo tanto no hay ficha. Se completa solo en cuanto Ariel le carga el número. */
+  cliente: ClienteDeTurno | null
+  /** HU-27 — Los tres van juntos: `null` en los tres es "todavía no se registró el
+   * cobro", que es un estado legítimo y no un error. */
+  medioPago: MedioPago | null
+  montoCobrado: number | null
+  cobradoEn: string | null // ISO
+}
+
+/** HU-27 — Cómo pagó. Conjunto cerrado: es un enum en la base, no una tabla que Ariel
+ * configure (al revés que las etiquetas de HU-25). */
+export type MedioPago = 'efectivo' | 'transferencia' | 'mercado_pago' | 'tarjeta'
+
+export interface DatosCobro {
+  medioPago: MedioPago
+  /** Pesos enteros. */
+  montoCobrado: number
+}
+
+/** HU-27 — Un turno realizado, visto desde la sección Cobros. Más chico que `TurnoAdmin`:
+ * acá lo que importa es la plata, no el contacto.
+ *
+ * Lleva `estado` y el `servicio` completo porque desde esta lista se abre el mismo modal
+ * de cobro que en la agenda, y ese modal necesita el id del servicio para leer el precio
+ * de hoy. Cumple `TurnoACobrar`. */
+export interface TurnoCobrado {
+  id: string
+  fecha: string // "YYYY-MM-DD"
+  hora: string // "HH:mm"
+  estado: EstadoTurno
+  clienteNombre: string
+  cliente: ClienteDeTurno | null
+  /** El **nombre** es el snapshot de cuando se reservó; el **id** apunta al servicio de
+   * hoy, que es de donde sale el precio (HU-27). */
+  servicio: Servicio
+  /** `null` = todavía no se registró el cobro. */
+  medioPago: MedioPago | null
+  montoCobrado: number | null
+}
+
+export interface TotalPorMedio {
+  medioPago: MedioPago
+  total: number
+  turnos: number
+}
+
+export interface ResumenCobros {
+  total: number
+  porMedio: TotalPorMedio[]
+  /** Turnos realizados en el período sin cobro registrado: lo que le falta al total. */
+  sinRegistrar: number
+  turnos: TurnoCobrado[]
+}
+
+/** HU-25 — Un cliente en el listado de la sección Clientes. */
+export interface ClienteResumen extends ClienteDeTurno {
+  /** Turnos que llegó a hacerse; los cancelados y reprogramados no cuentan. */
+  visitas: number
+  ultimaVisita: string | null // "YYYY-MM-DD"
+  proximoTurno: string | null // "YYYY-MM-DD"
+}
+
+/** Un turno dentro del historial de la ficha. Más chico que `TurnoAdmin`: acá ya se sabe
+ * de quién es, así que repetir nombre y teléfono en cada fila sería ruido. */
+export interface TurnoDeHistorial {
+  id: string
+  fecha: string // "YYYY-MM-DD"
+  hora: string // "HH:mm"
+  estado: EstadoTurno
+  origen: OrigenTurno
+  servicio: Servicio
+}
+
+export interface ClienteFicha extends ClienteDeTurno {
+  turnos: TurnoDeHistorial[]
+}
+
+export interface DatosCliente {
+  apodo?: string | null
+  notas?: string | null
+  /** La lista completa, no un delta: se reemplaza tal cual llega. */
+  etiquetaIds?: string[]
 }
 
 // HU-08 — El teléfono deja de heredarse obligatorio: Ariel carga turnos con el cliente
@@ -136,7 +251,24 @@ export interface ErrorApi {
   error: { codigo: string; mensaje: string }
 }
 
-/** Cuenta del admin logueado (HU-15) — `GET /api/admin/me`. */
+/** HU-26 — Qué puede hacer una cuenta. La única diferencia real es administrar cuentas:
+ * todo lo demás del panel es "gestionar la peluquería" y el `admin` lo puede entero. */
+export type RolAdmin = 'super_admin' | 'admin'
+
+/** Cuenta del admin logueado (HU-15, HU-26) — `GET /api/admin/me`. */
 export interface Me {
   usuario: string
+  /** Con lo que entra al panel desde HU-26. `usuario` pasó a ser solo el nombre visible. */
+  email: string | null
+  rol: RolAdmin
+}
+
+/** HU-26 — Una cuenta en la sección Administradores. */
+export interface AdministradorResumen {
+  id: string
+  usuario: string
+  email: string | null
+  rol: RolAdmin
+  creadaEn: string
+  passwordCambiadaEn: string | null
 }

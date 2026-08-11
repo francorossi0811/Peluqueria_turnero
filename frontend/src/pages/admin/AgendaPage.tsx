@@ -5,6 +5,8 @@ import { Kicker } from '../../components/ui/Kicker'
 import { FilaTurno } from '../../components/admin/FilaTurno'
 import { FilaBloqueo } from '../../components/admin/FilaBloqueo'
 import { ModalEditarTurno } from '../../components/admin/ModalEditarTurno'
+import { ModalTurno } from '../../components/admin/ModalTurno'
+import { ModalCobro } from '../../components/admin/ModalCobro'
 import { ModalCargarTurno } from '../../components/admin/ModalCargarTurno'
 import { ModalBloquear } from '../../components/admin/ModalBloquear'
 import { ModalBuscarTurno } from '../../components/admin/ModalBuscarTurno'
@@ -19,11 +21,13 @@ import { eliminarBloqueo, obtenerBloqueos } from '../../api/bloqueos'
 import { obtenerHorarioLaboral } from '../../api/horarioLaboral'
 import { obtenerFeriados } from '../../api/feriados'
 import { useAvisosPendientes } from '../../lib/useAvisosPendientes'
+import { useMinutosAhora } from '../../lib/useMinutosAhora'
 import {
   hoyIso,
   sumarDias,
   fechaLegible,
   domingoDeLaSemana,
+  turnoEnCurso,
 } from '../../utils/fecha'
 import type { TurnoAdmin } from '../../types/api'
 
@@ -73,6 +77,14 @@ export function AgendaPage() {
   const [modalBloquear, setModalBloquear] = useState(false)
   const [modalBuscar, setModalBuscar] = useState(false)
   const [turnoEditar, setTurnoEditar] = useState<TurnoAdmin | null>(null)
+  // HU-25 — El turno abierto desde la grilla. Es un estado aparte del de reprogramar
+  // porque son dos pasos encadenados: primero se ve quién es, y recién si hace falta se
+  // pasa a mover el horario.
+  const [turnoDetalle, setTurnoDetalle] = useState<TurnoAdmin | null>(null)
+  // HU-27 — El turno que se está cobrando. Se abre al tocar "Realizado" (y ahí el modal
+  // hace las dos cosas de una) o desde el detalle, para completarle el cobro a uno que ya
+  // se marcó sin registrarlo.
+  const [turnoCobrar, setTurnoCobrar] = useState<TurnoAdmin | null>(null)
   const [huecoElegido, setHuecoElegido] = useState<{
     fecha: string
     hora: string
@@ -172,10 +184,20 @@ export function AgendaPage() {
   const turnos = agendaQuery.data?.turnos ?? []
   const franjas = horarioQuery.data ?? []
 
-  // La línea de "ahora" de la grilla. Se calcula en cada render, que con el refetch de la
-  // agenda cada 30 segundos alcanza y sobra: no justifica un timer propio.
-  const ahora = new Date()
-  const minutosAhora = ahora.getHours() * 60 + ahora.getMinutes()
+  // La línea de "ahora" de la grilla, que baja sola. Sí justifica un timer propio: el
+  // refetch de la agenda es cada 30 segundos con la pestaña visible, pero cada 3 minutos
+  // con la pestaña oculta — y volver a la pestaña y ver la línea atrasada es exactamente
+  // el momento en que se la mira.
+  const minutosAhora = useMinutosAhora()
+  // El turno abierto, releído de la agenda en cada render en vez de usar la copia que se
+  // guardó al abrirlo. Importa: cuando Ariel le carga el teléfono desde el modal, la
+  // agenda se invalida y vuelve con la ficha puesta — con la copia vieja el modal seguiría
+  // ofreciéndole cargar un teléfono que ya cargó. Si el turno desapareció del rango (lo
+  // canceló), se cae a la copia para no vaciar el modal debajo de sus manos.
+  const turnoAbierto = turnoDetalle
+    ? (turnos.find((t) => t.id === turnoDetalle.id) ?? turnoDetalle)
+    : null
+
   const sinVer = turnos.filter((t) => !t.vistoPorAdmin)
   const nuevosMasAdelante = agendaQuery.data?.nuevosMasAdelante ?? 0
   const idsMasAdelante = agendaQuery.data?.idsMasAdelante ?? []
@@ -316,7 +338,7 @@ export function AgendaPage() {
           hoy={hoyIso()}
           minutosAhora={minutosAhora}
           onElegirHueco={(f, h) => setHuecoElegido({ fecha: f, hora: h })}
-          onElegirTurno={setTurnoEditar}
+          onElegirTurno={setTurnoDetalle}
         />
       )}
 
@@ -360,11 +382,18 @@ export function AgendaPage() {
                     <FilaTurno
                       key={t.id}
                       turno={t}
+                      enCurso={turnoEnCurso(t, dia, hoyIso(), minutosAhora)}
                       onEditar={() => setTurnoEditar(t)}
                       onCancelar={() => cancelarMutation.mutate(t.id)}
+                      // HU-27 — "Realizado" abre el cobro y desde ahí se guardan las dos
+                      // cosas juntas; "Ausente" no pasa por ningún modal, porque un
+                      // ausente no paga.
                       onMarcarEstado={(estado) =>
-                        marcarMutation.mutate({ id: t.id, estado })
+                        estado === 'realizado'
+                          ? setTurnoCobrar(t)
+                          : marcarMutation.mutate({ id: t.id, estado })
                       }
+                      onCobrar={() => setTurnoCobrar(t)}
                       cancelando={
                         cancelarMutation.isPending &&
                         cancelarMutation.variables === t.id
@@ -382,6 +411,41 @@ export function AgendaPage() {
         </div>
       )}
 
+      {/* HU-25 — Tocar un turno en la grilla abre su detalle, no directamente el
+          reprogramar: primero quién es, después qué hacer. */}
+      {turnoAbierto && (
+        <ModalTurno
+          turno={turnoAbierto}
+          onClose={() => setTurnoDetalle(null)}
+          onReprogramar={() => {
+            setTurnoEditar(turnoAbierto)
+            setTurnoDetalle(null)
+          }}
+          onCobrar={() => {
+            setTurnoCobrar(turnoAbierto)
+            setTurnoDetalle(null)
+          }}
+          // Ausente cierra el detalle al marcarlo: el modal muestra las acciones de un
+          // turno reservado, y dejarlo abierto sobre un turno que ya no lo es sería
+          // mostrarle acciones que ya no aplican.
+          onMarcarAusente={() => {
+            marcarMutation.mutate({ id: turnoAbierto.id, estado: 'ausente' })
+            setTurnoDetalle(null)
+          }}
+          marcando={
+            marcarMutation.isPending &&
+            marcarMutation.variables?.id === turnoAbierto.id
+          }
+        />
+      )}
+      {/* HU-27 — El cobro. Mismo modal para las dos puertas de entrada: al marcar
+          Realizado y al completar un cobro pendiente. */}
+      {turnoCobrar && (
+        <ModalCobro
+          turno={turnoCobrar}
+          onClose={() => setTurnoCobrar(null)}
+        />
+      )}
       {turnoEditar && (
         <ModalEditarTurno
           turno={turnoEditar}

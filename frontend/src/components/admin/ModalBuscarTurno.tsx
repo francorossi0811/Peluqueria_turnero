@@ -25,7 +25,7 @@ const ESTILO_ESTADO: Record<EstadoTurno, string> = {
   cancelado: 'bg-borde-suave text-tinta-tenue',
   reprogramado: 'bg-borde-suave text-tinta-tenue',
   realizado: 'bg-bien-suave text-bien',
-  ausente: 'bg-alerta-suave text-alerta',
+  ausente: 'bg-ausente-suave text-ausente',
 }
 
 const INPUT =

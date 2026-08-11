@@ -42,6 +42,34 @@ export function domingoDeLaSemana(fechaIso: string): string {
   return sumarDias(fechaIso, -diaSemana(fechaIso))
 }
 
+/** Minutos desde medianoche de una hora `"HH:mm"`. La grilla posiciona todo con esto. */
+export function minutosDeHora(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
+
+/** ¿Este turno está ocurriendo justo ahora?
+ *
+ * Vive acá y no en la grilla porque lo usan las dos vistas de la agenda, y tienen que
+ * coincidir: un turno pintado como "en curso" en la semana y normal en el día sería peor
+ * que no marcarlo en ninguna.
+ *
+ * Usa la `horaFin` guardada en el turno y no la duración del servicio actual, por la regla
+ * de siempre: el turno guarda su propia copia y no se recalcula si Ariel cambia el
+ * servicio después. */
+export function turnoEnCurso(
+  turno: { hora: string; horaFin: string },
+  diaDelTurno: string,
+  hoy: string,
+  minutosAhora: number | null,
+): boolean {
+  if (diaDelTurno !== hoy || minutosAhora === null) return false
+  return (
+    minutosAhora >= minutosDeHora(turno.hora) &&
+    minutosAhora < minutosDeHora(turno.horaFin)
+  )
+}
+
 /** Indexados por `getDay()` (0 = domingo), misma convención que `horario_laboral`. */
 export const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 

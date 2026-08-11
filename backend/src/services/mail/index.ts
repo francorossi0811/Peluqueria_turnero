@@ -33,3 +33,19 @@ export function obtenerMailer(): Mailer {
 export function resetearMailer(): void {
   cacheado = null
 }
+
+/**
+ * ¿Hay un mailer de verdad, o el de consola?
+ *
+ * Existe por HU-26: el botón "me olvidé la contraseña" **solo se muestra si esto es
+ * `true`**. Sin cuenta de Brevo el mail se imprime en el log del servidor, así que el
+ * botón le prometería a Ariel un mail que nunca va a llegar, y encima reemplazando la
+ * única recuperación que hoy funciona (que Franco le resetee la contraseña desde el
+ * panel). Un botón que miente es peor que no tener botón.
+ *
+ * Es exactamente el mismo criterio que `whatsappEstaConfigurado()`: el adaptador de
+ * consola sirve para desarrollar, no cuenta como enviado.
+ */
+export function mailEstaConfigurado(): boolean {
+  return Boolean(process.env.BREVO_API_KEY)
+}

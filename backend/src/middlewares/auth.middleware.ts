@@ -3,8 +3,8 @@ import jwt from 'jsonwebtoken'
 import { jwtSecret } from '../config/env'
 import {
   debeRenovarse,
+  estadoDeSesion,
   firmarToken,
-  sesionInvalidadaPorCambioDePassword,
 } from '../services/auth.service'
 
 // `iat`/`exp` los agrega jsonwebtoken al firmar; los necesitamos acá para decidir la
@@ -60,7 +60,8 @@ export async function requireAuth(
 
   // Antes de renovar, no después: si no, un token ya invalidado se renovaría a sí mismo
   // indefinidamente y el cambio de contraseña nunca cerraría esa sesión.
-  if (await sesionInvalidadaPorCambioDePassword(payload)) {
+  const sesion = await estadoDeSesion(payload)
+  if (!sesion) {
     res.status(401).json({
       error: {
         codigo: 'TOKEN_INVALIDO',
@@ -70,7 +71,7 @@ export async function requireAuth(
     return
   }
 
-  req.admin = { sub: payload.sub, usuario: payload.usuario }
+  req.admin = { sub: payload.sub, usuario: payload.usuario, rol: sesion.rol }
 
   if (debeRenovarse(payload, Math.floor(Date.now() / 1000))) {
     res.setHeader(
@@ -79,5 +80,32 @@ export async function requireAuth(
     )
   }
 
+  next()
+}
+
+/**
+ * HU-26 — Deja pasar solo al super admin.
+ *
+ * Va **después** de `requireAuth`, que es quien pone `req.admin.rol` leyéndolo de la base.
+ * Protege únicamente la administración de cuentas: todo lo demás del panel es "gestionar
+ * la peluquería" y Ariel lo puede hacer entero.
+ *
+ * Responde 403 y no 404: no hay nada que esconder acá — que exista una sección de cuentas
+ * no es secreto, y un 404 le haría creer a Ariel que el panel está roto.
+ */
+export function requireSuperAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (req.admin?.rol !== 'super_admin') {
+    res.status(403).json({
+      error: {
+        codigo: 'NO_AUTORIZADO',
+        mensaje: 'Esta sección es solo para el administrador general.',
+      },
+    })
+    return
+  }
   next()
 }

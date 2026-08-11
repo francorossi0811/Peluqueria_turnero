@@ -8,7 +8,8 @@
 | Actor | Descripción |
 |---|---|
 | **Cliente** | Persona que reserva un turno. No tiene cuenta ni login. |
-| **Administrador (Ariel)** | Dueño y único peluquero. Autenticado con JWT. |
+| **Administrador (Ariel)** | Dueño y único peluquero. Autenticado con JWT, rol `admin`: puede todo lo de su peluquería. |
+| **Administrador general (Franco)** | Rol `super_admin` (HU-26). Lo mismo que el anterior, más administrar las cuentas del panel. Existe para que Ariel nunca quede sin poder entrar. |
 | **Sistema** | Procesos automáticos: cálculo de disponibilidad, recordatorios, notificaciones. |
 
 ---
@@ -38,6 +39,9 @@ Como cliente, quiero recibir una confirmación clara de mi turno, para saber que
 Como cliente, quiero poder cancelar mi turno usando mi link único, para liberar el horario si no puedo asistir, sin tener que llamar a Ariel.
 - Solo puedo cancelar hasta 60 minutos antes del turno.
 - Si intento cancelar dentro de esa ventana, el sistema me explica por qué no puedo y qué hacer (contactar a Ariel directamente).
+- **La pantalla tiene siempre a la vista un botón de WhatsApp y uno para llamar.** El aviso de arriba decía "contactá a Ariel" sin decir cómo: el número está en la página principal, a la que nunca entré — llegué por mi link.
+- **Cuando la cancelación entra, me llega el mensaje** (HU-22): el comprobante de que el horario quedó liberado de verdad.
+- El botón de agregar el turno al calendario quedó **último** en la pantalla. Es lo que se hace una vez y no se vuelve a tocar; reprogramar, cancelar y escribirle a Ariel son las razones por las que vuelvo acá.
 
 **HU-04 — Reprogramar turno**
 Como cliente, quiero reprogramar mi turno a otro día/horario usando mi link único, para no tener que cancelar y volver a reservar desde cero.
@@ -70,6 +74,10 @@ Como Ariel, quiero cargar un turno a mano cuando un cliente me escribe o llama, 
 
 **HU-09 — Editar turno**
 Como Ariel, quiero poder mover un turno a otro horario, para acomodar imprevistos sin tener que cancelarlo y perder los datos del cliente.
+- En la interfaz el botón dice **"Reprogramar"**, que es la palabra que uso. Puertas
+  adentro no es lo mismo que el reprogramar del cliente (HU-04): acá se mueve el mismo
+  turno, allá se crea uno nuevo enlazado al viejo. Esa diferencia es del modelo de datos y
+  no de lo que estoy haciendo, así que la pantalla no la nombra.
 
 **HU-10 — Cancelar turno (como admin)**
 Como Ariel, quiero poder cancelar cualquier turno en cualquier momento, sin el límite de 60 minutos que tiene el cliente, porque yo sí necesito flexibilidad total.
@@ -79,18 +87,24 @@ Como Ariel, quiero bloquear un rango horario (almuerzo largo, un imprevisto, una
 
 **HU-12 — Marcar turno como Realizado o Ausente**
 Como Ariel, quiero marcar si el cliente vino o no, para llevar un registro (sin consecuencias automáticas en v1, ya que dejamos el sistema de deudas para fase 2).
+- Al marcar **Realizado** me pregunta cómo pagó (HU-27). Es parte del mismo gesto: ya estoy tocando el turno que acaba de terminar, y que registrar el cobro fuera un paso aparte significa que me lo olvido.
+- **Ausente no pregunta nada**: el que no vino no pagó.
 
 **HU-13 — Configurar servicios**
 Como Ariel, quiero poder agregar, editar o desactivar servicios y sus duraciones, sin depender de que alguien le toque el código.
+- También les pongo el **precio** (HU-27). Es un dato mío: me sirve para que el cobro venga con el monto puesto y para los totales, y **el cliente no lo ve en ningún momento**.
+- Un servicio puede no tener precio todavía. No es lo mismo que valga $0: cuando no lo cargué, el cobro simplemente no me prellena nada.
 
 **HU-14 — Configurar horario laboral**
 Como Ariel, quiero poder cambiar mis días y horarios de atención, para reflejar cambios reales (vacaciones, nuevo horario de invierno, etc.).
 
 **HU-15 — Iniciar sesión**
-Como Ariel, quiero acceder a mi panel con usuario y contraseña, para que nadie más pueda modificar mi agenda.
-- La cuenta se crea una sola vez, al hacer el seed inicial, con la contraseña que Ariel elige por variable de entorno (`ADMIN_PASSWORD`) — no queda en ningún archivo del repo. De ahí en más la contraseña vive hasheada en la tabla `administradores` y Ariel la cambia desde el panel (HU-16); la variable de entorno no se vuelve a leer.
+Como Ariel, quiero acceder a mi panel con mi email y una contraseña, para que nadie más pueda modificar mi agenda.
+- **Entro con mi email** (HU-26), no con un nombre de usuario. El nombre sigue existiendo, pero solo como lo que se muestra en el panel: son dos cosas distintas y antes estaban mezcladas en el mismo dato.
+- La cuenta se crea una sola vez, al hacer el seed inicial, con el email y la contraseña que se eligen por variable de entorno (`ADMIN_EMAIL`, `ADMIN_PASSWORD`) — no quedan en ningún archivo del repo. De ahí en más la contraseña vive hasheada en la tabla `administradores` y Ariel la cambia desde el panel (HU-16); las variables de entorno no se vuelven a leer.
 - La sesión dura 7 días y se renueva sola mientras use el panel: cada request autenticado la extiende, así que teniendo el panel abierto seguido no necesita volver a loguearse. Cerrar el navegador no cierra la sesión.
 - Al cambiar la contraseña se cierran las sesiones abiertas en otros dispositivos (HU-16).
+- **La flechita de atrás del navegador no me saca de la sesión.** Con la sesión viva, la pantalla de ingreso no se muestra: lleva derecho al panel. Es una aplicación web y Ariel usa el botón de atrás como en cualquier página; que le apareciera el formulario de ingreso le hacía creer que lo había echado, cuando en realidad la sesión seguía abierta y el "adelante" volvía al panel sin pedirle nada.
 
 **HU-16 — Cambiar mi contraseña**
 Como Ariel, quiero cambiar mi contraseña desde el panel, para poder elegir una que solo yo sepa y cambiarla si sospecho que alguien la tiene.
@@ -110,6 +124,7 @@ Como Ariel, quiero que los turnos que reservan por la web aparezcan solos en el 
 Como Ariel, quiero que me llegue un aviso al celular cuando entra una reserva, para enterarme aunque tenga el panel cerrado.
 - El aviso trae el cliente, el servicio, el día y la hora.
 - Solo avisa de las reservas que entran por la web, no de las que cargo yo.
+- **También me avisa cuando un cliente cancela desde su link**, con un aviso propio que no reemplaza al de la reserva. Sin esto, un horario que se liberó solo se ve mirando la agenda. Las bajas que hago yo desde el panel no me las avisa: ya las sé.
 - Se activa desde "Mi cuenta", por dispositivo, y se puede desactivar y probar desde ahí mismo.
 - Cada turno genera su propio aviso: dos reservas seguidas no se pisan entre sí.
 - Si el navegador cambia la suscripción por su cuenta, el sistema la renueva solo. Antes eso me dejaba sin avisos sin que nada lo dijera: el panel seguía mostrando "activados".
@@ -133,13 +148,17 @@ Como Ariel, quiero poder poner el panel en fondo oscuro con letras claras, porqu
 - **Solo cambia el panel.** Lo que ven los clientes queda siempre como está, porque el diseño ya estaba aprobado.
 - Se mantiene la estética: misma tipografía, mismo ámbar de marca, mismos componentes. Cambian los valores de color, no el diseño.
 
-**HU-22 — Recibir la confirmación por WhatsApp**
-Como cliente, quiero que la confirmación con mi link me llegue por WhatsApp, porque es donde miro los mensajes — no uso el mail.
+**HU-22 — Recibir los avisos de mi turno por WhatsApp**
+Como cliente, quiero que los avisos de mi turno me lleguen por WhatsApp, porque es donde miro los mensajes — no uso el mail.
 - Llega al número que dejé al reservar, con el servicio, la fecha y la hora.
 - Trae un botón que abre directamente mi turno, para cancelar o reprogramar sin buscar nada.
 - También me llega si el turno lo cargó Ariel a mano y le di mi número: es la única forma de que yo tenga el link.
-- Si reprogramo, me llega la confirmación nueva con el link nuevo.
-- **Si no se pudo mandar** (no dejé teléfono, el número no se entiende, o el envío falló), me llega por mail como antes. Nunca me quedo sin confirmación por los dos lados a la vez.
+- Si reprogramo, me llega la confirmación nueva con el link nuevo, y me avisa que el anterior ya no sirve.
+- **Si se cancela, también me llega el aviso**, cancele yo desde mi link o lo cancele Ariel desde el panel. Ese segundo caso es el más importante de los tres mensajes: es la única forma de que me entere de que no me esperan.
+- El aviso de cancelación **no trae el link de mi turno**, porque ese turno ya no se gestiona. Trae un botón para sacar otro.
+- **Si no se pudo mandar** (no dejé teléfono, el número no se entiende, o el envío falló), me llega por mail como antes. Nunca me quedo sin aviso por los dos lados a la vez.
+
+*Son tres mensajes distintos —confirmado, reprogramado y cancelado—, cada uno aprobado por Meta por separado. Los textos están en `Docs/plantillas-whatsapp.md`; los tres comparten las mismas variables a propósito, para que el sistema no tenga que armar cada uno por su lado.*
 
 *Notas de implementación, porque son las dos cosas que pueden fallar en silencio:*
 - *El número se traduce al formato internacional antes de mandarlo. En Argentina eso significa resolver el `0`, el `15` y el `9` de celular: `351 459 3325` tiene que salir como `5493514593325`. Si sale sin el `9`, WhatsApp lo acepta igual y el mensaje no llega nunca.*
@@ -150,7 +169,19 @@ Como Ariel, quiero ver la semana entera con los días en columnas y las horas ha
 - Los días que trabajo son las columnas; el tiempo va hacia abajo, con una línea cada 20 minutos.
 - **Un turno ocupa exactamente lo que dura.** Uno de 35 minutos se ve más largo que uno de 20: en la planilla los dos ocupaban una celda igual y eso se perdía.
 - El corte entre la mañana y la tarde se dibuja, como la franja que usaba de referencia en la planilla.
-- El día de hoy va resaltado y una línea marca la hora actual, para ubicarme sin leer.
+- El día de hoy va resaltado y **una línea roja marca la hora actual**, como en Google
+  Calendar. **La hora del margen izquierdo a esa altura también se pone en roja**, así
+  ubico el momento sin seguir la línea con el dedo hasta el borde.
+- **La línea baja sola** a medida que pasa el tiempo, sin que yo recargue nada.
+- **El turno que estoy atendiendo se marca con un borde más grueso, no con otro color.**
+  Su color tiene que seguir diciendo su estado: si se pintara de rojo, mientras dura no
+  podría distinguir uno reservado de uno al que el cliente faltó. En la vista Día lleva
+  además una marca "Ahora".
+- **El color dice el estado, y solo eso:** miel lo que viene, verde lo que ya se hizo,
+  rojo el que no vino. Los tres se ven igual de claros con el fondo claro y con el oscuro.
+- **Los feriados tienen su propio color** (violeta), distinto del de un horario bloqueado.
+  Son dos motivos distintos por los que un rato no está disponible: si se ven iguales, no
+  puedo saber cuál estoy mirando.
 - **Toco un hueco y cargo un turno ahí mismo**, con el día y la hora ya puestos.
 - Los ratos en los que no abro (por ejemplo las 9 de la mañana un martes, que solo abro el sábado) se ven rayados y no se pueden tocar: mostrarlos como libres sería mentir.
 - Los horarios que ya pasaron tampoco se tocan — miro semanas anteriores para saber quién vino, no para cargar turnos ahí.
@@ -159,7 +190,73 @@ Como Ariel, quiero ver la semana entera con los días en columnas y las horas ha
 - Los feriados se ven en la grilla: el día lleva el nombre del feriado arriba, y el rato en que no atiendo queda rayado — en un feriado de medio día, la tarde entera.
 - Un turno ya reservado en la tarde de un feriado de medio día **se sigue viendo**. El feriado deja de ofrecer horarios nuevos, no borra los que ya estaban.
 
-*Lo que todavía no trae:* la marca del cliente (viene con las fichas de clientes) y el medio de pago (Etapa 4). La grilla ya tiene el lugar previsto para los dos.
+- Cada turno muestra la **marca del cliente** (HU-25): los círculos de color de sus
+  etiquetas, al lado del nombre. Sin texto — el color habla solo, que es para lo que lo
+  usaba en la planilla.
+- Si le puse un apodo al cliente, el turno muestra **el apodo** y no el nombre con el que
+  reservó: "Flaco" es como lo tengo yo, no "Juan Ignacio Pérez".
+- **Toco un turno y se abre su detalle**, no el reprogramar. Primero veo de quién es —con
+  su ficha, sus etiquetas y mis observaciones— y recién ahí decido si lo reprogramo o lo
+  cancelo. Antes el toque me abría directo la pantalla de mover el horario, que es lo que
+  menos hago.
+- Desde ese detalle también **marco Realizado o Ausente** (HU-12), con las mismas cuatro
+  acciones y en el mismo orden que en la vista Día. Antes desde la semana solo podía
+  reprogramar o cancelar: para cerrar un turno —que es lo que más hago— tenía que cambiar
+  de vista.
+
+- Cada turno **realizado** muestra si ya lo cobré (HU-27): una marca discreta cuando sí, y
+  una que llama la atención cuando todavía no. Es lo único que necesito de la plata acá —
+  el monto lo miro en el detalle o en Cobros.
+  **No es un color más**: el color del bloque sigue diciendo el estado y nada más, porque
+  pintar dos cosas distintas con la misma señal es exactamente el problema que tenía la
+  planilla.
+
+**HU-25 — Tener una ficha de cada cliente**
+Como Ariel, quiero tener una ficha por cliente con mi apodo, mis marcas y mis
+observaciones, para dejar de llevar eso en la planilla y tenerlo al lado del turno.
+- **La misma persona se reconoce sola por el teléfono.** Dos turnos con el mismo número
+  son el mismo cliente, sin que yo tenga que unir nada. El nombre no sirve para eso: el
+  mismo cliente escribe "Juan", "juan perez" y "Juan P." según el día.
+- Le pongo **mi apodo**: en la planilla anoto "Flaco", "Jubilado bici", "Roja". Ese apodo
+  es el que veo después en la agenda.
+- Le pongo **etiquetas**, que son insignias que armo yo: un círculo del color que elijo
+  más el texto que quiero ("Suele cancelar", "VIP", "Vive lejos"). Las administro desde el
+  panel, no vienen de una lista fija.
+- **Cuando reserva alguien que no tenía ficha, el sistema le pone solo la etiqueta
+  "Nuevo".** Así, mirando la agenda, sé que a esa persona no la tengo fichada todavía y
+  que vale la pena ponerle el apodo o una observación cuando la atienda.
+  - Se pone **una sola vez**, al crear la ficha: la segunda reserva del mismo número no la
+    vuelve a poner, porque para entonces ya no es nuevo.
+  - **No se saca sola.** La saco yo desde la ficha, que es el gesto de "ya la conozco".
+  - La puedo renombrar y cambiarle el color como cualquier otra, y el automatismo la sigue
+    encontrando: el sistema no la busca por el nombre.
+  - Si la borro, los clientes nuevos simplemente dejan de marcarse. La pantalla de
+    etiquetas avisa cuál es la automática, para que borrarla no sea una sorpresa.
+- Escribo **observaciones** libres, que es lo que hoy anoto al margen del cuaderno.
+- Veo el **historial completo** de esa persona, incluidos los turnos que canceló. Que haya
+  cancelado tres veces es justo lo que quiero ver.
+- Busco por apodo, por nombre o por teléfono, sin tener que acordarme en qué campo estaba.
+- Un turno que cargué **sin teléfono** (HU-08) todavía no tiene ficha: sin número no hay
+  con qué reconocer a la persona. Puedo cargarle el número desde el turno y la ficha se
+  crea sola en ese momento.
+
+*Por qué no se integra con Drive:* de la planilla en Drive lo que servía era poder abrirla
+desde el celular o desde la computadora del local, y eso una aplicación web ya lo da. Una
+integración por OAuth sería un trámite entero para resolver algo que ya está resuelto.
+
+*Sobre exportar a una planilla:* se construyó y se sacó. Ariel no la pidió, y el motivo por
+el que estaba —"llevarse los datos"— resultó ser un problema que él no tiene: las fichas
+las consulta en el panel, que es donde están al lado del turno. Es funcionalidad que
+existía porque era fácil de hacer, no porque hiciera falta.
+
+*Por qué las etiquetas son configurables y no un casillero de "cliente problemático":* la
+planilla usa un color para marcar clientes porque es lo único que Sheets sabe hacer.
+Heredar esa limitación sería quedarnos con lo peor de la planilla.
+
+*Un detalle del código de colores de la planilla:* mezcla dos cosas distintas. El
+amarillo/naranja describe al **cliente** y el azul/violeta describe **un pago puntual**.
+Acá van separadas: la etiqueta vive en el cliente y vale para todos sus turnos; el medio
+de pago de un turno concreto es HU-27, y no se dice con un color sino con el dato.
 
 **HU-24 — En los feriados trabajo medio día**
 Como Ariel, quiero que los feriados se carguen solos y que por defecto se tomen como **medio día**, porque es lo que hago casi siempre, y poder cambiarlo cuando no.
@@ -171,6 +268,67 @@ Como Ariel, quiero que los feriados se carguen solos y que por defecto se tomen 
 - Tampoco veo los que ya pasaron: sobre un feriado de marzo, en agosto no hay nada que decidir.
 - Si un feriado se decreta a mitad de año, tengo un botón para volver a buscar la lista.
 - Cuando un feriado es de medio día, el cliente ve por qué hay menos horarios que de costumbre.
+
+**HU-26 — Entrar con mi email, y poder recuperarlo si me lo olvido**
+Como Ariel, quiero entrar con mi email en vez de un nombre de usuario, y tener un "me olvidé la contraseña", para no depender de que alguien me la resetee a mano.
+- Entro con mi **email**. El nombre que se ve arriba en el panel sigue siendo el mío, pero ya no es con lo que entro.
+- Si me olvido la contraseña, pido un link por mail y elijo una nueva. **El link vale 30 minutos y sirve una sola vez**: apenas lo uso, deja de funcionar.
+- Al terminar quedo adentro del panel, sin tener que volver a tipear lo que acabo de elegir.
+- Cambiar la contraseña —por este camino o desde "Mi cuenta"— cierra las sesiones abiertas en otros dispositivos, igual que en HU-16.
+- **El botón solo aparece si el sistema puede mandar mails de verdad.** Si no puede, no está: un botón que promete un mail que no llega es peor que no tener botón, y encima aparecería justo cuando ya no puedo entrar.
+
+**Como Franco (administrador general), además:**
+- Tengo mi propia cuenta, separada de la de Ariel.
+- Veo las cuentas que existen, creo una nueva, y le puedo **fijar una contraseña** a otra cuenta. Eso es lo que hace que Ariel nunca quede afuera aunque el mail falle.
+- **Es lo único que Ariel no puede hacer.** Todo el resto del panel —agenda, clientes, servicios, horarios, feriados, bloqueos— es gestionar su peluquería, y lo puede entero. No hay una segunda diferencia escondida.
+- No puedo cambiarme el rol a mí mismo ni dejar el sistema sin ningún administrador general: son dos accidentes que no tendrían arreglo desde la aplicación.
+- Sobre mi propia cuenta no aparece "cambiarle la contraseña": para eso está "Mi cuenta", que pide la actual. Si no, esta pantalla sería una forma de cambiar la contraseña sin saber la anterior — o sea, de aprovechar una sesión robada.
+
+*Una cuenta sin email no puede entrar*, porque el login es por email. La pantalla de administradores las marca en rojo y el seed lo avisa al correr: es la forma de que una cuenta muerta no pase desapercibida.
+
+**HU-27 — Registrar cómo me pagaron, y ver cuánto entró**
+Como Ariel, quiero anotar cómo me pagó cada cliente y ver cuánto entró en el día, la
+semana o el mes, para dejar de llevar eso de memoria y en la planilla.
+- **Me lo pregunta cuando marco el turno como Realizado.** Es el momento en que la persona
+  está pagando; si fuera una pantalla aparte, no la abriría nunca.
+- Elijo entre **efectivo, transferencia, Mercado Pago y tarjeta**. Son los cuatro que uso;
+  no necesito armarme una lista como con las etiquetas.
+- El **monto viene puesto** con el precio del servicio (HU-13) y lo puedo cambiar ahí
+  mismo, para el que le hago un descuento o el jubilado.
+- **Puedo marcar Realizado sin registrar el cobro** y cargarlo después. A veces me pagan
+  más tarde, o estoy apurado con otro cliente esperando. Ese turno me queda marcado como
+  pendiente y lo completo desde el turno o desde la lista de cobros.
+- Si me equivoqué, lo **corrijo** desde el mismo turno.
+- En la **agenda semanal** veo de un vistazo a quién me falta cobrarle, sin abrir nada.
+- Tengo una sección **Cobros** con el total del período, cuánto entró por cada medio de
+  pago, y la lista de quién pagó qué. Miro hoy, esta semana, este mes, o el rango que
+  quiera.
+- **Desde esa misma lista toco un turno y le cargo el cobro**, o le corrijo el que tiene.
+  Es donde veo juntos los que me faltan; tener que ir a buscar cada uno a su día en la
+  agenda haría que la lista me señale el problema y no me deje resolverlo.
+- **Los turnos que todavía no cobré se cuentan aparte y no se suman al total.** Prefiero
+  que me diga "faltan 3" antes que un número redondo que no cierra con la caja y no sé por
+  qué.
+
+*Sobre el precio y el momento en que se toma:* el monto sale del precio que el servicio
+tiene **el día que se cobra**, no del que tenía cuando el cliente reservó. Con los precios
+moviéndose, un turno sacado hace tres semanas se cobra a lo que sale hoy — que es lo que
+Ariel efectivamente cobra. Es a propósito distinto de la **duración**, que sí se congela al
+reservar (ver §4): la duración decide si el turno entra en la agenda, así que cambiarla
+movería turnos ya dados; el precio no afecta nada hasta el momento de cobrar.
+
+*Por qué el cliente no ve los precios:* es lo que pidió Ariel. Y además, un precio
+publicado que no se actualiza es peor que ninguno — el sistema le estaría mintiendo al
+cliente sin que nadie se entere. El flujo de reserva no se tocó en nada.
+
+*Por qué los medios de pago son una lista fija y las etiquetas no:* en las etiquetas
+(HU-25) el texto que escribe Ariel *es* el contenido, y por eso se configuran. Acá el
+conjunto es cerrado y estable, y el desglose necesita categorías fijas para poder sumarse.
+
+*Lo que esto no es:* no se cobra nada por el sistema. No hay seña, ni pasarela de pago, ni
+link para que el cliente pague online. Es el registro de una plata que ya cambió de manos
+en el local — el equivalente de la columna de color de la planilla, con el dato adentro en
+vez de en el color.
 
 ### Cliente (continuación)
 
@@ -252,13 +410,26 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
 
 ## 5. Fuera de alcance en v1 (recordatorio)
 
-Precios · Deudas por ausencia · Multi-peluquero · Recuperación autoservicio del link para clientes sin email · Recordatorio automático mandado por el sistema (HU-05: lo cubre en parte la alarma del evento de calendario de HU-19)
+Deudas por ausencia · Multi-peluquero · Recuperación autoservicio del link para clientes sin email · Recordatorio automático mandado por el sistema (HU-05: lo cubre en parte la alarma del evento de calendario de HU-19)
+
+*Sobre los precios:* **dejaron de estar fuera de alcance en la v3** (HU-27), igual que
+WhatsApp. Estuvieron afuera durante la v1 y la v2 porque el sistema no tenía nada que
+hacer con ellos: sin cobros, un precio era un número decorativo, y publicárselo al cliente
+sin que nadie lo mantuviera al día era peor que no tenerlo. Lo que cambió es que ahora
+existe **para qué**: el precio del servicio es de dónde sale el monto del cobro, y el
+cobro es de dónde salen los totales. Sigue sin verlo el cliente — el precio quedó del lado
+de Ariel, que es donde tiene un uso.
+
+*Sigue fuera de alcance dentro de los cobros:* el **cobro online** (seña por Mercado Pago
+o cualquier pasarela — sería una etapa aparte, con trámites externos como los de
+WhatsApp), los **pagos parciales o divididos**, el **historial de precios** de un servicio,
+y la **facturación**.
 
 *Sobre WhatsApp:* **dejó de estar fuera de alcance en la v3** (HU-22). Durante la v1 y la v2 lo estuvo, y por un motivo concreto: la API de WhatsApp Business exigía dedicarle un número a la API, o sea que Ariel tenía que dejar de usar su número de siempre en la app de WhatsApp Business. Eso se cayó con *Coexistence* (Meta, mayo de 2026), que permite el mismo número en los dos lados a la vez sin perder los chats. Antes de eso, el aviso al cliente figuró un tiempo como "simulado en la interfaz", con un cartel prometiendo un mensaje que nunca iba a llegar; ese cartel se sacó porque era mentirle al cliente. Ahora el mensaje es real.
 
 *Sigue fuera de alcance dentro de WhatsApp:* los **webhooks de estado** de Meta (saber si el mensaje se entregó, se leyó o rebotó), el **recordatorio previo al turno**, y la **respuesta automática** al cliente que escribe primero.
 
-*Salieron de esta lista: que Ariel cambie su contraseña desde el panel (HU-16), el envío del link por mail (HU-02, HU-19) y la confirmación por WhatsApp (HU-22), todos ya implementados.*
+*Salieron de esta lista: que Ariel cambie su contraseña desde el panel (HU-16), el envío del link por mail (HU-02, HU-19), la confirmación por WhatsApp (HU-22) y los precios (HU-27), todos ya implementados.*
 
 ---
 

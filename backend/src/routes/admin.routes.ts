@@ -3,12 +3,26 @@ import { getMe, patchPassword } from '../controllers/admin.controller'
 import {
   getAgenda,
   getBuscarTurnos,
+  patchCobroTurno,
   patchEstadoTurno,
+  patchTelefonoTurno,
   patchTurno,
   postCancelarTurnoAdmin,
   postMarcarVistos,
   postTurnoManual,
 } from '../controllers/turnos.controller'
+import {
+  getCliente,
+  getClientes,
+  patchCliente,
+} from '../controllers/clientes.controller'
+import { getCobros } from '../controllers/cobros.controller'
+import {
+  deleteEtiqueta,
+  getEtiquetas,
+  patchEtiqueta,
+  postEtiqueta,
+} from '../controllers/etiquetas.controller'
 import {
   deleteSuscripcion,
   getClavePublica,
@@ -35,12 +49,61 @@ import {
   getBloqueos,
   postBloqueo,
 } from '../controllers/bloqueos.controller'
-import { requireAuth } from '../middlewares/auth.middleware'
+import {
+  deleteAdministrador,
+  getAdministradores,
+  patchAdministrador,
+  patchPasswordDeAdministrador,
+  patchRolDeAdministrador,
+  postAdministrador,
+} from '../controllers/administradores.controller'
+import { requireAuth, requireSuperAdmin } from '../middlewares/auth.middleware'
 
 export const adminRouter = Router()
 
 adminRouter.get('/admin/me', requireAuth, getMe)
 adminRouter.patch('/admin/password', requireAuth, patchPassword)
+
+// HU-26 — Administración de cuentas: lo único que el rol `admin` no puede hacer. Todo lo
+// demás de este archivo es "gestionar la peluquería" y Ariel lo puede entero.
+adminRouter.get(
+  '/admin/administradores',
+  requireAuth,
+  requireSuperAdmin,
+  getAdministradores,
+)
+adminRouter.post(
+  '/admin/administradores',
+  requireAuth,
+  requireSuperAdmin,
+  postAdministrador,
+)
+adminRouter.patch(
+  '/admin/administradores/:id',
+  requireAuth,
+  requireSuperAdmin,
+  patchAdministrador,
+)
+adminRouter.patch(
+  '/admin/administradores/:id/password',
+  requireAuth,
+  requireSuperAdmin,
+  patchPasswordDeAdministrador,
+)
+adminRouter.patch(
+  '/admin/administradores/:id/rol',
+  requireAuth,
+  requireSuperAdmin,
+  patchRolDeAdministrador,
+)
+// A diferencia de servicios y turnos, acá sí hay DELETE: nada referencia a una cuenta de
+// administrador, así que borrarla no deja registros incompletos. Ver el service.
+adminRouter.delete(
+  '/admin/administradores/:id',
+  requireAuth,
+  requireSuperAdmin,
+  deleteAdministrador,
+)
 adminRouter.get('/admin/turnos', requireAuth, getAgenda)
 adminRouter.get('/admin/turnos/buscar', requireAuth, getBuscarTurnos)
 adminRouter.post('/admin/turnos', requireAuth, postTurnoManual)
@@ -51,7 +114,24 @@ adminRouter.post(
   postCancelarTurnoAdmin,
 )
 adminRouter.patch('/admin/turnos/:id/estado', requireAuth, patchEstadoTurno)
+adminRouter.patch('/admin/turnos/:id/telefono', requireAuth, patchTelefonoTurno)
+// HU-27 — Le carga o le corrige el cobro a un turno ya realizado. El cobro del momento
+// va dentro del PATCH de estado de arriba, que es cuando Ariel lo hace de verdad.
+adminRouter.patch('/admin/turnos/:id/cobro', requireAuth, patchCobroTurno)
 adminRouter.post('/admin/turnos/marcar-vistos', requireAuth, postMarcarVistos)
+
+// HU-27 — Lo cobrado en un período.
+adminRouter.get('/admin/cobros', requireAuth, getCobros)
+
+// HU-25 — Fichas de clientes.
+adminRouter.get('/admin/clientes', requireAuth, getClientes)
+adminRouter.get('/admin/clientes/:id', requireAuth, getCliente)
+adminRouter.patch('/admin/clientes/:id', requireAuth, patchCliente)
+
+adminRouter.get('/admin/etiquetas', requireAuth, getEtiquetas)
+adminRouter.post('/admin/etiquetas', requireAuth, postEtiqueta)
+adminRouter.patch('/admin/etiquetas/:id', requireAuth, patchEtiqueta)
+adminRouter.delete('/admin/etiquetas/:id', requireAuth, deleteEtiqueta)
 
 // HU-18 — Notificaciones push al celular de Ariel.
 adminRouter.get('/admin/push/clave-publica', requireAuth, getClavePublica)

@@ -1,29 +1,65 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useEffect, type ComponentType } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   IconoAgenda,
+  IconoClientes,
+  IconoCobros,
+  IconoLlave,
   IconoPersona,
   IconoReloj,
 } from '../ui/Iconos'
+import { obtenerMe } from '../../api/auth'
 import { registrarServiceWorker, soportaPush } from '../../lib/push'
 
-// Tres destinos, no cinco. "Buscar turno" pasó a ser un modal dentro de la agenda (es
-// una acción sobre la agenda, no una sección aparte) y "Servicios" se juntó con
-// "Horario": las dos son configuración de cómo trabaja Ariel, y ninguna se toca seguido.
-// "Salir" salió del nav a propósito — es una acción destructiva de sesión y no merece
-// estar a un click de distancia todo el día; vive abajo de todo en "Mi cuenta".
+// Cuatro destinos. "Buscar turno" pasó a ser un modal dentro de la agenda (es una acción
+// sobre la agenda, no una sección aparte) y "Servicios" se juntó con "Horario": las dos
+// son configuración de cómo trabaja Ariel, y ninguna se toca seguido. "Salir" salió del
+// nav a propósito — es una acción destructiva de sesión y no merece estar a un click de
+// distancia todo el día; vive abajo de todo en "Mi cuenta".
+//
+// "Clientes" (HU-25) sí es una sección propia y no un modal de la agenda, al revés que
+// "Buscar turno": Ariel se queda ahí un rato — repasa fichas, pone apodos, etiqueta — en
+// vez de entrar a resolver una cosa puntual y salir.
+//
+// "Cobros" (HU-27) sigue el mismo criterio y por eso no es un pie de la agenda: la agenda
+// se mira turno por turno y la plata se mira sumada.
+//
+// El orden lo eligió Ariel y sigue su día: primero la agenda, después los cobros —las dos
+// cosas que toca todos los días, y la segunda es la otra lectura de la primera—, después
+// las fichas, y al final lo que casi no se toca.
 const NAV: {
   to: string
   label: string
   Icono: ComponentType<{ className?: string }>
+  /** HU-26 — Solo para el super admin. Esconder el ítem es comodidad: quien decide es
+   * `requireSuperAdmin` en el backend. */
+  soloSuperAdmin?: boolean
 }[] = [
   { to: '/admin', label: 'Agenda', Icono: IconoAgenda },
+  { to: '/admin/cobros', label: 'Cobros', Icono: IconoCobros },
+  { to: '/admin/clientes', label: 'Clientes', Icono: IconoClientes },
   { to: '/admin/horarios', label: 'Horarios y servicios', Icono: IconoReloj },
   { to: '/admin/cuenta', label: 'Mi cuenta', Icono: IconoPersona },
+  {
+    to: '/admin/administradores',
+    label: 'Administradores',
+    Icono: IconoLlave,
+    soloSuperAdmin: true,
+  },
 ]
 
 export function AdminLayout() {
   const location = useLocation()
+
+  // El rol, para saber qué ítems del nav mostrar. `staleTime` largo: no cambia durante
+  // una sesión, y esta query la comparten el nav, "Mi cuenta" y "Administradores".
+  const meQuery = useQuery({
+    queryKey: ['me'],
+    queryFn: obtenerMe,
+    staleTime: 60 * 60 * 1000,
+  })
+  const esSuperAdmin = meQuery.data?.rol === 'super_admin'
 
   // El service worker se registra al abrir el panel, no recién al tocar "Activar
   // avisos". Dos motivos: es lo que hace que un `sw.js` corregido llegue al dispositivo
@@ -48,7 +84,7 @@ export function AdminLayout() {
             La Peluquería de Ariel Enrique
           </p>
           <nav className="flex flex-wrap items-center gap-1">
-            {NAV.map(({ to, label, Icono }) => (
+            {NAV.filter((item) => !item.soloSuperAdmin || esSuperAdmin).map(({ to, label, Icono }) => (
               <Link
                 key={to}
                 to={to}

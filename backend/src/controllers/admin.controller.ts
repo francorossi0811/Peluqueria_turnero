@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
+import { prisma } from '../config/prisma'
 import { cambiarPassword } from '../services/auth.service'
 import {
   AdministradorNoEncontradoError,
@@ -24,8 +25,30 @@ const cambiarPasswordSchema = z
     path: ['passwordNueva'],
   })
 
-export function getMe(req: Request, res: Response) {
-  res.json({ usuario: req.admin?.usuario })
+/** La cuenta con la que está entrando.
+ *
+ * Devuelve `rol` (HU-26) porque es de donde el panel decide si mostrar la sección de
+ * cuentas. Ojo con lo que eso NO significa: la que decide de verdad es
+ * `requireSuperAdmin` en el backend. Esconder el ítem del menú es comodidad, no seguridad
+ * — quien tenga un token de `admin` y llame el endpoint a mano se come un 403 igual.
+ *
+ * El `email` va porque desde HU-26 es la credencial: "Mi cuenta" tiene que poder mostrarle
+ * a Ariel con qué entra, que ya no es el nombre que ve arriba. */
+export async function getMe(req: Request, res: Response) {
+  const admin = await prisma.administrador.findUnique({
+    where: { id: req.admin!.sub },
+    select: { usuario: true, email: true, rol: true },
+  })
+  if (!admin) {
+    res.status(404).json({
+      error: {
+        codigo: 'ADMINISTRADOR_NO_ENCONTRADO',
+        mensaje: 'No encontramos la cuenta.',
+      },
+    })
+    return
+  }
+  res.json(admin)
 }
 
 export async function patchPassword(req: Request, res: Response) {

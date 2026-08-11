@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "migrate:deploy": "prisma migrate deploy",
-    "seed": "prisma db seed"
+    "seed": "prisma db seed",
+    "backfill:clientes": "tsx prisma/backfill-clientes.ts"
   },
   "keywords": [],
   "author": "",

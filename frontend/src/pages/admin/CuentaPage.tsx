@@ -126,7 +126,10 @@ function SeccionSalir() {
         variant="outline"
         onClick={() => {
           clearToken()
-          navigate('/admin/login')
+          // `replace`: el back después de salir no tiene que apuntar a un panel que ya
+          // no se puede ver. Sin esto rebota igual (lo ataja `RequireAuth`), pero el
+          // rebote se ve, y es el mismo parpadeo que el resto de este arreglo saca.
+          navigate('/admin/login', { replace: true })
         }}
       >
         Cerrar sesión
@@ -458,12 +461,25 @@ function SeccionUsuario() {
 
   return (
     <Card>
-      <p className="text-tinta-tenue text-xs tracking-wide uppercase">Usuario</p>
+      <p className="text-tinta-tenue text-xs tracking-wide uppercase">Cuenta</p>
       <p className="text-tinta mt-1 font-medium">
         {query.isPending && 'Cargando…'}
         {query.isError && 'No pudimos cargar tu cuenta.'}
         {query.data?.usuario}
       </p>
+      {/* El email va acá porque desde HU-26 **es con lo que se entra**. El nombre de
+          arriba dejó de ser la credencial, y si esta pantalla solo mostrara el nombre,
+          Ariel no tendría dónde ver qué tiene que tipear en el login. */}
+      {query.data && (
+        <p className="text-tinta-suave mt-1 text-sm">
+          Entrás con: {query.data.email ?? '— (sin email cargado)'}
+        </p>
+      )}
+      {query.data?.rol === 'super_admin' && (
+        <p className="text-miel mt-2 text-xs font-medium tracking-wide uppercase">
+          Administrador general
+        </p>
+      )}
     </Card>
   )
 }
