@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Modal } from '../ui/Modal'
@@ -7,6 +7,7 @@ import { GrillaHorarios } from '../GrillaHorarios'
 import { obtenerServicios } from '../../api/servicios'
 import { obtenerDisponibilidad } from '../../api/disponibilidad'
 import { cargarTurnoManual } from '../../api/agenda'
+import { elegirContacto, soportaElegirContacto } from '../../lib/contactos'
 import { hoyIso, sumarDias } from '../../utils/fecha'
 import type { ErrorApi, Servicio } from '../../types/api'
 
@@ -14,12 +15,20 @@ const DIAS_A_MOSTRAR = 14
 
 interface ModalCargarTurnoProps {
   onClose: () => void
+  /** Día y hora del hueco que Ariel tocó en la grilla semanal (HU-23). Ver abajo por qué
+   * la hora es una preferencia y no un valor fijo. */
+  fechaInicial?: string
+  horaInicial?: string
 }
 
-export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
+export function ModalCargarTurno({
+  onClose,
+  fechaInicial,
+  horaInicial,
+}: ModalCargarTurnoProps) {
   const queryClient = useQueryClient()
   const [servicio, setServicio] = useState<Servicio | null>(null)
-  const [fecha, setFecha] = useState<string | null>(null)
+  const [fecha, setFecha] = useState<string | null>(fechaInicial ?? null)
   const [hora, setHora] = useState<string | null>(null)
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
@@ -48,7 +57,9 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
         fecha: fecha!,
         hora: hora!,
         clienteNombre,
-        clienteTelefono,
+        // Vacío significa "no me lo sé", no un teléfono en blanco. Mismo criterio que el
+        // email: se manda `undefined` para no guardar un dato falso en la base.
+        clienteTelefono: clienteTelefono.trim() || undefined,
         clienteEmail: clienteEmail.trim() || undefined,
         origen,
       }),
@@ -77,7 +88,38 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
     },
   })
 
-  const listo = servicio && fecha && hora && clienteNombre && clienteTelefono
+  async function completarDesdeContactos() {
+    try {
+      const contacto = await elegirContacto()
+      if (!contacto) return
+      if (contacto.telefono) setClienteTelefono(contacto.telefono)
+      // El nombre solo se completa si Ariel todavía no escribió uno, para no pisarle lo
+      // que ya venía tipeando.
+      if (contacto.nombre && !clienteNombre.trim())
+        setClienteNombre(contacto.nombre)
+    } catch {
+      // Cancelar el selector nativo también entra por acá. No es un error que valga la
+      // pena mostrar: el campo se puede tipear igual.
+    }
+  }
+
+  // Cuando el modal se abre desde un hueco de la grilla ya sabemos qué día y qué hora
+  // quiere Ariel, pero **la hora no se puede dar por buena**: la disponibilidad depende
+  // de la duración del servicio, y el servicio se elige después. Un corte de 20 min entra
+  // en un hueco donde un corte + barba de 35 no.
+  //
+  // Por eso la hora entra como *preferencia*: se aplica sola si sigue libre para el
+  // servicio elegido, y si no, el hueco queda sin elegir y Ariel ve la grilla normal.
+  // Nunca se manda al backend una hora que va a rechazar.
+  useEffect(() => {
+    if (!horaInicial || hora || fecha !== fechaInicial) return
+    const dia = disponibilidadQuery.data?.find((d) => d.fecha === fecha)
+    if (dia?.horarios.includes(horaInicial)) setHora(horaInicial)
+  }, [horaInicial, fechaInicial, fecha, hora, disponibilidadQuery.data])
+
+  // El teléfono ya no bloquea el alta: Ariel suele cargar el turno con el cliente
+  // enfrente y sin saberse el número.
+  const listo = servicio && fecha && hora && clienteNombre
 
   return (
     <Modal titulo="Cargar turno" onClose={onClose}>
@@ -93,7 +135,7 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
                 (x) => x.id === e.target.value,
               )
               setServicio(s ?? null)
-              setFecha(null)
+              setFecha(fechaInicial ?? null)
               setHora(null)
             }}
             className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
@@ -153,14 +195,28 @@ export function ModalCargarTurno({ onClose }: ModalCargarTurnoProps) {
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-                Teléfono
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+                  Teléfono (opcional)
+                </span>
+                {/* Solo aparece donde funciona de verdad: Chrome en Android. En la
+                    computadora del mostrador ni se renderiza, así que no hay un botón
+                    que no haga nada. */}
+                {soportaElegirContacto() && (
+                  <button
+                    type="button"
+                    onClick={completarDesdeContactos}
+                    className="text-miel text-xs font-medium hover:opacity-80"
+                  >
+                    Elegir de mis contactos
+                  </button>
+                )}
+              </div>
               <input
-                required
                 type="tel"
                 value={clienteTelefono}
                 onChange={(e) => setClienteTelefono(e.target.value)}
+                placeholder="Si no lo sabés, dejalo vacío"
                 className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
               />
             </label>

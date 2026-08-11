@@ -9,16 +9,22 @@ import { cambiarPassword, obtenerMe } from '../../api/auth'
 import {
   eliminarSuscripcion,
   enviarPrueba,
+  huellaDeEndpoint,
   obtenerClavePublica,
+  obtenerDispositivos,
   registrarSuscripcion,
+  type ResultadoEnvio,
 } from '../../api/push'
 import { clearToken, setToken } from '../../lib/authStorage'
+import { cambiarTema, type Tema } from '../../lib/tema'
+import { useTema } from '../../lib/useTemaAdmin'
 import {
   crearSuscripcion,
   desuscribirse,
   esIOS,
   estaInstaladaComoApp,
   pedirPermiso,
+  probarNotificacionLocal,
   soportaPush,
   suscripcionActual,
 } from '../../lib/push'
@@ -36,6 +42,12 @@ export function CuentaPage() {
           Mi cuenta
         </h1>
         <SeccionUsuario />
+      </div>
+      <div>
+        <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
+          Apariencia
+        </h2>
+        <SeccionApariencia />
       </div>
       <div>
         <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
@@ -59,6 +71,43 @@ export function CuentaPage() {
   )
 }
 
+const OPCIONES_TEMA: { valor: Tema; etiqueta: string }[] = [
+  { valor: 'oscuro', etiqueta: 'Oscuro' },
+  { valor: 'claro', etiqueta: 'Claro' },
+]
+
+/** Interruptor de tema, solo para el panel — la parte que ven los clientes queda siempre
+ * en claro. El cambio se aplica al instante y se guarda en este dispositivo. */
+function SeccionApariencia() {
+  const tema = useTema()
+
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-tinta-suave text-sm">
+        Cómo se ve el panel en este dispositivo. Lo que ven tus clientes no
+        cambia.
+      </p>
+      {/* Mismo pill que el selector Día/Semana de la agenda. */}
+      <div className="border-borde flex rounded-md border p-1">
+        {OPCIONES_TEMA.map(({ valor, etiqueta }) => (
+          <button
+            key={valor}
+            onClick={() => cambiarTema(valor)}
+            aria-pressed={tema === valor}
+            className={`rounded px-3 py-1 text-sm font-medium transition ${
+              tema === valor
+                ? 'bg-miel-suave text-miel'
+                : 'text-tinta-suave hover:text-tinta'
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
 /** Cerrar sesión vive acá, abajo de todo, y ya no en el nav.
  *
  * Ariel tiene el panel abierto casi todo el día en la tablet del mostrador: un botón
@@ -77,7 +126,10 @@ function SeccionSalir() {
         variant="outline"
         onClick={() => {
           clearToken()
-          navigate('/admin/login')
+          // `replace`: el back después de salir no tiene que apuntar a un panel que ya
+          // no se puede ver. Sin esto rebota igual (lo ataja `RequireAuth`), pero el
+          // rebote se ve, y es el mismo parpadeo que el resto de este arreglo saca.
+          navigate('/admin/login', { replace: true })
         }}
       >
         Cerrar sesión
@@ -86,11 +138,23 @@ function SeccionSalir() {
   )
 }
 
+/** El estado real de los avisos en este dispositivo.
+ *
+ * `desincronizado` es el que faltaba: el navegador tiene una suscripción, pero el backend
+ * no la conoce. Pasa cuando la suscripción se registró contra otra base de datos, y hasta
+ * ahora se veía igual que "activado" — o sea que la pantalla decía que iban a llegar
+ * avisos que no iban a llegar. */
+type EstadoAvisos = 'activado' | 'apagado' | 'desincronizado'
+
 function SeccionNotificaciones() {
-  const [suscripto, setSuscripto] = useState<boolean | null>(null)
+  const [suscripto, setSuscripto] = useState<EstadoAvisos | null>(null)
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [trabajando, setTrabajando] = useState(false)
+  // El error crudo del navegador. Sin esto no hay forma de saber por qué falló en un
+  // dispositivo que no tenemos a mano.
+  const [detalleTecnico, setDetalleTecnico] = useState<string | null>(null)
+  const [envios, setEnvios] = useState<ResultadoEnvio[] | null>(null)
 
   const soportado = soportaPush()
   const enIOS = esIOS()
@@ -99,12 +163,41 @@ function SeccionNotificaciones() {
   // que se pueda pedir desde una pestaña de Safari.
   const bloqueadoPorIOS = enIOS && !instalada
 
+  // ⚠️ Acá había un defecto real, y le costó a Franco una tarde de depuración: el estado
+  // salía **solo** de `suscripcionActual()`, o sea de lo que sabe el navegador, sin
+  // preguntarle nunca al backend. Los dos pueden estar desincronizados —una suscripción
+  // pertenece a la base que estaba activa cuando se registró, así que cambiar
+  // `DATABASE_URL` en Render deja huérfanos todos los dispositivos— y la pantalla seguía
+  // diciendo "avisos activados" mientras no llegaba nada.
   useEffect(() => {
     if (!soportado) {
-      setSuscripto(false)
+      setSuscripto('apagado')
       return
     }
-    void suscripcionActual().then((s) => setSuscripto(Boolean(s)))
+
+    void (async () => {
+      const local = await suscripcionActual()
+      if (!local) {
+        setSuscripto('apagado')
+        return
+      }
+
+      try {
+        const [dispositivos, huella] = await Promise.all([
+          obtenerDispositivos(),
+          huellaDeEndpoint(local.endpoint),
+        ])
+        setSuscripto(
+          dispositivos.some((d) => d.huella === huella)
+            ? 'activado'
+            : 'desincronizado',
+        )
+      } catch {
+        // Si no se puede consultar al servidor no inventamos un problema: se muestra lo
+        // que sabe el navegador, que es lo que se mostraba antes de este arreglo.
+        setSuscripto('activado')
+      }
+    })()
   }, [soportado])
 
   async function activar() {
@@ -117,9 +210,16 @@ function SeccionNotificaciones() {
     let permiso: NotificationPermission
     try {
       permiso = await pedirPermiso()
-    } catch {
+    } catch (err) {
+      // El mensaje se parte por plataforma. Antes era uno solo y hablaba de iPhone, así
+      // que en la computadora de Ariel el botón "no hacía nada" y salía un texto sobre
+      // agregar la app a la pantalla de inicio — que fue lo que lo confundió.
+      const detalle = err instanceof Error ? `${err.name}: ${err.message}` : ''
+      setDetalleTecnico(detalle || null)
       setError(
-        'Este dispositivo no nos deja pedir el permiso. En iPhone tiene que ser iOS 16.4 o más nuevo, y el panel abierto desde el ícono de la pantalla de inicio.',
+        enIOS
+          ? 'Este iPhone no nos deja pedir el permiso. Tiene que ser iOS 16.4 o más nuevo, y el panel abierto desde el ícono de la pantalla de inicio.'
+          : 'Este navegador rechazó el pedido de permiso. Suele pasar cuando las notificaciones están bloqueadas para todos los sitios. Probá desde Chrome, o revisá los permisos del navegador.',
       )
       return
     }
@@ -140,7 +240,7 @@ function SeccionNotificaciones() {
       const clave = await obtenerClavePublica()
       const suscripcion = await crearSuscripcion(clave)
       await registrarSuscripcion(suscripcion)
-      setSuscripto(true)
+      setSuscripto('activado')
       setMensaje('Listo, ya te van a llegar los avisos a este dispositivo.')
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 503) {
@@ -164,7 +264,7 @@ function SeccionNotificaciones() {
     try {
       const endpoint = await desuscribirse()
       if (endpoint) await eliminarSuscripcion(endpoint)
-      setSuscripto(false)
+      setSuscripto('apagado')
       setMensaje('Listo, no vas a recibir más avisos en este dispositivo.')
     } catch {
       setError('No pudimos desactivar los avisos. Probá de nuevo.')
@@ -173,15 +273,40 @@ function SeccionNotificaciones() {
     }
   }
 
+  /** Prueba **local**: dibuja la notificación desde el propio navegador, sin pasar por
+   * el servidor ni por la red. Es lo que separa los dos modos de falla — si esta se ve y
+   * la de push no, lo que falla es la entrega (el servicio de push del sistema, el
+   * ahorro de batería, "aplicaciones en suspensión"), no el permiso. */
+  async function probarLocal() {
+    setError(null)
+    setMensaje(null)
+    setDetalleTecnico(null)
+    try {
+      await probarNotificacionLocal()
+      setMensaje(
+        'Si viste la notificación, las del sistema funcionan en este dispositivo.',
+      )
+    } catch (err) {
+      setDetalleTecnico(err instanceof Error ? `${err.name}: ${err.message}` : null)
+      setError('Este dispositivo no pudo mostrar ni siquiera una notificación local.')
+    }
+  }
+
   async function probar() {
     setError(null)
     setMensaje(null)
+    setDetalleTecnico(null)
     try {
-      const enviadas = await enviarPrueba()
+      const resultados = await enviarPrueba()
+      setEnvios(resultados)
+      const aceptados = resultados.filter((r) => r.ok).length
       setMensaje(
-        enviadas > 0
-          ? `Aviso de prueba enviado a ${enviadas} dispositivo${enviadas > 1 ? 's' : ''}.`
-          : 'No hay ningún dispositivo con los avisos activados.',
+        resultados.length === 0
+          ? 'No hay ningún dispositivo con los avisos activados.'
+          : // "Aceptado" y no "enviado": el servicio de push confirma que lo tomó, no
+            // que el celular lo haya mostrado. Decir "enviado" fue lo que nos hizo
+            // creer que andaba cuando en realidad no llegaba.
+            `El servicio de avisos aceptó el mensaje para ${aceptados} de ${resultados.length} dispositivo${resultados.length > 1 ? 's' : ''}. Si no lo ves aparecer, el problema está en el dispositivo, no en el servidor.`,
       )
     } catch {
       setError('No pudimos enviar la prueba.')
@@ -219,9 +344,21 @@ function SeccionNotificaciones() {
         </div>
       )}
 
+      {suscripto === 'desincronizado' && (
+        <div className="border-alerta bg-alerta-suave text-alerta mt-4 rounded-md border px-3 py-2 text-sm">
+          <p className="font-semibold">
+            Este dispositivo figura activado, pero el servidor no lo conoce.
+          </p>
+          <p className="mt-1">
+            No te van a llegar los avisos hasta que lo vuelvas a activar. Tocá
+            "Desactivar avisos" y después "Activar" de nuevo.
+          </p>
+        </div>
+      )}
+
       {soportado && !bloqueadoPorIOS && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          {suscripto ? (
+          {suscripto === 'activado' || suscripto === 'desincronizado' ? (
             <>
               <Button
                 variant="outline"
@@ -243,6 +380,11 @@ function SeccionNotificaciones() {
               {trabajando ? 'Activando…' : 'Activar avisos en este dispositivo'}
             </Button>
           )}
+          {soportado && (
+            <Button variant="ghost" onClick={() => void probarLocal()}>
+              Probar sin internet
+            </Button>
+          )}
         </div>
       )}
 
@@ -252,8 +394,66 @@ function SeccionNotificaciones() {
           {error}
         </div>
       )}
+      {detalleTecnico && (
+        <p className="text-tinta-tenue mt-2 font-mono text-xs break-all">
+          {detalleTecnico}
+        </p>
+      )}
+
+      {envios && envios.length > 0 && (
+        <div className="border-borde mt-4 border-t pt-3">
+          <p className="text-tinta-tenue mb-2 text-xs tracking-wide uppercase">
+            Resultado por dispositivo
+          </p>
+          <ul className="flex flex-col gap-1">
+            {envios.map((e, i) => (
+              <li key={i} className="text-tinta-suave text-sm">
+                <span className={e.ok ? 'text-bien' : 'text-alerta'}>
+                  {e.ok ? '✓' : '✗'}
+                </span>{' '}
+                {nombreDeDispositivo(e.userAgent)}{' '}
+                <span className="text-tinta-tenue">
+                  ({e.servicio}
+                  {e.estado ? `, ${e.estado}` : ''})
+                </span>
+                {e.error && (
+                  <span className="text-alerta"> — {e.error.slice(0, 80)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Card>
   )
+}
+
+/** El user agent completo es ilegible. Esto saca lo único que a Ariel le sirve para
+ * reconocer cuál de sus dispositivos es cada línea. */
+function nombreDeDispositivo(userAgent: string | null): string {
+  if (!userAgent) return 'Dispositivo sin identificar'
+  const sistema = /Android/i.test(userAgent)
+    ? 'Android'
+    : /iPhone|iPad/i.test(userAgent)
+      ? 'iPhone'
+      : /Windows/i.test(userAgent)
+        ? 'Windows'
+        : /Mac/i.test(userAgent)
+          ? 'Mac'
+          : 'Otro'
+  // El orden importa: Edge y Samsung Internet también dicen "Chrome" en su user agent.
+  const navegador = /Edg\//i.test(userAgent)
+    ? 'Edge'
+    : /SamsungBrowser/i.test(userAgent)
+      ? 'Samsung Internet'
+      : /Firefox/i.test(userAgent)
+        ? 'Firefox'
+        : /Chrome/i.test(userAgent)
+          ? 'Chrome'
+          : /Safari/i.test(userAgent)
+            ? 'Safari'
+            : 'navegador desconocido'
+  return `${navegador} en ${sistema}`
 }
 
 function SeccionUsuario() {
@@ -261,12 +461,25 @@ function SeccionUsuario() {
 
   return (
     <Card>
-      <p className="text-tinta-tenue text-xs tracking-wide uppercase">Usuario</p>
+      <p className="text-tinta-tenue text-xs tracking-wide uppercase">Cuenta</p>
       <p className="text-tinta mt-1 font-medium">
         {query.isPending && 'Cargando…'}
         {query.isError && 'No pudimos cargar tu cuenta.'}
         {query.data?.usuario}
       </p>
+      {/* El email va acá porque desde HU-26 **es con lo que se entra**. El nombre de
+          arriba dejó de ser la credencial, y si esta pantalla solo mostrara el nombre,
+          Ariel no tendría dónde ver qué tiene que tipear en el login. */}
+      {query.data && (
+        <p className="text-tinta-suave mt-1 text-sm">
+          Entrás con: {query.data.email ?? '— (sin email cargado)'}
+        </p>
+      )}
+      {query.data?.rol === 'super_admin' && (
+        <p className="text-miel mt-2 text-xs font-medium tracking-wide uppercase">
+          Administrador general
+        </p>
+      )}
     </Card>
   )
 }

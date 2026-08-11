@@ -92,7 +92,59 @@ export function configVapid(): ConfigVapid | null {
 
 /** URL pública del frontend, para armar links en los mails (HU-19). Sin barra final. */
 export function frontendUrl(): string {
-  return (process.env.FRONTEND_URL ?? 'http://localhost:5173').replace(/\/$/, '')
+  return (process.env.FRONTEND_URL ?? 'http://localhost:5173').replace(
+    /\/$/,
+    '',
+  )
+}
+
+export interface ConfigWhatsapp {
+  /** `null` cuando no hay credenciales: se usa el adaptador de consola. */
+  token: string | null
+  phoneNumberId: string | null
+  plantillaConfirmado: string
+  plantillaReprogramado: string
+  plantillaCancelado: string
+  idioma: string
+  version: string
+}
+
+/** Configuración de WhatsApp (HU-21).
+ *
+ * A diferencia de `configVapid()`, esta **nunca devuelve `null`**: los nombres de
+ * plantilla y el idioma hacen falta igual cuando no hay credenciales, porque el adaptador
+ * de consola los imprime. Lo que dice si hay canal real es `token`.
+ *
+ * Que se pueda correr sin credenciales es a propósito, por el mismo motivo que el mail:
+ * reservar no puede depender de que un proveedor externo esté configurado.
+ *
+ * El criterio todo-o-nada sobre las dos credenciales sí es el de `configVapid()`: media
+ * configuración es casi siempre un error de deploy, no una decisión, y sin este chequeo
+ * quedaría un canal que falla en silencio. */
+export function configWhatsapp(): ConfigWhatsapp {
+  const token = process.env.WHATSAPP_TOKEN || null
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || null
+
+  if (Boolean(token) !== Boolean(phoneNumberId)) {
+    throw new Error(
+      'Configuración de WhatsApp incompleta: hacen falta WHATSAPP_TOKEN y ' +
+        'WHATSAPP_PHONE_NUMBER_ID juntas (o ninguna de las dos). ' +
+        'Ver backend/.env.example.',
+    )
+  }
+
+  return {
+    token,
+    phoneNumberId,
+    plantillaConfirmado:
+      process.env.WHATSAPP_PLANTILLA_CONFIRMADO || 'turno_confirmado',
+    plantillaReprogramado:
+      process.env.WHATSAPP_PLANTILLA_REPROGRAMADO || 'turno_reprogramado',
+    plantillaCancelado:
+      process.env.WHATSAPP_PLANTILLA_CANCELADO || 'turno_cancelado',
+    idioma: process.env.WHATSAPP_IDIOMA || 'es_AR',
+    version: process.env.WHATSAPP_API_VERSION || 'v23.0',
+  }
 }
 
 /** Se llama una sola vez desde server.ts, antes de escuchar. Mejor que el deploy falle
@@ -100,4 +152,5 @@ export function frontendUrl(): string {
 export function validarEnvAlArrancar(): void {
   jwtSecret()
   configVapid()
+  configWhatsapp()
 }

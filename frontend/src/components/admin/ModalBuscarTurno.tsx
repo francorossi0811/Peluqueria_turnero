@@ -25,7 +25,7 @@ const ESTILO_ESTADO: Record<EstadoTurno, string> = {
   cancelado: 'bg-borde-suave text-tinta-tenue',
   reprogramado: 'bg-borde-suave text-tinta-tenue',
   realizado: 'bg-bien-suave text-bien',
-  ausente: 'bg-alerta-suave text-alerta',
+  ausente: 'bg-ausente-suave text-ausente',
 }
 
 const INPUT =
@@ -116,8 +116,10 @@ function FilaResultado({ turno }: { turno: TurnoAdmin }) {
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3">
       <div>
+        {/* Ver FilaTurno: el teléfono puede faltar en los turnos que carga Ariel. */}
         <p className="text-tinta font-medium">
-          {turno.clienteNombre} · {turno.clienteTelefono}
+          {turno.clienteNombre}
+          {turno.clienteTelefono && ` · ${turno.clienteTelefono}`}
         </p>
         <p className="text-tinta-suave text-sm">
           {turno.servicio.nombre} · {fechaLegible(turno.fecha)} · {turno.hora}

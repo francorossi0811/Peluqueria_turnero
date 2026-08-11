@@ -1,5 +1,6 @@
 import { Kicker } from './ui/Kicker'
 import { BTN_OUTLINE, BTN_GHOST } from './ui/estilosBoton'
+import { DIRECCION, TELEFONO_LEGIBLE, WHATSAPP_URL } from '../utils/contacto'
 import type { Servicio } from '../types/api'
 import type { UseQueryResult } from '@tanstack/react-query'
 
@@ -8,11 +9,10 @@ interface LandingProps {
   onElegir: (servicio: Servicio) => void
 }
 
-// Datos reales de contacto (los mismos que Franco cargó en el diseño original).
-const DIRECCION = 'Pastor Taboada 10, X5016 Córdoba'
-const TELEFONO = 'Tel / WhatsApp: 3514593325'
+// La dirección, el teléfono y el link de WhatsApp viven en `utils/contacto.ts`: los
+// comparte con la pantalla de gestión del turno.
+const TELEFONO = `Tel / WhatsApp: ${TELEFONO_LEGIBLE}`
 const HORARIO = 'Martes a sábado, 10 - 13hs y 17 - 20:30hs'
-const WHATSAPP_URL = 'https://wa.me/5493514593325'
 const MAPA_URL =
   'https://maps.google.com/maps?q=Pastor%20Taboada%2010%2C%20C%C3%B3rdoba%2C%20Argentina&z=16&output=embed'
 
@@ -23,18 +23,14 @@ function fotoStock(tags: string, w: number, h: number, lock: number): string {
   return `https://loremflickr.com/g/${w}/${h}/${tags}?lock=${lock}`
 }
 
-const FOTO_POR_SERVICIO: Record<string, string> = {
-  'Corte clásico': '/imagenes/servicio-corte.jpg',
-  Barba: '/imagenes/servicio-barba.jpg',
-  'Corte + Barba': '/imagenes/servicio-corte-barba.webp',
-  Color: '/imagenes/servicio-color.jpg',
-}
-
-function fotoParaServicio(nombre: string, lockPorDefecto: number): string {
-  return (
-    FOTO_POR_SERVICIO[nombre] ??
-    fotoStock('barber,haircut', 500, 650, lockPorDefecto)
-  )
+// La foto de cada servicio **viene de la base** (`servicios.foto`).
+//
+// Acá vivía un mapa `nombre → archivo`, y era un defecto: el nombre del servicio lo edita
+// Ariel desde el panel (HU-13), así que renombrar "Corte clásico" le borraba la foto en
+// silencio — la pantalla no fallaba, simplemente pasaba a mostrar una de stock y nada lo
+// avisaba. Ahora el vínculo es la fila del servicio y el nombre puede cambiar libremente.
+function fotoParaServicio(servicio: Servicio, lockPorDefecto: number): string {
+  return servicio.foto ?? fotoStock('barber,haircut', 500, 650, lockPorDefecto)
 }
 
 const PRODUCTOS = [
@@ -278,9 +274,19 @@ function ServicioCard({
       onClick={onClick}
       className="group relative block aspect-[3/4] overflow-hidden rounded-md text-left shadow-sm"
     >
+      {/* Si la foto propia no está (archivo que todavía no se subió, o nombre que no
+          coincide), se cae a la de stock en vez de dejar el ícono de imagen rota. Es una
+          pantalla que ve el cliente: una foto genérica es un default, una imagen rota
+          parece un sitio abandonado. */}
       <img
-        src={fotoParaServicio(servicio.nombre, lock)}
+        src={fotoParaServicio(servicio, lock)}
         alt={servicio.nombre}
+        onError={(e) => {
+          const img = e.currentTarget
+          const respaldo = fotoStock('barber,haircut', 500, 650, lock)
+          // Sin la guarda, una stock que también falle entraría en un bucle de errores.
+          if (img.src !== respaldo) img.src = respaldo
+        }}
         className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />

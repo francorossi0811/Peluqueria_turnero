@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { Navigate, useNavigate } from 'react-router-dom'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
-import { login } from '../../api/auth'
-import { setToken } from '../../lib/authStorage'
+import {
+  login,
+  olvidePassword,
+  recuperacionDisponible,
+} from '../../api/auth'
+import { getTokenValido, setToken } from '../../lib/authStorage'
 import { Button } from '../../components/ui/Button'
 
 // Antes mostrábamos "Usuario o contraseña incorrectos." ante cualquier fallo, lo que
@@ -11,27 +15,60 @@ import { Button } from '../../components/ui/Button'
 // realidad el backend estaba caído.
 function mensajeDeError(err: unknown): string {
   if (isAxiosError(err) && err.response?.status === 401) {
-    return 'Usuario o contraseña incorrectos.'
+    return 'Email o contraseña incorrectos.'
   }
   return 'No pudimos conectar con el servidor. Probá de nuevo en un momento.'
 }
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const [usuario, setUsuario] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [olvide, setOlvide] = useState(false)
+
+  // Ya logueado: esta pantalla no tiene nada que hacer. Es el espejo de `RequireAuth`, y
+  // lo que evita que la flechita de atrás de Chrome parezca un cierre de sesión: la
+  // entrada del login sigue en el historial del navegador aunque la sesión esté viva, y
+  // sin esto Ariel veía el formulario de ingreso y daba por hecho que lo había echado.
+  const yaLogueado = Boolean(getTokenValido())
+
+  // HU-26 — El botón de recuperación solo existe si el servidor puede mandar mails de
+  // verdad. Sin cuenta de Brevo el mail se imprime en el log del servidor: el botón le
+  // prometería a Ariel algo que no va a pasar, y encima justo cuando ya no puede entrar.
+  const recuperacionQuery = useQuery({
+    queryKey: ['recuperacion-disponible'],
+    queryFn: recuperacionDisponible,
+    staleTime: 60 * 60 * 1000,
+    // Si el chequeo falla no se muestra el botón: ante la duda, no prometer nada.
+    retry: false,
+  })
 
   const loginMutation = useMutation({
-    mutationFn: () => login(usuario, password),
+    mutationFn: () => login(email, password),
     onSuccess: (token) => {
       setToken(token)
-      navigate('/admin')
+      // `replace` y no un push: el login no tiene que quedar en el historial. Si queda,
+      // la flechita de atrás lo trae de vuelta y parece que la sesión se cayó.
+      navigate('/admin', { replace: true })
     },
   })
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     loginMutation.mutate()
+  }
+
+  // Después de los hooks a propósito: React los pide siempre en el mismo orden, así que
+  // el corte por sesión activa no puede ir arriba de todo.
+  if (yaLogueado) return <Navigate to="/admin" replace />
+
+  if (olvide) {
+    return (
+      <OlvidePassword
+        emailInicial={email}
+        onVolver={() => setOlvide(false)}
+      />
+    )
   }
 
   return (
@@ -47,13 +84,15 @@ export function LoginPage() {
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-              Usuario
+              Email
             </span>
             <input
               required
               autoFocus
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
             />
           </label>
@@ -64,6 +103,7 @@ export function LoginPage() {
             <input
               required
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
@@ -84,7 +124,105 @@ export function LoginPage() {
           >
             {loginMutation.isPending ? 'Ingresando…' : 'Ingresar'}
           </Button>
+
+          {recuperacionQuery.data && (
+            <button
+              type="button"
+              onClick={() => setOlvide(true)}
+              className="text-tinta-suave hover:text-tinta mt-1 text-center text-sm underline"
+            >
+              Me olvidé la contraseña
+            </button>
+          )}
         </div>
+      </form>
+    </main>
+  )
+}
+
+/** HU-26 — Pedir el link de restablecimiento.
+ *
+ * El mensaje de éxito es el mismo exista o no la cuenta, y el backend responde igual: si
+ * cambiara, esta pantalla sería una forma de averiguar qué direcciones tienen cuenta en el
+ * panel. Por eso dice "si esa dirección tiene una cuenta" y no "listo, te lo mandamos". */
+function OlvidePassword({
+  emailInicial,
+  onVolver,
+}: {
+  emailInicial: string
+  onVolver: () => void
+}) {
+  const [email, setEmail] = useState(emailInicial)
+
+  const mutation = useMutation({
+    mutationFn: () => olvidePassword(email),
+  })
+
+  return (
+    <main className="bg-fondo flex min-h-screen items-center justify-center px-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          mutation.mutate()
+        }}
+        className="w-full max-w-sm"
+      >
+        <p className="text-tinta-suave mb-1 text-center text-xs font-medium tracking-wide uppercase">
+          La Peluquería de Ariel Enrique
+        </p>
+        <h1 className="font-hero text-tinta mb-2 text-center text-[clamp(22px,3vw,28px)] font-extrabold">
+          Restablecer la contraseña
+        </h1>
+        <p className="text-tinta-suave mb-6 text-center text-sm">
+          Poné tu email y te mandamos un link para elegir una nueva.
+        </p>
+
+        {mutation.isSuccess ? (
+          <div className="flex flex-col gap-3">
+            <div className="border-bien bg-bien-suave text-bien rounded-md border px-3 py-2 text-sm">
+              {mutation.data}
+            </div>
+            <p className="text-tinta-tenue text-center text-xs">
+              El link vale 30 minutos y se puede usar una sola vez.
+            </p>
+            <Button type="button" variant="outline" onClick={onVolver}>
+              Volver al ingreso
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+                Email
+              </span>
+              <input
+                required
+                autoFocus
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+              />
+            </label>
+
+            {mutation.isError && (
+              <div className="border-vino bg-vino-suave text-vino rounded-md border px-3 py-2 text-sm">
+                No pudimos procesar el pedido. Probá de nuevo.
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              variant="primaryVino"
+              disabled={mutation.isPending}
+            >
+              {mutation.isPending ? 'Enviando…' : 'Mandarme el link'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={onVolver}>
+              Volver
+            </Button>
+          </div>
+        )}
       </form>
     </main>
   )

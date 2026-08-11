@@ -57,9 +57,16 @@ export function ModalEditarTurno({ turno, onClose }: ModalEditarTurnoProps) {
   })
 
   return (
-    <Modal titulo="Editar turno" onClose={onClose}>
+    // "Reprogramar" y no "Editar" (que es como se llama HU-09 puertas adentro): es la
+    // palabra que usa Ariel, y lo que la pantalla hace es mover el turno a otro horario.
+    // Mecánicamente no es lo mismo que el reprogramar del cliente —acá se mueve el mismo
+    // turno, no se crea uno nuevo enlazado— pero esa diferencia es del modelo de datos,
+    // no de lo que él está haciendo.
+    <Modal titulo="Reprogramar turno" onClose={onClose}>
+      {/* El apodo primero, igual que en el detalle del turno: si el modal anterior decía
+          "Roja" y este dice "Prueba", parece que se cambió de cliente en el medio. */}
       <p className="text-tinta-suave mb-1 text-sm">
-        {turno.servicio.nombre} · {turno.clienteNombre}
+        {turno.servicio.nombre} · {turno.cliente?.apodo || turno.clienteNombre}
       </p>
       <p className="text-tinta-tenue mb-4 text-sm">
         Actualmente: {fechaLegible(turno.fecha)} · {turno.hora}

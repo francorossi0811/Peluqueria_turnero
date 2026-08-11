@@ -4,29 +4,36 @@ import {
   buscarTurnos,
   cancelarTurno,
   cancelarTurnoAdmin,
-  contarNuevosDespuesDe,
+  cargarTelefonoDelTurno,
+  idsNuevosDespuesDe,
   crearTurno,
   editarTurno,
+  esCobrable,
   estaDentroDeVentanaDeCambio,
   guardarEmailDelCliente,
   listarTurnosEnRango,
   marcarTurno,
   marcarTurnosComoVistos,
   obtenerTurno,
+  registrarCobro,
   reprogramarTurno,
 } from '../services/turnos.service'
+import { clienteDto, type TurnoConCliente } from '../services/clientes.service'
 import {
   FueraDeVentanaError,
   HorarioNoDisponibleError,
   ServicioNoDisponibleError,
+  TurnoNoCobrableError,
   TurnoNoEncontradoError,
   TurnoNoModificableError,
   TurnoYaTieneEmailError,
 } from '../services/errores'
 import {
+  enviarAvisoDeCancelacion,
   enviarConfirmacionDeTurno,
   icsDeTurno,
   notificarNuevoTurno,
+  notificarTurnoCancelado,
 } from '../services/notificaciones.service'
 import {
   ahoraArgentina,
@@ -71,8 +78,26 @@ const reprogramarSchema = z.object({
 })
 
 // HU-08: 'online' es exclusivo del flujo público, nunca de la carga manual de Ariel.
+//
+// El teléfono se **sobrescribe** para hacerlo opcional. Es la única diferencia de
+// validación entre los dos flujos, y va acá y no en `bodySchema` a propósito: al cliente
+// que reserva por la web se le sigue exigiendo, porque es el único dato con el que Ariel
+// lo puede ubicar si algo cambia. Ariel, en cambio, muchas veces está cargando un turno
+// con la persona sentada enfrente y no se sabe el número de memoria.
+//
+// El `preprocess` es el mismo molde que usa `clienteEmail`: el input vacío del panel
+// llega como `""`, y sin esto no pasaría la validación en vez de significar "no lo sé".
+// Lo que **no** cambia: si escribió algo, tiene que ser un teléfono válido.
 const bodyManualSchema = bodySchema.extend({
   origen: z.enum(['telefono', 'whatsapp']),
+  clienteTelefono: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z
+      .string()
+      .trim()
+      .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
+      .optional(),
+  ),
 })
 
 // HU-09: mismos fecha/hora que reprogramar, pero sin servicioId (no cambia el servicio).
@@ -81,10 +106,27 @@ const editarSchema = z.object({
   hora: horaSchema,
 })
 
-// HU-12
-const estadoSchema = z.object({
-  estado: z.enum(['realizado', 'ausente']),
+// HU-27 — El cobro. Los dos campos van juntos o no va ninguno: un medio de pago sin
+// monto no suma en ningún total, y un monto sin medio no aparece en ningún desglose.
+const cobroSchema = z.object({
+  medioPago: z.enum(['efectivo', 'transferencia', 'mercado_pago', 'tarjeta']),
+  montoCobrado: z
+    .int('El monto va en pesos enteros.')
+    .nonnegative('El monto no puede ser negativo.')
+    .max(10_000_000, 'Monto demasiado alto.'),
 })
+
+// HU-12 + HU-27. La regla de qué se puede cobrar vive en el service (`esCobrable`), no
+// duplicada acá: el request se rechaza con el mismo criterio con el que el service se
+// negaría igual.
+export const estadoSchema = z
+  .object({
+    estado: z.enum(['realizado', 'ausente']),
+    cobro: cobroSchema.optional(),
+  })
+  .refine((d) => !d.cobro || esCobrable(d.estado), {
+    message: 'Un turno ausente no se cobra.',
+  })
 
 const idSchema = z.object({ id: z.uuid() })
 
@@ -118,7 +160,11 @@ function turnoADto(turno: Turno) {
 }
 
 // Vista de admin: además de lo público, Ariel necesita ver quién es y cómo contactarlo.
-function turnoAdminDto(turno: Turno) {
+//
+// `cliente` es la ficha (HU-25) y viaja hasta acá porque la grilla de la semana dibuja las
+// insignias de color sin abrir nada: pedirlas aparte sería una consulta por turno. Es
+// `null` cuando el turno no tiene teléfono y por lo tanto no tiene ficha.
+function turnoAdminDto(turno: TurnoConCliente) {
   return {
     ...turnoADto(turno),
     horaFin: formatearHora(turno.horaFin),
@@ -127,6 +173,12 @@ function turnoAdminDto(turno: Turno) {
     clienteEmail: turno.clienteEmail,
     origen: turno.origen,
     vistoPorAdmin: turno.vistoPorAdmin,
+    cliente: turno.cliente ? clienteDto(turno.cliente) : null,
+    // HU-27 — Solo en el DTO de admin. `turnoADto`, que es el que ve el cliente en su
+    // link de gestión, no los lleva: el precio es interno.
+    medioPago: turno.medioPago,
+    montoCobrado: turno.montoCobrado,
+    cobradoEn: turno.cobradoEn ? turno.cobradoEn.toISOString() : null,
   }
 }
 
@@ -177,6 +229,16 @@ function manejarErroresComunes(err: unknown, res: Response): boolean {
         codigo: 'FUERA_DE_VENTANA_CANCELACION',
         mensaje:
           'Ya no podés cancelar ni reprogramar online. Contactá directamente a Ariel.',
+      },
+    })
+    return true
+  }
+  // HU-27
+  if (err instanceof TurnoNoCobrableError) {
+    res.status(409).json({
+      error: {
+        codigo: 'TURNO_NO_COBRABLE',
+        mensaje: 'Solo se le registra el cobro a un turno realizado.',
       },
     })
     return true
@@ -371,6 +433,12 @@ export async function postCancelarTurno(req: Request, res: Response) {
   try {
     const turno = await cancelarTurno(parsed.data.id)
     res.json(turnoADto(turno))
+
+    // Dos destinatarios distintos: al cliente el comprobante de que la baja entró, y a
+    // Ariel el aviso de que se le liberó ese horario. Sin lo segundo, una cancelación
+    // hecha desde el link solo se ve mirando la agenda.
+    void enviarAvisoDeCancelacion(turno)
+    void notificarTurnoCancelado(turno)
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
     throw err
@@ -449,11 +517,14 @@ export async function getAgenda(req: Request, res: Response) {
   const horizonte = new Date(
     hastaFecha.getTime() + Math.max(largoRangoMs, 7 * 86_400_000),
   )
-  const nuevosMasAdelante = await contarNuevosDespuesDe(hastaFecha, horizonte)
+  const idsMasAdelante = await idsNuevosDespuesDe(hastaFecha, horizonte)
 
   res.json({
     turnos: turnos.map(turnoAdminDto),
-    nuevosMasAdelante,
+    // Los ids y no solo el contador: sin ellos el panel puede avisar que hay turnos
+    // nuevos más adelante pero no dejar marcarlos como vistos sin navegar hasta ahí.
+    idsMasAdelante,
+    nuevosMasAdelante: idsMasAdelante.length,
     hastaMasAdelante: formatearFecha(horizonte),
   })
 }
@@ -498,6 +569,49 @@ export async function postCancelarTurnoAdmin(req: Request, res: Response) {
   try {
     const turno = await cancelarTurnoAdmin(parsed.data.id)
     res.json(turnoAdminDto(turno))
+
+    // Acá no hay push (Ariel no se avisa a sí mismo), pero el aviso al cliente es todavía
+    // más necesario que en la baja del cliente: es la única forma de que se entere de que
+    // no lo esperan.
+    void enviarAvisoDeCancelacion(turno)
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+// HU-25 — Cargarle el teléfono a un turno que se guardó sin él (HU-08), para que entre a
+// las fichas. Acá el teléfono es obligatorio: el endpoint existe para completarlo, así
+// que vaciarlo no es un caso de uso — para eso está no llamarlo.
+const telefonoSchema = z.object({
+  clienteTelefono: z
+    .string()
+    .trim()
+    .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO),
+})
+
+export async function patchTelefonoTurno(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = telefonoSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  try {
+    const turno = await cargarTelefonoDelTurno(
+      idParsed.data.id,
+      bodyParsed.data.clienteTelefono,
+    )
+    res.json(turnoAdminDto(turno))
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
     throw err
@@ -522,7 +636,37 @@ export async function patchEstadoTurno(req: Request, res: Response) {
   }
 
   try {
-    const turno = await marcarTurno(idParsed.data.id, bodyParsed.data.estado)
+    const turno = await marcarTurno(
+      idParsed.data.id,
+      bodyParsed.data.estado,
+      bodyParsed.data.cobro,
+    )
+    res.json(turnoAdminDto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+// HU-27 — Cargarle o corregirle el cobro a un turno ya realizado.
+export async function patchCobroTurno(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = cobroSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  try {
+    const turno = await registrarCobro(idParsed.data.id, bodyParsed.data)
     res.json(turnoAdminDto(turno))
   } catch (err) {
     if (manejarErroresComunes(err, res)) return

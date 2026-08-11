@@ -48,6 +48,17 @@
 |---|---|---|
 | GET | `/api/servicios` | Lista los servicios **activos** (para elegir en el flujo de reserva, HU-01) |
 
+Devuelve `id`, `nombre`, `duracionMinutos` y `foto` (la imagen de la landing; `null` cae a
+una de stock).
+
+⚠️ **No lleva `precio`, y eso es una promesa y no un olvido** (HU-27). El precio es un dato
+interno de Ariel y viaja solo por `/api/admin/servicios`. El controller mapea campo por
+campo justamente para que agregarle una columna al modelo no la publique sola — y que
+`foto` haya quedado adentro y `precio` afuera, siendo las dos columnas nuevas del mismo
+modelo, es exactamente lo que esa lista explícita obliga a decidir en vez de dejarlo al
+descuido. Lo mismo con `GET /api/turnos/:id`, el link de gestión del cliente: no lleva ni
+el medio de pago ni el monto.
+
 ### Disponibilidad — CU-04
 
 | Método | Ruta | Descripción |
@@ -77,7 +88,10 @@ cliente algo útil en vez del mismo "no hay turnos" para todo:
 | `bloqueado` | Ariel bloqueó el día completo; `motivo` trae lo que él escribió, si escribió algo |
 | `completo` | atiende, pero no quedó ningún hueco libre |
 
-`motivo` es `null` salvo en `feriado` y `bloqueado`. Un bloqueo parcial (solo unas horas)
+`motivo` es `null` salvo en `feriado`, `bloqueado` y —desde HU-24— en un día
+`disponible` o `completo` que sea **feriado de medio día**: ahí trae el nombre del feriado
+y el horario recortado ("Día del Trabajador: atendemos de 10:00 a 13:00."), porque si no el
+cliente ve la mitad de los horarios de siempre y no entiende por qué. Un bloqueo parcial (solo unas horas)
 no cambia el estado del día: si quedan huecos sigue siendo `disponible`, y si no queda
 ninguno el día figura como `completo`.
 
@@ -99,8 +113,14 @@ reprogramar, porque reprogramar genera un turno nuevo y por lo tanto un link nue
 
 `clienteTelefono` se valida contra la regla de `backend/src/utils/validaciones.ts`:
 dígitos, espacios, guiones, paréntesis y un `+` inicial, con entre 8 y 15 dígitos. Lo que
-no la cumple responde `400 PARAMETROS_INVALIDOS`. Vale igual para la carga manual de
-Ariel (`POST /api/admin/turnos`), que extiende el mismo schema.
+no la cumple responde `400 PARAMETROS_INVALIDOS`.
+
+**Obligatorio acá, opcional en `POST /api/admin/turnos`** (HU-08). El cliente que reserva
+por la web tiene que dejarlo, porque es el único dato con el que Ariel lo puede ubicar;
+Ariel, en cambio, carga turnos con la persona enfrente y sin saberse el número. El schema
+de la carga manual **sobrescribe** ese campo en vez de que el público lo afloje, así que
+la regla estricta sigue siendo la del flujo público. Vacío significa "no lo sé" y se
+guarda como `null`; si viene algo, tiene que ser válido igual.
 
 **POST `/api/turnos`** — body:
 ```json
@@ -121,6 +141,10 @@ minutos:
 ```json
 { "error": { "codigo": "FUERA_DE_VENTANA_CANCELACION", "mensaje": "Ya no podés cancelar online. Contactá directamente a Ariel." } }
 ```
+Después de responder dispara dos avisos (HU-22, HU-18), los dos "fire and forget": al
+cliente el mensaje de cancelación y a Ariel el push de que se liberó el horario. El de
+admin (`/api/admin/turnos/:id/cancelar`) manda solo el primero — Ariel no se avisa a sí
+mismo.
 
 **POST `/api/turnos/:id/enviar-confirmacion`** — body `{ "email": "juana@gmail.com" }`.
 Guarda el email en el turno y le manda la confirmación con el link y el `.ics`. Response
@@ -151,9 +175,86 @@ nuevo (mismo shape que el POST de creación).
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/auth/login` | `{ "usuario": "...", "password": "..." }` → `{ "token": "<jwt>" }`. Credenciales incorrectas: `401 CREDENCIALES_INVALIDAS` (no distingue usuario inexistente de contraseña incorrecta) |
-| GET | `/api/admin/me` | `{ "usuario": "ariel" }` — la cuenta del admin logueado |
+| POST | `/api/auth/login` | `{ "email": "...", "password": "..." }` → `{ "token": "<jwt>" }`. Credenciales incorrectas: `401 CREDENCIALES_INVALIDAS` (no distingue cuenta inexistente de contraseña incorrecta) |
+| GET | `/api/auth/recuperacion-disponible` | **Público.** `{ "disponible": true }` si el servidor puede mandar mails (HU-26) |
+| POST | `/api/auth/olvide-password` | **Público.** `{ "email": "..." }` → `200` con un mensaje genérico, **exista o no la cuenta** |
+| POST | `/api/auth/restablecer-password` | **Público.** `{ "token": "...", "passwordNueva": "..." }` → `{ "token": "<jwt de sesión>" }` |
+| GET | `/api/admin/me` | `{ "usuario": "Ariel", "email": "...", "rol": "admin" }` — la cuenta logueada |
 | PATCH | `/api/admin/password` | `{ "passwordActual": "...", "passwordNueva": "..." }` → `{ "token": "<jwt nuevo>" }` (HU-16) |
+
+### Login por email y recuperación — HU-26
+
+**La credencial es el email**, no el usuario: `usuario` quedó como el nombre que se
+muestra en el panel. Son dos cosas distintas y estaban mezcladas en el mismo campo.
+
+Las tres rutas de recuperación son **públicas por definición**: quien las llama es
+justamente alguien que no puede entrar. La protección no es la autenticación sino:
+
+- **`/olvide-password` responde lo mismo exista o no la cuenta.** Si la respuesta cambiara,
+  el endpoint sería una forma de averiguar qué direcciones tienen cuenta en el panel. Es el
+  mismo motivo por el que el login no distingue "no existe" de "contraseña incorrecta". El
+  mail se manda después de responder y sin `await`, como los avisos de turno.
+- **El token del mail está firmado con el secreto global más el hash actual de la
+  contraseña**, así que se invalida solo al usarse: `400 TOKEN_DE_RESET_INVALIDO`. Vence a
+  los 30 minutos. No hay tabla de tokens.
+
+`/recuperacion-disponible` existe para que el login sepa si mostrar el botón. Sin cuenta de
+mail configurada el mensaje se imprime en el log del servidor, y un botón que promete un
+mail que no llega es peor que no tener botón — sobre todo apareciendo justo cuando la
+persona ya no puede entrar. Lo único que expone es un booleano sobre la configuración del
+servidor.
+
+`/restablecer-password` devuelve un **token de sesión**: quien probó tener acceso a ese
+mail y eligió una contraseña ya está autenticado, y mandarlo al login a tipear lo que
+escribió hace dos segundos no agrega seguridad.
+
+### Administración de cuentas — HU-26 (solo `super_admin`)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/administradores` | Las cuentas: nombre, email, rol, cuándo se creó y cuándo cambió la contraseña |
+| POST | `/api/admin/administradores` | `{ "usuario", "email", "password", "rol" }` |
+| PATCH | `/api/admin/administradores/:id` | `{ "usuario"?, "email"? }` → `204`. Corrige el nombre o el email |
+| PATCH | `/api/admin/administradores/:id/password` | `{ "passwordNueva": "..." }` → `204`. Le fija la contraseña a otra cuenta |
+| PATCH | `/api/admin/administradores/:id/rol` | `{ "rol": "super_admin" \| "admin" }` → `204` |
+| DELETE | `/api/admin/administradores/:id` | Borra la cuenta → `204` |
+
+Un `admin` que las llame recibe `403 NO_AUTORIZADO`. **Esconder la sección en el panel es
+comodidad, no seguridad**: la que decide es `requireSuperAdmin` en el backend.
+
+`PATCH …/password` es la recuperación que **no depende de que el mail salga**, y por eso
+existe: mientras no haya cuenta de mail configurada, el link de "me olvidé la contraseña"
+no llega a ningún lado, y sin esto la única salida sería entrar a la base a mano. Escribe
+`password_changed_at`, o sea que cierra las sesiones abiertas de esa cuenta — que es lo que
+uno quiere cuando le resetea la contraseña a alguien.
+
+**`PATCH /:id` existe porque un email cargado no se podía cambiar por ningún lado.** El
+seed solo lo completa cuando está vacío, así que un mail mal tipeado —o un placeholder
+puesto durante el desarrollo— quedaba clavado, y como el login es por email eso deja la
+cuenta inutilizable sin entrar a la base a mano. A diferencia de los otros dos, **sí se
+puede sobre la cuenta propia**: corregirse el mail no es un privilegio que se pueda abusar
+(hay que estar logueado igual), y prohibirlo dejaría al super admin sin forma de arreglar
+su propia dirección. No toca la contraseña ni cierra sesiones: cambiar el email no cambia
+quién es la persona.
+
+**El `DELETE` borra de verdad, no desactiva.** Un turno nunca se borra porque otras filas
+lo referencian; una cuenta de administrador **no está referenciada por ninguna tabla**
+(`administradores` no tiene relaciones, y `push_suscripciones` a propósito tampoco), así
+que borrarla no deja ningún registro incompleto atrás. Mismo criterio que las etiquetas de
+HU-25.
+
+**Sus sesiones mueren solas**: `requireAuth` responde `401 TOKEN_INVALIDO` cuando la fila
+del token ya no existe. Verificado — el mismo token que devolvía `200` pasa a `401` apenas
+se borra la cuenta.
+
+Los `PATCH` de contraseña y rol y el `DELETE` responden `403 NO_AUTORIZADO` sobre la
+**cuenta propia**. En el `DELETE` ese único candado alcanza para no quedarse sin
+administrador general: el que llama siempre es un `super_admin` y no puede ser el borrado,
+así que después de cualquier borrado queda al menos uno. El `PATCH` de rol sí necesita
+además el chequeo del "último `super_admin`", porque ahí el que se degrada puede ser otro. Los dos candados son contra el
+mismo accidente —quedarse sin nadie que pueda administrar cuentas— que no tendría arreglo
+desde la aplicación. Para cambiarse la contraseña de uno mismo está `PATCH
+/api/admin/password`, que pide la actual.
 
 Sobre `PATCH /api/admin/password`:
 
@@ -180,11 +281,54 @@ Sobre `PATCH /api/admin/password`:
 | POST | `/api/admin/turnos` | Carga manual de un turno (HU-08); body igual al público más `"origen": "telefono" \| "whatsapp"` |
 | PATCH | `/api/admin/turnos/:id` | Mover un turno a otro horario (HU-09), sin límite de 60 min |
 | POST | `/api/admin/turnos/:id/cancelar` | Cancela sin límite de 60 min (HU-10) |
-| PATCH | `/api/admin/turnos/:id/estado` | `{ "estado": "realizado" \| "ausente" }` (HU-12) |
+| PATCH | `/api/admin/turnos/:id/estado` | `{ "estado": "realizado" \| "ausente" }`, más un `cobro` opcional (HU-12, HU-27) |
 | POST | `/api/admin/turnos/marcar-vistos` | `{ "ids": ["<uuid>", …] }` → `{ "marcados": n }`. Apaga la marca "Nuevo" (HU-17) |
+| PATCH | `/api/admin/turnos/:id/telefono` | `{ "clienteTelefono": "351 459 3325" }` — le carga el teléfono a un turno que se guardó sin él (HU-08) y lo engancha con su ficha (HU-25) |
+| PATCH | `/api/admin/turnos/:id/cobro` | `{ "medioPago": "efectivo", "montoCobrado": 9500 }` — le carga o le corrige el cobro a un turno **ya realizado** (HU-27) |
 
-Los turnos en la vista de admin incluyen además `vistoPorAdmin` (HU-17) y `clienteEmail`
-(HU-19). Los que se cargan por `POST /api/admin/turnos` nacen con `vistoPorAdmin: true`:
+Sobre `PATCH …/telefono`: va en un endpoint propio y no dentro de `PATCH
+/api/admin/turnos/:id` a propósito. Aquel mueve el turno en el tiempo y tiene que
+revalidar disponibilidad; esto solo completa un dato de contacto y no puede pisarle el
+horario a nadie. Mezclarlos obligaría a mandar fecha y hora para corregir un número. Acá
+el teléfono es **obligatorio** —el endpoint existe para completarlo, así que vaciarlo no
+es un caso de uso— y no filtra por estado: un turno ya realizado es justo donde más ganas
+hay de completar el número, porque la persona ya vino.
+
+**El cobro viaja dentro del `PATCH …/estado` (HU-27)**, no en una llamada aparte:
+
+```json
+{ "estado": "realizado", "cobro": { "medioPago": "efectivo", "montoCobrado": 9500 } }
+```
+
+Es un solo gesto de Ariel —toca "Realizado", elige el medio— y por lo tanto una sola
+escritura: partirlo en dos requests dejaría la puerta abierta a que el segundo falle y el
+turno quede marcado sin cobro sin que nadie se entere. `cobro` es **opcional**: se puede
+marcar Realizado sin registrarlo y completarlo después.
+
+`medioPago` es uno de `efectivo | transferencia | mercado_pago | tarjeta`, y `montoCobrado`
+va en **pesos enteros** (un decimal responde `400`).
+
+**Un `cobro` con `"estado": "ausente"` responde `400`**, y `PATCH …/cobro` sobre un turno
+que no está `realizado` responde `409 TURNO_NO_COBRABLE`. El que no vino no pagó, y un
+cancelado nunca llegó a ocurrir: aceptarles un cobro dejaría entrar plata que no existe y
+los totales dejarían de cerrar contra la caja.
+
+Sobre `PATCH …/cobro`: existe por el mismo motivo que `PATCH …/telefono`. Si el cobro solo
+se pudiera registrar en el momento de marcar Realizado, un turno marcado a las apuradas
+quedaría fuera de los totales para siempre. Registrar dos veces **corrige**, no duplica.
+
+Los turnos en la vista de admin incluyen además `vistoPorAdmin` (HU-17), `clienteEmail`
+(HU-19), `cliente` (HU-25) y el cobro (HU-27: `medioPago`, `montoCobrado`, `cobradoEn`,
+los tres `null` mientras no se haya registrado):
+
+```json
+{ "cliente": { "id": "uuid", "telefono": "+5493514593325", "apodo": "Flaco", "nombre": "Juan Pérez",
+               "notas": "Degradé bajo.", "etiquetas": [ { "id": "uuid", "nombre": "VIP", "color": "#b68235" } ] } }
+```
+
+`cliente` es `null` cuando el turno no tiene teléfono. Viaja **dentro del turno** y no se
+pide aparte porque la grilla de la semana dibuja las insignias de todos los turnos a la
+vez: pedirlas por separado sería una consulta por turno en pantalla. Los que se cargan por `POST /api/admin/turnos` nacen con `vistoPorAdmin: true`:
 no tiene sentido marcarle como nuevo a Ariel algo que acaba de escribir él.
 
 `GET /api/admin/turnos` devuelve, junto a `turnos`, un contador de lo que **no** está en
@@ -205,21 +349,132 @@ la semanal, de "la semana que viene".
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/admin/push/clave-publica` | `{ "clavePublica": "<VAPID>" }`. `503 PUSH_NO_CONFIGURADO` si el servidor no tiene claves VAPID |
-| POST | `/api/admin/push/suscripciones` | Body: el `PushSubscription.toJSON()` del navegador. Idempotente por `endpoint` |
+| POST | `/api/admin/push/suscripciones` | Body: el `PushSubscription.toJSON()` del navegador. Idempotente por `endpoint`. Guarda el `User-Agent` para poder identificar el dispositivo |
 | DELETE | `/api/admin/push/suscripciones` | `{ "endpoint": "..." }` |
-| POST | `/api/admin/push/prueba` | Manda un aviso de prueba → `{ "enviadas": n }` |
+| POST | `/api/admin/push/prueba` | Manda un aviso de prueba → `{ "dispositivos": [...] }` |
+| GET | `/api/admin/push/dispositivos` | Los dispositivos registrados y el resultado de su último envío. Cada uno trae una `huella` (hash del endpoint) para que el panel reconozca **el suyo** — sin eso no puede detectar que el navegador cree estar suscripto y el servidor no lo conoce. Es un hash y no el endpoint entero porque la URL del endpoint funciona como credencial (ver `/api/push/renovar`) |
+| POST | **`/api/push/renovar`** | **Sin autenticación** — ver abajo. `{ endpointViejo, suscripcion }` → `200 { ok: true }`, o `404 SUSCRIPCION_NO_ENCONTRADA` |
 
 La clave pública se sirve por API y no se compila dentro del frontend a propósito: una
 copia de build-time se desincroniza de la del servidor sin que nadie lo note, y genera
 suscripciones a las que después no se les puede enviar nada.
 
+**`/prueba` devuelve el detalle por dispositivo, no un contador**, y la distinción
+importa:
+
+```json
+{ "dispositivos": [
+  { "servicio": "fcm.googleapis.com", "userAgent": "…", "estado": 201, "ok": true,  "error": null },
+  { "servicio": "fcm.googleapis.com", "userAgent": null,  "estado": 403, "ok": false, "error": "…" }
+] }
+```
+
+`ok: true` significa que el servicio de push **aceptó** el mensaje, no que el celular lo
+haya mostrado — de ahí en más decide el sistema operativo del dispositivo. El contador
+anterior (`{ "enviadas": n }`) decía lo mismo en los dos casos, y por eso una suscripción
+rota con claves VAPID viejas quedó invisible durante semanas.
+
+**`POST /api/push/renovar` no lleva autenticación, y es deliberado.** Lo llama el service
+worker desde el evento `pushsubscriptionchange`, que se dispara cuando el navegador rota
+la suscripción por su cuenta: ese evento corre **sin el JWT de Ariel** y puede ocurrir con
+el panel cerrado, así que ni un header de autorización ni un mensaje a la página son
+opciones. La autorización es **conocer `endpointViejo`**: es una URL larga que asigna el
+servicio de push y no se puede adivinar, el mismo criterio con el que el id de un turno
+funciona como token del link del cliente. Si ese endpoint no está en la base, responde 404
+y **no crea nada** — sin ese chequeo sería un alta abierta de suscripciones arbitrarias.
+
+### Clientes y etiquetas — HU-25
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/clientes?buscar=&etiquetaId=` | Las fichas, con visitas, última visita y próximo turno |
+| GET | `/api/admin/clientes/:id` | La ficha más su historial completo de turnos |
+| PATCH | `/api/admin/clientes/:id` | `{ "apodo", "notas", "etiquetaIds": [...] }`, los tres opcionales |
+| GET | `/api/admin/etiquetas` | Las etiquetas configuradas |
+| POST | `/api/admin/etiquetas` | `{ "nombre", "color": "#rrggbb" }` |
+| PATCH | `/api/admin/etiquetas/:id` | Renombrar o recolorear |
+| DELETE | `/api/admin/etiquetas/:id` | Borra la etiqueta y sus asignaciones (`204`) |
+
+**El `buscar` pega contra apodo, nombre y teléfono a la vez**, porque Ariel no piensa en
+campos: escribe "flaco" o "459" y espera encontrarlo. Los dígitos se extraen de lo que
+escribió antes de buscar contra el teléfono, que está guardado normalizado — si no,
+buscar "351 459" no encontraría nada.
+
+`etiquetaIds` se manda **entero, no como delta**: es el mismo criterio que el `PUT` del
+horario laboral, y por el mismo motivo — evita exponer un alta y una baja por separado
+para algo que la interfaz siempre manda completo. Un id que no existe responde
+`404 ETIQUETA_NO_ENCONTRADA` y no aplica ningún cambio.
+
+Un nombre de etiqueta repetido responde `409 ETIQUETA_DUPLICADA`, y un color que no sea
+un hexadecimal de seis dígitos, `400 PARAMETROS_INVALIDOS`. El color lo elige Ariel
+libremente, pero el **formato** se valida: lo que se guarde ahí termina como color de
+fondo en el navegador, y aceptar cualquier string sería aceptar que escriba algo que no
+pinta nada.
+
+*Hubo un `GET /api/admin/clientes/export.csv` que devolvía las fichas como CSV. Se sacó a
+pedido de Ariel: las consulta en el panel, al lado del turno, y llevárselas a una planilla
+no resolvía ningún problema que tuviera. El `.ics` de HU-19 vuelve a ser la única
+excepción al "todo es JSON".*
+
+**Ninguna ruta crea fichas.** Se crean solas al guardar un turno con teléfono, dentro de
+`crearTurno`, que es el único lugar por el que pasan tanto la reserva de la web como la
+carga manual de Ariel.
+
+### Cobros — HU-27
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/cobros?desde=&hasta=` | Lo cobrado en el período: total, desglose por medio de pago y la lista de turnos |
+
+```json
+{
+  "total": 21500,
+  "porMedio": [ { "medioPago": "transferencia", "total": 12000, "turnos": 1 },
+                { "medioPago": "efectivo", "total": 9500, "turnos": 1 } ],
+  "sinRegistrar": 2,
+  "turnos": [ { "id": "uuid", "fecha": "2026-08-11", "hora": "11:00", "estado": "realizado",
+                "clienteNombre": "Rocío", "cliente": { "...": "igual que en la agenda" },
+                "servicio": { "id": "uuid", "nombre": "Corte clásico" },
+                "medioPago": "transferencia", "montoCobrado": 12000 } ]
+}
+```
+
+`estado` viaja aunque acá sean todos `realizado`, y `servicio` viaja como objeto y no como
+el nombre pelado, porque desde esta lista se abre el mismo modal de cobro que en la agenda:
+necesita el **id** del servicio para leer el precio de hoy. El `nombre` sigue siendo el
+snapshot de cuando se reservó — no es una inconsistencia, es la regla de HU-27 con cada
+dato en su lugar.
+
+`desde` y `hasta` son **inclusivos en los dos extremos** (con `desde = hasta` se pide un
+solo día) y el rango tope es de 425 días — no es una regla de negocio, es la red contra un
+`desde` mal tipeado que se lleve la tabla entera.
+
+**Solo entran los turnos `realizado`.** Un cancelado o un reprogramado nunca se cobró, y un
+ausente no pagó.
+
+**`sinRegistrar` va aparte y no escondido**, y es la decisión que hace confiable a esta
+pantalla: son los turnos realizados del período que todavía no tienen cobro cargado, y
+**no están sumados en `total`**. Un total al que le faltan turnos sin decirlo no cierra
+contra la caja y no hay forma de saber por qué. `porMedio` viene ordenado de mayor a menor.
+
+`total` es siempre la suma de `porMedio`: se calculan en el mismo lugar justamente para que
+no puedan contradecirse, porque van uno al lado del otro en pantalla.
+
 ### Servicios — HU-13
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/api/admin/servicios` | Todos los servicios (incluye inactivos) |
+| GET | `/api/admin/servicios` | Todos los servicios (incluye inactivos) y **con `precio`** |
 | POST | `/api/admin/servicios` | Crear servicio |
-| PATCH | `/api/admin/servicios/:id` | Editar nombre/duración/`activo`. No hay `DELETE`: se desactiva |
+| PATCH | `/api/admin/servicios/:id` | Editar nombre/duración/`activo`/`precio`. No hay `DELETE`: se desactiva |
+
+`precio` va en **pesos enteros** y es **nullable**: `null` significa "todavía no le puse
+precio", que no es lo mismo que `0`. Mandar `"precio": null` explícitamente es cómo se le
+saca el precio a un servicio que ya tenía uno.
+
+`foto` se devuelve pero **no se puede editar por la API**: se asigna en la base o en una
+migración. Es deliberado — Ariel no elige la foto desde el panel, así que un campo editable
+sería superficie sin uso. Si algún día la elige, se agrega a los dos schemas.
 
 ### Horario laboral — HU-14
 
@@ -258,10 +513,19 @@ endpoint idempotente:
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/admin/feriados?anio=` | Feriados cargados para ese año |
-| PATCH | `/api/admin/feriados/:id` | `{ "bloquea": false }` — Ariel "destapa" un feriado puntual para atender igual |
+| PATCH | `/api/admin/feriados/:id` | `{ "modalidad": "cerrado" \| "medio_dia" \| "dia_completo" }` — qué hace Ariel ese día (HU-24) |
+| POST | `/api/admin/feriados/sincronizar?anio=` | Vuelve a traer los feriados de la fuente externa. Devuelve `{ anio, importados }`, o `502 FUENTE_NO_DISPONIBLE` si la fuente no responde |
 
-La sincronización con la fuente externa de feriados corre como job de backend (no como
-endpoint disparado por el usuario); se detalla en la etapa de implementación del backend.
+La carga inicial corre **al arrancar el backend**, para el año actual y el siguiente (en
+diciembre ya se reserva para enero), y **solo para el año que no tenga ninguna fila**: el
+plan gratuito de Render duerme y levanta muchas veces por día, y sin esa guarda le
+pegaríamos a una API pública gratuita en cada arranque en frío sin motivo.
+
+El `POST …/sincronizar` es la contracara de esa guarda, y es la razón por la que existe un
+endpoint disparado por el usuario donde antes este documento decía que iba a ser un job:
+sin él, un feriado decretado a mitad de año no entraría nunca. Un cron no existe en el plan
+gratuito de Render, y que Ariel decida cuándo refrescar es más predecible que adivinar un
+intervalo.
 
 ---
 
@@ -279,9 +543,12 @@ endpoint disparado por el usuario); se detalla en la etapa de implementación de
 
 ## 5. Fuera de alcance de este documento
 
-Paginación de listados largos, rate limiting, versionado de la API (`/api/v1`) y el
-detalle de la sincronización de feriados con la fuente externa — se definen en la etapa
-de implementación del backend si hacen falta, no cambian el contrato ya descripto acá.
+Paginación de listados largos, rate limiting y versionado de la API (`/api/v1`) — se
+definen en la etapa de implementación del backend si hacen falta, no cambian el contrato ya
+descripto acá.
+
+La sincronización de feriados salió de esta lista: quedó especificada arriba, en la sección
+Feriados.
 
 ---
 

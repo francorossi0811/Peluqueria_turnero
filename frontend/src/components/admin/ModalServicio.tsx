@@ -17,13 +17,27 @@ export function ModalServicio({ servicio, onClose }: ModalServicioProps) {
   const [duracionMinutos, setDuracionMinutos] = useState(
     servicio?.duracionMinutos ?? 30,
   )
+  // HU-27 — Texto y no número: el campo vacío tiene que poder significar "sin precio",
+  // y un `useState<number>` no sabe expresar eso sin inventar un 0.
+  const [precio, setPrecio] = useState(
+    servicio?.precio != null ? String(servicio.precio) : '',
+  )
   const [error, setError] = useState<string | null>(null)
+
+  const precioAEnviar = precio.trim() === '' ? null : Number(precio)
+  const precioInvalido =
+    precioAEnviar !== null &&
+    (!Number.isInteger(precioAEnviar) || precioAEnviar < 0)
 
   const mutation = useMutation({
     mutationFn: () =>
       servicio
-        ? actualizarServicio(servicio.id, { nombre, duracionMinutos })
-        : crearServicio({ nombre, duracionMinutos }),
+        ? actualizarServicio(servicio.id, {
+            nombre,
+            duracionMinutos,
+            precio: precioAEnviar,
+          })
+        : crearServicio({ nombre, duracionMinutos, precio: precioAEnviar }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['servicios-admin'] })
       onClose()
@@ -69,6 +83,30 @@ export function ModalServicio({ servicio, onClose }: ModalServicioProps) {
             className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
           />
         </label>
+        {/* HU-27 — Solo lo ve Ariel. Se aclara acá mismo porque el resto de esta pantalla
+            configura cosas que el cliente sí ve, y la duda es razonable. */}
+        <label className="flex flex-col gap-1">
+          <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+            Precio
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-tinta-suave">$</span>
+            <input
+              type="number"
+              min={0}
+              step={100}
+              inputMode="numeric"
+              placeholder="Sin precio"
+              value={precio}
+              onChange={(e) => setPrecio(e.target.value)}
+              className="border-borde bg-superficie text-tinta focus:border-miel w-full rounded-md border px-3 py-2 outline-none"
+            />
+          </div>
+          <span className="text-tinta-tenue text-xs">
+            Es tuyo: el cliente no lo ve en ningún momento. Dejalo vacío si todavía no
+            querés ponerle precio.
+          </span>
+        </label>
 
         {error && (
           <div className="border-vino bg-vino-suave text-vino rounded-md border px-3 py-2 text-sm">
@@ -84,7 +122,10 @@ export function ModalServicio({ servicio, onClose }: ModalServicioProps) {
             variant="primaryVino"
             className="flex-1"
             disabled={
-              !nombre.trim() || duracionMinutos < 1 || mutation.isPending
+              !nombre.trim() ||
+              duracionMinutos < 1 ||
+              precioInvalido ||
+              mutation.isPending
             }
             onClick={() => mutation.mutate()}
           >

@@ -13,12 +13,25 @@ const idSchema = z.object({ id: z.uuid() })
 
 const DURACION_MAX_MINUTOS = 480 // 8hs — guarda razonable contra un typo, no una regla de negocio
 
+// HU-27 — Mismo espíritu que el máximo de duración: no es una regla de negocio (los
+// precios los pone Ariel y la inflación los mueve), es una red contra el cero de más.
+const PRECIO_MAX = 10_000_000
+
+/** HU-27 — Pesos enteros. `null` no es "no lo mandes": es cómo Ariel le saca el precio a
+ * un servicio que ya tenía uno. */
+const precioSchema = z
+  .int('El precio va en pesos enteros.')
+  .nonnegative('El precio no puede ser negativo.')
+  .max(PRECIO_MAX, 'Precio demasiado alto.')
+  .nullable()
+
 const crearSchema = z.object({
   nombre: z.string().trim().min(1, 'Falta el nombre.'),
   duracionMinutos: z
     .int()
     .positive()
     .max(DURACION_MAX_MINUTOS, 'Duración demasiado larga.'),
+  precio: precioSchema.optional(),
 })
 
 const actualizarSchema = z
@@ -26,6 +39,7 @@ const actualizarSchema = z
     nombre: z.string().trim().min(1).optional(),
     duracionMinutos: z.int().positive().max(DURACION_MAX_MINUTOS).optional(),
     activo: z.boolean().optional(),
+    precio: precioSchema.optional(),
   })
   .refine((d) => Object.keys(d).length > 0, {
     message: 'No mandaste ningún campo para editar.',
@@ -37,6 +51,9 @@ function servicioDto(servicio: Servicio) {
     nombre: servicio.nombre,
     duracionMinutos: servicio.duracionMinutos,
     activo: servicio.activo,
+    // HU-27 — El precio existe solo en este DTO. El público es otro y no lo lleva.
+    precio: servicio.precio,
+    foto: servicio.foto,
   }
 }
 
@@ -45,13 +62,23 @@ function respondErrorParametrosInvalidos(res: Response, mensaje: string) {
 }
 
 // HU-01 — público, sin auth: solo los activos, sin el campo `activo` (siempre true acá).
+//
+// ⚠️ HU-27 — El mapeo campo por campo de acá abajo **es** lo que cumple la promesa de que
+// el cliente no vea los precios; no es un descuido de estilo. Reemplazarlo por
+// `servicioDto` o por la fila entera publicaría `precio` sin que nada falle ni lo avise.
+// Si algún día se agrega otro dato interno al servicio, este es el lugar donde no ponerlo.
+//
+// `foto` sí va: es lo que se dibuja en la landing. Que dos columnas nuevas del mismo
+// modelo terminen una adentro y otra afuera es justamente lo que esta lista explícita
+// obliga a decidir, en vez de que lo decida el descuido.
 export async function getServiciosPublico(_req: Request, res: Response) {
   const servicios = await listarServiciosActivos()
   res.json({
-    servicios: servicios.map(({ id, nombre, duracionMinutos }) => ({
+    servicios: servicios.map(({ id, nombre, duracionMinutos, foto }) => ({
       id,
       nombre,
       duracionMinutos,
+      foto,
     })),
   })
 }

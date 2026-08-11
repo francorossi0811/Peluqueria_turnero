@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import { InputHora } from '../ui/InputHora'
 import { crearBloqueo } from '../../api/bloqueos'
 import type { ErrorBloqueoAfectaTurnos, TurnoAfectado } from '../../types/api'
 
@@ -95,28 +96,26 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
 
         {!todoElDia && (
           <div className="flex gap-3">
-            <label className="flex flex-1 flex-col gap-1">
+            <div className="flex flex-1 flex-col gap-1">
               <span className="text-tinta-tenue text-xs tracking-wide uppercase">
                 Desde las
               </span>
-              <input
-                type="time"
+              <InputHora
                 value={horaInicio}
-                onChange={(e) => setHoraInicio(e.target.value)}
-                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+                onChange={setHoraInicio}
+                etiqueta="inicio del bloqueo"
               />
-            </label>
-            <label className="flex flex-1 flex-col gap-1">
+            </div>
+            <div className="flex flex-1 flex-col gap-1">
               <span className="text-tinta-tenue text-xs tracking-wide uppercase">
                 Hasta las
               </span>
-              <input
-                type="time"
+              <InputHora
                 value={horaFin}
-                onChange={(e) => setHoraFin(e.target.value)}
-                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+                onChange={setHoraFin}
+                etiqueta="fin del bloqueo"
               />
-            </label>
+            </div>
           </div>
         )}
 

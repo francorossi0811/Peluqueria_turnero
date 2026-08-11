@@ -36,9 +36,107 @@
   --color-alerta: #a8541a;
   --color-alerta-suave: #f3ddc4;
 
+  /* Tokens de rol, no de color. Existen porque estos cinco valores estaban escritos a
+     mano en los componentes (`text-white`, `bg-[#5a3b0a]`, `bg-black/50`,
+     `bg-miel-suave/40`) y por eso eran los únicos que NO cambiaban al redefinir la
+     paleta. Los valores de acá son exactamente los que había hardcodeados, así que el
+     tema claro renderiza igual que antes; el tema oscuro los redefine. */
+
+  /* Texto encima de un fondo del color de acento (botón sólido, badge "Nuevo"). */
+  --color-sobre-acento: #ffffff;
+  --color-kicker-fondo: #5a3b0a;
+  --color-kicker-texto: #ffffff;
+  /* Realce de "esto es nuevo": era `miel-suave` al 40% sobre el crema de la página, ya
+     mezclado acá para que no dependa de con qué fondo le toque combinarse. */
+  --color-destacado: #faf1e3;
+  /* Velo detrás de los modales. */
+  --color-velo: rgb(0 0 0 / 0.5);
+
+  /* "Ahora": la línea de la hora actual y la hora del margen izquierdo a esa altura.
+     Rojo por la convención de Google Calendar, que es de donde viene la idea.
+
+     ⚠️ El turno en curso NO se tiñe con esto. Se marca solo con un borde más grueso, para
+     que su color siga diciendo su estado — si se pintara de rojo, un turno reservado y uno
+     ausente se verían igual mientras dura.
+
+     Era `red-500` escrito a mano dentro de la grilla. Pasa a token por el mismo motivo que
+     `sobre-acento` y `velo` en la v3: un color hardcodeado es un color que no cambia de
+     tema, y este necesita aclararse sobre el fondo oscuro para no apagarse. */
+  --color-ahora: #c0392b;
+
+  /* Estado "ausente" (HU-12): rojo. Es el mismo rojo que `ahora` a propósito y no por
+     descuido — no hay dos rojos en la paleta. No se confunden porque aparecen en formas
+     distintas: `ahora` es una línea de 2 px y una hora del margen, `ausente` es un bloque
+     relleno. Se declara aparte igual, para que cambiarle el rojo a uno no se lo cambie al
+     otro sin querer. */
+  --color-ausente: #c0392b;
+  --color-ausente-suave: #f7dedb;
+
+  /* Feriado. Distinto de `alerta`, que ya significa "bloqueado": son dos motivos distintos
+     por los que un rato no está disponible, y pintarlos igual deja a Ariel sin saber cuál
+     de los dos está mirando. Violeta porque es el único matiz que queda libre entre el
+     ámbar de marca, el verde de "realizado" y el rojo de "ahora". */
+  --color-feriado: #6d4c9f;
+  --color-feriado-suave: #ece4f5;
+
   --font-display: 'Cormorant Garamond', Georgia, serif;
   --font-body: 'Lora', system-ui, sans-serif;
   --font-hero: 'Playfair Display', Georgia, serif;
+}
+
+/* Tema oscuro del panel de Ariel (usa lentes y el crema le cansa la vista). Se activa
+   con `data-tema="oscuro"` en `<html>`, que pone y saca `useTemaAdmin` según la ruta —
+   o sea que el lado del cliente nunca lo ve.
+
+   Solo se redefinen las variables: los componentes no saben que existe un tema oscuro.
+   Es un oscuro **cálido** a propósito, no gris neutro, para no perder la identidad
+   crema/ámbar que a Ariel le gustó.
+
+   Los tres tokens que más importan y menos se notan:
+   - `vino` en claro vale lo mismo que `tinta` (está neutralizado, ver arriba). Si acá se
+     olvidara, los quince banners de error del panel quedarían texto negro sobre fondo
+     negro, y el "Eliminar" de las franjas horarias sería invisible.
+   - `miel-fuerte` existe en claro solo porque el `miel` normal no contrasta contra texto
+     blanco; acá pasa a ser el mismo `miel`, porque el texto encima ya no es blanco.
+   - `miel-suave` deja de ser suave y pasa a ser un ámbar apagado de fondo. El nombre
+     miente, pero el rol —"realce tenue del acento"— se mantiene, y renombrarlo tocaría
+     cuatro archivos del lado del cliente sin ganar nada. */
+:root[data-tema='oscuro'] {
+  color-scheme: dark;
+
+  --color-fondo: #1b1815;
+  --color-superficie: #24201b;
+  --color-superficie-2: #2d2822;
+  --color-tinta: #f4efe6;
+  --color-tinta-suave: #c6bdae;
+  --color-tinta-tenue: #9c9284;
+  --color-borde: #3d372e;
+  --color-borde-suave: #2d2822;
+  --color-miel: #e3ac52;
+  --color-miel-suave: #3a2d16;
+  --color-miel-fuerte: #e3ac52;
+  --color-vino: #f0e5d5;
+  --color-vino-suave: #35271f;
+  --color-bien: #86c496;
+  --color-bien-suave: #1f2d24;
+  --color-alerta: #e0a05a;
+  --color-alerta-suave: #34261a;
+
+  --color-sobre-acento: #201f1d;
+  --color-kicker-fondo: #3a2d16;
+  --color-kicker-texto: #e3ac52;
+  --color-destacado: #2f2617;
+  /* Más opaco que en claro: sobre un fondo ya oscuro, un velo al 50% no alcanza para
+     separar el modal de lo que hay atrás. */
+  --color-velo: rgb(0 0 0 / 0.7);
+
+  /* Los tres se aclaran y los "suave" se dan vuelta: acá son fondos oscuros teñidos, no
+     pasteles. Es el mismo movimiento que ya hacen `bien-suave` y `alerta-suave`. */
+  --color-ahora: #ef6f63;
+  --color-ausente: #ef6f63;
+  --color-ausente-suave: #3a2020;
+  --color-feriado: #b799e0;
+  --color-feriado-suave: #2b2338;
 }
 
 body {

@@ -368,7 +368,14 @@ function PasoDatos({
             placeholder="Ej: 351 459 3325"
             className={claseInput(Boolean(errores.telefono))}
           />
-          {errores.telefono && <ErrorCampo>{errores.telefono}</ErrorCampo>}
+          {errores.telefono ? (
+            <ErrorCampo>{errores.telefono}</ErrorCampo>
+          ) : (
+            <span className="text-tinta-tenue text-xs">
+              Te mandamos la confirmación con el link de tu turno por WhatsApp a
+              este número.
+            </span>
+          )}
         </label>
 
         <label className="flex flex-col gap-1">
@@ -390,8 +397,9 @@ function PasoDatos({
             <ErrorCampo>{errores.email}</ErrorCampo>
           ) : (
             <span className="text-tinta-tenue text-xs">
-              Te mandamos el link de tu turno por mail así no lo perdés. Si no
-              ponés, te lo podemos mandar después.
+              Por si el WhatsApp no llega: te mandamos el link por mail y el
+              turno para tu calendario. Si no ponés, te lo podemos mandar
+              después.
             </span>
           )}
         </label>

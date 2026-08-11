@@ -42,6 +42,7 @@ export async function obtenerServicioPorId(id: string): Promise<Servicio> {
 export async function crearServicio(datos: {
   nombre: string
   duracionMinutos: number
+  precio?: number | null
 }): Promise<Servicio> {
   return prisma.servicio.create({
     data: { ...datos, orden: await proximoOrden() },
@@ -50,7 +51,14 @@ export async function crearServicio(datos: {
 
 export async function actualizarServicio(
   id: string,
-  datos: { nombre?: string; duracionMinutos?: number; activo?: boolean },
+  datos: {
+    nombre?: string
+    duracionMinutos?: number
+    activo?: boolean
+    // HU-27 — `null` es un valor válido y no "no lo mandes": es cómo Ariel le saca el
+    // precio a un servicio que había cargado.
+    precio?: number | null
+  },
 ): Promise<Servicio> {
   await obtenerServicioPorId(id)
   return prisma.servicio.update({ where: { id }, data: datos })

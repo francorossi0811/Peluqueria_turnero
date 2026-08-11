@@ -10,8 +10,13 @@
 6. **Servicios externos salientes** — las únicas llamadas que el backend hace hacia afuera:
    - **Web Push** (VAPID, librería `web-push`) para avisarle a Ariel al celular cuando entra un turno (HU-18). Opcional: sin claves configuradas, el resto funciona igual.
    - **Envío de mail** para la confirmación al cliente (HU-19), detrás de una interfaz `Mailer` con dos implementaciones: Brevo en producción y una que escribe por consola en desarrollo (o mientras no haya cuenta creada). Cambiar de proveedor es agregar un archivo.
+   - **WhatsApp** (Cloud API de Meta) para la confirmación al cliente (HU-22), que desde la v3 es el canal principal. Mismo molde que el mail: interfaz `Whatsapp` en `services/whatsapp/`, con la Cloud API en producción y una implementación de consola en desarrollo. Se habla por `fetch` nativo, sin dependencia HTTP.
 
-No hay una tercera integración saliente: **WhatsApp Business API quedó descartada**, no diferida. El aviso al cliente por WhatsApp estuvo un tiempo "simulado" con un cartel en la pantalla de confirmación, y ese cartel se sacó — anunciar en la interfaz una integración que no se va a construir es peor que no tenerla. El mail cubre el mismo objetivo (que el link llegue solo a algún lado) sin cuenta de negocio ni aprobación de Meta.
+**Por qué WhatsApp pasó de descartado a construido.** Durante la v1 y la v2 figuró como descartado —no diferido— y el motivo era real: la API exigía dedicarle un número, o sea que Ariel tenía que dejar de usar el suyo en la app de WhatsApp Business. *Coexistence* (Meta, mayo de 2026) permite el mismo número en los dos lados a la vez sin perder los chats, y eso sacó el único bloqueante que importaba. El mail no se quitó: pasó a ser el respaldo.
+
+**Los dos avisos al cliente están detrás del mismo punto de salida.** `notificaciones.service.ts` es el único lugar que decide por dónde sale la confirmación, y los controllers siguen llamando a una sola función. Por eso agregar WhatsApp no tocó ninguno de los cuatro lugares que la disparan.
+
+**El teléfono se normaliza al salir, no al entrar.** `utils/validaciones.ts` acepta el número como lo escribe la persona y lo guarda tal cual, porque Ariel lo lee para llamar; `utils/telefono.ts` lo traduce a E.164 recién al momento de mandar el mensaje. Separarlo así evita que un requisito de un proveedor externo cambie lo que se ve en la agenda. Se usa `libphonenumber-js` y no una expresión regular propia porque sacar el `15` de un celular argentino exige saber dónde termina la característica, y las argentinas van de 2 a 4 dígitos.
 
 ## Decisiones y por qué
 
@@ -25,6 +30,63 @@ No hay una tercera integración saliente: **WhatsApp Business API quedó descart
 
 Integración con WhatsApp Business API — descartada, no diferida (ver arriba y §5 de
 `historias-de-usuario-casos-de-uso.md`).
+
+## Decisiones de la v3
+
+- **El token de "me olvidé la contraseña" no tiene tabla (HU-26).** Es un JWT firmado con
+  el secreto global **más el hash actual de la contraseña de esa cuenta**. De ahí sale que
+  valga un solo uso: al restablecer, el hash cambia y el token viejo deja de verificar. La
+  alternativa de manual —una tabla `password_resets` con su columna `usado_en` y un job que
+  limpie los vencidos— agrega estado que se puede desincronizar para conseguir exactamente
+  lo mismo. Es el mismo espíritu que `password_changed_at` en la v2: apoyarse en un dato
+  que ya existe en vez de inventar una tabla.
+- **El rol se lee de la base en cada request, no del JWT.** Está en la misma consulta que
+  `requireAuth` ya hacía para saber si el token quedó invalidado por un cambio de
+  contraseña, así que no cuesta nada. Si se leyera del token, cambiarle el rol a alguien no
+  tendría efecto hasta que venciera su sesión — o sea, hasta 7 días después.
+- **El botón de recuperación se esconde solo si no hay mailer real.** Sin cuenta de Brevo
+  el mail se imprime en el log del servidor: el botón le prometería a Ariel algo que no va
+  a pasar, justo cuando ya no puede entrar, y encima reemplazando la recuperación que sí
+  funciona (que el super admin le fije una contraseña). Es el mismo criterio con el que el
+  adaptador de consola de WhatsApp no cuenta como enviado.
+
+- **La identidad de un cliente es su teléfono normalizado (HU-25).** Se apoya en
+  `utils/telefono.ts`, que ya existía para WhatsApp, y por eso las fichas no trajeron
+  ninguna dependencia nueva. El nombre no sirve como identidad: cambia de una reserva a la
+  otra y unir por nombre juntaría a dos personas distintas que se llaman igual, en
+  silencio.
+- **La ficha se resuelve en `crearTurno` y no en los controllers.** Es el único lugar por
+  el que pasan las dos formas de crear un turno —la reserva de la web y la carga manual de
+  Ariel— así que ninguna puede quedarse sin ficha por olvido. Es el mismo criterio con el
+  que `notificaciones.service.ts` es el único punto de salida de los avisos, aunque acá la
+  conclusión sea la opuesta (los avisos sí se disparan desde el controller, justamente
+  porque la ruta tiene que poder distinguirlos).
+- **El precio se toma al cobrar, no al reservar (HU-27).** El turno no guarda un
+  `precio_snapshot`, a diferencia de `servicio_duracion_snapshot`, y la asimetría es
+  deliberada. La duración se congela porque decide la disponibilidad: si cambiara, movería
+  turnos ya agendados. El precio no afecta nada hasta el momento del cobro, y con la
+  inflación un turno reservado hace tres semanas se cobra a lo que sale hoy — que es lo que
+  Ariel efectivamente cobra. Congelarlo al reservar le haría cobrar precios viejos sin que
+  nada lo avise.
+- **El cobro son tres columnas en `turnos`, no una tabla `pagos`.** Un pago por turno, sin
+  pagos parciales ni historial. Una tabla aparte sería estado que se puede desincronizar
+  del turno para conseguir exactamente lo mismo, que es el mismo argumento por el que el
+  token de reset de HU-26 no tiene tabla.
+- **Los medios de pago son un enum y no una tabla configurable**, al revés que las
+  etiquetas de HU-25. Allá el texto que escribe Ariel *es* el contenido y por eso se
+  configuran; acá el conjunto es cerrado y el desglose necesita categorías fijas para poder
+  sumarse. Una tabla para cuatro valores que no cambian sería generalidad especulativa.
+- **En los cobros, la base filtra y la aplicación suma.** Es la excepción al reflejo de
+  "agregá en SQL", y tiene un motivo concreto: la pantalla siempre devuelve la lista de
+  turnos del período, así que las filas ya están en memoria cuando hay que totalizarlas —
+  un `groupBy` sería un segundo viaje a Neon para derivar algo que ya se trajo. De paso
+  `resumirCobros` queda como función pura, que es lo único que se puede testear de verdad
+  sin base.
+- **El backfill de fichas es un script TypeScript, no SQL dentro de la migración.**
+  Traducir un teléfono a E.164 exige saber dónde termina la característica argentina, que
+  es lo que resuelve `libphonenumber-js`; reimplementarlo en SQL sería repetir el error que
+  la librería está ahí para evitar. La migración crea las tablas vacías y el script las
+  llena.
 
 ## Decisiones de las etapas de v2
 

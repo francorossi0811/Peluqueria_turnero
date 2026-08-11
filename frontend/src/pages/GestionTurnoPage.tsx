@@ -17,6 +17,7 @@ import {
 } from '../api/turnos'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
+import { TELEFONO_URL, WHATSAPP_URL } from '../utils/contacto'
 import type { ErrorApi, EstadoTurno } from '../types/api'
 
 const DIAS_A_MOSTRAR = 14
@@ -178,6 +179,10 @@ export function GestionTurnoPage({ id }: { id: string }) {
             ? 'Reprogramando…'
             : 'Confirmar nuevo horario'}
         </Button>
+
+        {/* Acá el motivo es concreto: si ningún horario de los que quedan le sirve, la
+            salida es hablar con Ariel, no volver atrás. */}
+        <ContactoAriel />
       </PaginaCentrada>
     )
   }
@@ -215,15 +220,6 @@ export function GestionTurnoPage({ id }: { id: string }) {
         <div className="border-vino bg-vino-suave text-vino mb-4 rounded-md border px-3 py-2 text-sm">
           {errorAccion}
         </div>
-      )}
-
-      {turno.estado === 'reservado' && (
-        <a
-          href={urlCalendario(turno.id)}
-          className={`${BTN_OUTLINE} mb-4 w-full`}
-        >
-          Agregar a mi calendario
-        </a>
       )}
 
       {turno.estado === 'reservado' &&
@@ -297,7 +293,53 @@ export function GestionTurnoPage({ id }: { id: string }) {
           </Link>
         </div>
       )}
+
+      <ContactoAriel />
+
+      {/* Último a propósito: agendar es lo que se hace una vez y después no se vuelve a
+          tocar, mientras que reprogramar, cancelar y escribirle a Ariel son las acciones
+          por las que alguien vuelve a esta pantalla. */}
+      {turno.estado === 'reservado' && (
+        <a
+          href={urlCalendario(turno.id)}
+          className={`${BTN_OUTLINE} mt-3 w-full`}
+        >
+          Agregar a mi calendario
+        </a>
+      )}
     </PaginaCentrada>
+  )
+}
+
+/** Los dos caminos para hablar con Ariel, siempre a la vista.
+ *
+ * "Contactá directamente a Ariel" ya se lo decía la pantalla al que llegaba tarde para
+ * cancelar, pero sin decirle cómo: el número está en la landing, a la que este cliente
+ * no entró — llegó por su link. Van siempre y no solo en ese caso porque el motivo para
+ * escribirle no siempre es el turno (llegar tarde, preguntar algo, cambiar el servicio).
+ *
+ * Los dos son links nativos (`wa.me` y `tel:`), así que en el celular abren la app que
+ * corresponde sin que tengamos que detectar nada. */
+function ContactoAriel() {
+  return (
+    <div className="border-borde mt-6 border-t pt-4">
+      <p className="text-tinta-suave mb-2 text-center text-sm">
+        ¿Necesitás hablar con Ariel?
+      </p>
+      <div className="flex gap-2">
+        <a
+          href={WHATSAPP_URL}
+          target="_blank"
+          rel="noreferrer"
+          className={`${BTN_OUTLINE} flex-1`}
+        >
+          WhatsApp
+        </a>
+        <a href={TELEFONO_URL} className={`${BTN_OUTLINE} flex-1`}>
+          Llamar
+        </a>
+      </div>
+    </div>
   )
 }
 

@@ -9,7 +9,7 @@ interface ModalProps {
 export function Modal({ titulo, onClose, children }: ModalProps) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="bg-velo fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div

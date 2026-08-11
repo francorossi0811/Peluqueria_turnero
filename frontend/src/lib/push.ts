@@ -47,8 +47,20 @@ export function permisoActual(): NotificationPermission | null {
   return soportaPush() ? Notification.permission : null
 }
 
+/** La URL de la API viaja como query string del script.
+ *
+ * El service worker la necesita para renovar la suscripción cuando el navegador la rota
+ * (ver `pushsubscriptionchange` en `sw.js`), y allá adentro no existe `import.meta.env`.
+ * Tampoco sirve asumir el mismo origen: el frontend está en Vercel y la API en Render.
+ *
+ * Cambiar la query string reemplaza el worker de este scope, no crea un registro suelto. */
+function urlDelServiceWorker(): string {
+  const api = import.meta.env.VITE_API_URL
+  return api ? `/sw.js?api=${encodeURIComponent(api)}` : '/sw.js'
+}
+
 export async function registrarServiceWorker(): Promise<ServiceWorkerRegistration> {
-  return navigator.serviceWorker.register('/sw.js')
+  return navigator.serviceWorker.register(urlDelServiceWorker())
 }
 
 export async function suscripcionActual(): Promise<PushSubscription | null> {
@@ -79,6 +91,13 @@ export async function crearSuscripcion(
   const registro = await registrarServiceWorker()
   await navigator.serviceWorker.ready
 
+  // Si ya hay una suscripción firmada con otra clave VAPID, `subscribe` tira
+  // `InvalidStateError` y el usuario ve un error genérico sin forma de salir. Pasa
+  // siempre que se rotan las claves del servidor — ya nos pasó una vez. Se da de baja la
+  // vieja y se sigue.
+  const existente = await registro.pushManager.getSubscription()
+  if (existente) await existente.unsubscribe()
+
   const suscripcion = await registro.pushManager.subscribe({
     // Obligatorio en Chrome: no se admiten pushes sin payload visible para el usuario.
     userVisibleOnly: true,
@@ -86,6 +105,23 @@ export async function crearSuscripcion(
   })
 
   return suscripcion.toJSON()
+}
+
+/** Muestra una notificación **local**, sin pasar por el servidor ni por la red.
+ *
+ * Es la prueba que separa los dos modos de falla: si esta se ve y la de push no, lo que
+ * falla es la entrega (el servicio de push del dispositivo, la optimización de batería,
+ * "aplicaciones en suspensión"). Si no se ve ninguna, lo que falla es el permiso o el
+ * canal de notificaciones del sistema. */
+export async function probarNotificacionLocal(): Promise<void> {
+  const registro = await registrarServiceWorker()
+  await navigator.serviceWorker.ready
+  await registro.showNotification('Prueba local', {
+    body: 'Si ves esto, las notificaciones del sistema funcionan en este dispositivo.',
+    icon: '/icono-192.png',
+    badge: '/badge-96.png',
+    tag: 'prueba-local',
+  })
 }
 
 /** Da de baja en el navegador. Borrarla del backend es responsabilidad del llamador. */
