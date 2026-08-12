@@ -108,6 +108,63 @@ const CLASES_ESTADO: Record<string, string> = {
   ausente: 'bg-ausente-suave text-ausente border-ausente/70',
 }
 
+/** Reparte en columnas los turnos que comparten un rato, para que ninguno tape a otro.
+ *
+ * Que dos turnos se pisen **no es un error de datos**: marcar Ausente (o Realizado antes
+ * de tiempo) libera el rato que queda, que es justamente para lo que sirve — el chico no
+ * vino a los 10 minutos, Ariel lo marca y mete a otro en lo que resta. El backend lo
+ * permite a propósito: el `EXCLUDE` de la base solo cuenta los `reservado`. Lo que estaba
+ * mal era la pantalla, que los dibujaba uno encima del otro y escondía al de abajo.
+ *
+ * Es el mismo reparto que hace cualquier calendario: los que se tocan forman un grupo, y
+ * el grupo se divide en tantas columnas como hagan falta. Cada turno cae en la primera
+ * columna que ya se desocupó, así que dos turnos que no se pisan entre sí comparten
+ * columna y el grupo no se angosta de más.
+ *
+ * Un turno solo devuelve `columnas: 1`, o sea el ancho entero: mientras no haya
+ * solapamiento la grilla se ve exactamente igual que antes, que es el caso normal. */
+function repartirEnColumnas<T>(
+  turnos: { turno: T; inicio: number; fin: number }[],
+): { turno: T; columna: number; columnas: number }[] {
+  // Por hora de inicio, y a igual inicio primero el más largo: así el que abarca a los
+  // demás queda a la izquierda y el reparto se lee en el mismo orden que el día.
+  const ordenados = [...turnos].sort(
+    (a, b) => a.inicio - b.inicio || b.fin - a.fin,
+  )
+
+  const repartidos: { turno: T; columna: number; columnas: number }[] = []
+  let grupo: typeof repartidos = []
+  /** Hasta qué minuto llega lo último puesto en cada columna del grupo. */
+  let finDeCadaColumna: number[] = []
+  /** Hasta dónde llega el grupo entero: cuando un turno empieza después, ya no lo toca. */
+  let finDelGrupo = -Infinity
+
+  const cerrarGrupo = () => {
+    // El ancho lo define el grupo, no cada turno: si dos se pisan, los dos van a la mitad
+    // aunque uno de ellos no se pise con el tercero.
+    for (const r of grupo) r.columnas = finDeCadaColumna.length
+    repartidos.push(...grupo)
+    grupo = []
+    finDeCadaColumna = []
+    finDelGrupo = -Infinity
+  }
+
+  for (const { turno, inicio, fin } of ordenados) {
+    if (inicio >= finDelGrupo) cerrarGrupo()
+
+    // La primera columna libre a esta altura; si no hay ninguna, se abre una nueva.
+    let columna = finDeCadaColumna.findIndex((finCol) => finCol <= inicio)
+    if (columna === -1) columna = finDeCadaColumna.length
+
+    finDeCadaColumna[columna] = fin
+    finDelGrupo = Math.max(finDelGrupo, fin)
+    grupo.push({ turno, columna, columnas: 0 })
+  }
+  cerrarGrupo()
+
+  return repartidos
+}
+
 /** El turno en curso **no cambia de color**: mantiene el de su estado y se marca con el
  * borde más grueso.
  *
@@ -335,6 +392,18 @@ function TramoGrilla({
         const pasado = (desde: number) =>
           dia < hoy || (dia === hoy && minutosAhora !== null && desde < minutosAhora)
 
+        // El fin se calcula con la duración del snapshot, que es **la misma cuenta con la
+        // que se dibuja el alto** unas líneas más abajo. Podría salir de `t.horaFin`, que
+        // hoy vale lo mismo, pero derivarlo de lo que se dibuja es lo que garantiza que
+        // el reparto y el bloque nunca puedan discrepar.
+        const turnosDelTramo = delDia
+          .map((turno) => ({
+            turno,
+            inicio: aMinutos(turno.hora),
+            fin: aMinutos(turno.hora) + turno.servicio.duracionMinutos,
+          }))
+          .filter((t) => t.inicio >= tramo.inicio && t.inicio < tramo.fin)
+
         return (
           <div
             key={dia}
@@ -414,9 +483,12 @@ function TramoGrilla({
               )
             })}
 
-            {delDia.map((t) => {
+            {repartirEnColumnas(turnosDelTramo).map(({
+              turno: t,
+              columna,
+              columnas,
+            }) => {
               const inicio = aMinutos(t.hora)
-              if (inicio < tramo.inicio || inicio >= tramo.fin) return null
 
               // El turno que está ocurriendo justo ahora. Misma función que usa la vista
               // Día, para que las dos coincidan.
@@ -441,7 +513,7 @@ function TramoGrilla({
                   // `rounded-md` + `shadow-sm`: el relieve mínimo que despega el bloque del
                   // fondo sin que parezca una tarjeta. El `shadow` se refuerza a `md` solo
                   // en el turno en curso, junto con el borde grueso.
-                  className={`absolute right-0.5 left-0.5 overflow-hidden rounded-md border px-1 text-left shadow-sm transition hover:brightness-110 ${
+                  className={`absolute overflow-hidden rounded-md border px-1 text-left shadow-sm transition hover:brightness-110 ${
                     CLASES_ESTADO[t.estado] ??
                     'bg-superficie-2 text-tinta-suave'
                   } ${enCurso ? CLASES_EN_CURSO : ''} ${
@@ -450,6 +522,12 @@ function TramoGrilla({
                   style={{
                     top: (inicio - tramo.inicio) / MINUTOS_POR_PX,
                     height: t.servicio.duracionMinutos / MINUTOS_POR_PX,
+                    // El reparto en columnas (ver `repartirEnColumnas`). Los 2 px de
+                    // cada lado son los mismos que antes daban `left-0.5 right-0.5`,
+                    // así que un turno solo —el caso normal— queda idéntico a como
+                    // estaba; lo que cambia es solo el turno que comparte el rato.
+                    left: `calc(${(columna / columnas) * 100}% + 2px)`,
+                    width: `calc(${100 / columnas}% - 4px)`,
                   }}
                 >
                   {/* Mayúsculas y `text-tinta` (blanco en el tema oscuro, que es el que

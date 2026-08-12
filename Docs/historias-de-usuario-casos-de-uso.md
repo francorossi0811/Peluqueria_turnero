@@ -183,6 +183,13 @@ Como Ariel, quiero ver la semana entera con los días en columnas y las horas ha
   Son dos motivos distintos por los que un rato no está disponible: si se ven iguales, no
   puedo saber cuál estoy mirando.
 - **Toco un hueco y cargo un turno ahí mismo**, con el día y la hora ya puestos.
+- **Dos turnos que comparten un rato se ponen lado a lado, cada uno en media columna**, y
+  ninguno tapa al otro. Que se pisen **no es un error**: si a los 10 minutos el cliente no
+  vino, lo marco Ausente y meto a otro en lo que queda del rato — para eso sirve marcarlo.
+  Antes los dos se dibujaban uno encima del otro y el de abajo desaparecía de la pantalla.
+  Si se pisan tres van en tres columnas, y los que no se pisan entre sí comparten columna,
+  así los bloques no se angostan más de lo necesario. **Un turno que no comparte el rato
+  con nadie —el caso normal— se sigue viendo del ancho entero.**
 - Los ratos en los que no abro (por ejemplo las 9 de la mañana un martes, que solo abro el sábado) se ven rayados y no se pueden tocar: mostrarlos como libres sería mentir.
 - Los horarios que ya pasaron tampoco se tocan — miro semanas anteriores para saber quién vino, no para cargar turnos ahí.
 - Cada turno muestra el nombre **en mayúsculas y en blanco**, para leerlo de lejos: uso lentes. El color del turno lo dan el fondo y el borde, no la letra.
