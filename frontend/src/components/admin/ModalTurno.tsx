@@ -8,7 +8,7 @@ import { cancelarTurnoAdmin, cargarTelefonoTurno } from '../../api/agenda'
 import { esTelefonoValido, MENSAJE_TELEFONO_INVALIDO } from '../../utils/validaciones'
 import { fechaLegible } from '../../utils/fecha'
 import { ETIQUETA_MEDIO_PAGO, formatearPesos } from '../../utils/dinero'
-import type { ErrorApi, EstadoTurno, TurnoAdmin } from '../../types/api'
+import type { ErrorApi, TurnoAdmin } from '../../types/api'
 
 // HU-25 — El detalle de un turno de la grilla.
 //
@@ -19,22 +19,6 @@ import type { ErrorApi, EstadoTurno, TurnoAdmin } from '../../types/api'
 //
 // La vista Día no cambia: ahí las acciones están inline en la fila, y ese es el flujo con
 // el que Ariel opera durante la jornada. Meterle un modal en el medio sería más lento.
-
-const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'Reservado',
-  cancelado: 'Cancelado',
-  reprogramado: 'Reprogramado',
-  realizado: 'Realizado',
-  ausente: 'Ausente',
-}
-
-const ESTILO_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'bg-miel-suave text-miel',
-  cancelado: 'bg-borde-suave text-tinta-tenue',
-  reprogramado: 'bg-borde-suave text-tinta-tenue',
-  realizado: 'bg-bien-suave text-bien',
-  ausente: 'bg-ausente-suave text-ausente',
-}
 
 const ETIQUETA_ORIGEN: Record<TurnoAdmin['origen'], string> = {
   online: 'Reservó online',

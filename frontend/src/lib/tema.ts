@@ -10,10 +10,14 @@ export type Tema = 'claro' | 'oscuro'
 
 const CLAVE = 'turnero_tema_panel'
 
-/** Oscuro por defecto: es lo que pidió Ariel, que usa lentes y el fondo crema le cansa
- * la vista. Que el default sea el que él quiere significa que no tiene que tocar el
- * interruptor en ninguno de sus tres dispositivos — solo Franco, si quiere el claro. */
-const POR_DEFECTO: Tema = 'oscuro'
+/** Claro por defecto desde el 13/8/2026, por pedido de Ariel.
+ *
+ * Antes era oscuro, y el motivo era el mismo de siempre: usa lentes y el crema le cansaba
+ * la vista. Lo que cambió es que la agenda ahora se lee por colores planos de alto
+ * contraste (naranja / verde claro / verde fuerte / rojo), que son fijos en los dos temas,
+ * y sobre esos colores el resto del panel le cierra en claro. El interruptor de "Mi
+ * cuenta" sigue estando: lo que cambia es con cuál arranca un dispositivo nuevo. */
+const POR_DEFECTO: Tema = 'claro'
 
 const oyentes = new Set<() => void>()
 let cacheado: Tema | null = null

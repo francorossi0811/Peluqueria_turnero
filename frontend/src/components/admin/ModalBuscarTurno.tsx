@@ -5,28 +5,13 @@ import { Card } from '../ui/Card'
 import { Modal } from '../ui/Modal'
 import { buscarTurnos } from '../../api/agenda'
 import { fechaLegible } from '../../utils/fecha'
-import type { EstadoTurno, TurnoAdmin } from '../../types/api'
+import { ESTILO_ESTADO, ETIQUETA_ESTADO } from '../../utils/estadoTurno'
+import type { TurnoAdmin } from '../../types/api'
 
 // Caso borde de Docs/historias-de-usuario-casos-de-uso.md §4: el cliente perdió su link
 // único y Ariel se lo tiene que reenviar. Antes era una página propia en el nav; es una
 // acción puntual sobre la agenda, no una sección donde uno se queda, así que vive acá
 // junto a "Cargar turno" y "Bloquear horario".
-
-const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'Reservado',
-  cancelado: 'Cancelado',
-  reprogramado: 'Reprogramado',
-  realizado: 'Realizado',
-  ausente: 'Ausente',
-}
-
-const ESTILO_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'bg-miel-suave text-miel',
-  cancelado: 'bg-borde-suave text-tinta-tenue',
-  reprogramado: 'bg-borde-suave text-tinta-tenue',
-  realizado: 'bg-bien-suave text-bien',
-  ausente: 'bg-ausente-suave text-ausente',
-}
 
 const INPUT =
   'border-borde bg-superficie text-tinta focus:border-miel w-full rounded-md border px-3 py-2 outline-none'

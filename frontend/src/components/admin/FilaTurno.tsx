@@ -1,26 +1,8 @@
 import { useState } from 'react'
 import { Button } from '../ui/Button'
 import { ETIQUETA_MEDIO_PAGO, formatearPesos } from '../../utils/dinero'
-import type { EstadoTurno, TurnoAdmin } from '../../types/api'
-
-const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'Reservado',
-  cancelado: 'Cancelado',
-  reprogramado: 'Reprogramado',
-  realizado: 'Realizado',
-  ausente: 'Ausente',
-}
-
-/** Los mismos tres colores que la grilla: miel lo que viene, verde lo que se hizo, rojo el
- * que no vino. `ausente` usaba `alerta` (ámbar-naranja) y en la grilla usaba un neutro:
- * eran tres colores distintos para el mismo estado según dónde lo miraras. */
-const ESTILO_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'bg-miel-suave text-miel',
-  cancelado: 'bg-borde-suave text-tinta-tenue',
-  reprogramado: 'bg-borde-suave text-tinta-tenue',
-  realizado: 'bg-bien-suave text-bien',
-  ausente: 'bg-ausente-suave text-ausente',
-}
+import { ESTILO_ESTADO, ETIQUETA_ESTADO } from '../../utils/estadoTurno'
+import type { TurnoAdmin } from '../../types/api'
 
 const ETIQUETA_ORIGEN: Record<TurnoAdmin['origen'], string> = {
   online: 'Online',

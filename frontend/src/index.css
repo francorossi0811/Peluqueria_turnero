@@ -72,6 +72,38 @@
   --color-ausente: #c0392b;
   --color-ausente-suave: #f7dedb;
 
+  /* ── Agenda de alto contraste (pedido de Ariel, 13/8/2026) ────────────────────────
+     Ariel tiene problemas de visión y viene de leer su agenda en una planilla de
+     colores planos. Estos ocho tokens valen **lo mismo en claro y en oscuro**: son los
+     únicos de la paleta que no siguen el tema, y es a propósito — el interruptor de
+     "Mi cuenta" no tiene que poder cambiar los colores con los que él lee su día.
+     Por eso se declaran acá y **no** se redefinen en el bloque `[data-tema='oscuro']`. */
+
+  /* El fondo de toda la grilla: naranja fuerte, hoy y lo que viene. */
+  --color-agenda-fondo: #f4801a;
+  /* Los días de la semana que ya pasaron. Verde claro para que se lean como "esto ya
+     está hecho" de un vistazo, sin tener que buscar la línea de ahora. */
+  --color-agenda-pasado: #cfe9bd;
+  /* Las divisiones. Negro liso, no el crema `borde`: sobre naranja un borde claro
+     desaparece. */
+  --color-agenda-linea: #000000;
+  /* Texto y bloques apoyados sobre el naranja o sobre el verde claro. */
+  --color-agenda-tinta: #16130f;
+
+  /* Un turno que todavía no pasó. Va casi blanco y no miel: sobre el naranja fuerte, el
+     miel-suave se pierde. El color del bloque sigue diciendo el estado y nada más. */
+  --color-turno-proximo: #fffaf2;
+
+  /* Realizado: verde fuerte, elegido para **no** confundirse con el verde claro de los
+     días pasados, que es justo el fondo sobre el que casi siempre va a caer. Uno es un
+     relleno oscuro con texto blanco, el otro un pastel con texto negro. */
+  --color-realizado: #14682c;
+  /* Ausente: rojo fuerte. Más saturado que `ausente`, que era un pastel con el texto
+     teñido. */
+  --color-ausente-fuerte: #c62828;
+  /* Texto encima de esos dos rellenos: blanco, 6:1 contra los dos. */
+  --color-sobre-estado: #ffffff;
+
   /* Feriado. Distinto de `alerta`, que ya significa "bloqueado": son dos motivos distintos
      por los que un rato no está disponible, y pintarlos igual deja a Ariel sin saber cuál
      de los dos está mirando. Violeta porque es el único matiz que queda libre entre el
@@ -142,4 +174,69 @@
 body {
   background-color: var(--color-fondo);
   color: var(--color-tinta);
+}
+
+/* ── Panel de alto contraste (pedido de Ariel, 13/8/2026) ──────────────────────────
+   Ariel tiene problemas de visión: pidió el panel entero en mayúsculas y que nada baje
+   de 16 px, "dejando de lado la estética".
+
+   Va acá y no componente por componente por dos motivos. Uno práctico: son unos 25
+   archivos y cada texto nuevo que se escriba mañana se olvidaría de la regla. Y uno de
+   fondo: esto no es una decisión de diseño de cada pantalla, es una propiedad del panel
+   — la misma razón por la que el tema oscuro también se resuelve redefiniendo variables
+   en la raíz y los componentes no saben que existe.
+
+   El gancho es `data-panel="admin"` en `<html>`, que pone y saca `useTemaAdmin` según
+   la ruta. Está en la raíz y no en `AdminLayout` por lo mismo que `data-tema`:
+   `/admin/login` cuelga fuera del layout. El lado del cliente nunca ve nada de esto. */
+
+:root[data-panel='admin'] body {
+  text-transform: uppercase;
+}
+
+/* ⚠️ Los controles de formulario hay que nombrarlos aparte: la hoja de estilos del propio
+   navegador les pone `text-transform: none`, así que la herencia del `body` no les llega.
+   Se descubrió mirando la pantalla —el botón "Ingresar" era lo único que quedaba en
+   minúscula—, no leyendo el CSS. */
+:root[data-panel='admin'] button,
+:root[data-panel='admin'] select,
+:root[data-panel='admin'] option {
+  text-transform: uppercase;
+}
+
+/* Lo que Ariel **tipea** se deja como lo tipea. `text-transform` no cambia el valor que
+   se envía, solo cómo se ve — y esa diferencia entre lo que se lee y lo que se guarda es
+   exactamente el problema: el email es la llave del login (HU-26), y verlo en mayúscula
+   cuando en la base está en minúscula confunde justo cuando la persona no puede entrar.
+   Los `<select>` sí quedan en mayúscula: ahí no se escribe, se elige de una lista que es
+   interfaz como cualquier otra. */
+:root[data-panel='admin'] input,
+:root[data-panel='admin'] textarea {
+  text-transform: none;
+}
+
+/* Piso de 16 px. La regla pega en `*` porque tiene que ganarle a las utilidades de
+   Tailwind (`text-xs`, `text-sm`) y también a los tamaños escritos a mano que hay en el
+   panel (`text-[10px]`, `text-[11px]`): una clase pesa 0-1-0 y este selector 0-1-2, así
+   que gana sin necesidad de `!important`. */
+:root[data-panel='admin'] body,
+:root[data-panel='admin'] body * {
+  font-size: 16px;
+}
+
+/* Y acá se vuelve a subir lo que tiene que seguir siendo más grande. Es el piso lo que
+   pidió Ariel, no el techo: si todo quedara exactamente en 16, un título dejaría de
+   distinguirse de un dato. Misma especificidad que la regla de arriba (0-1-2) y más
+   abajo en el archivo, que es lo que la hace ganar. */
+:root[data-panel='admin'] body h1 {
+  font-size: 30px;
+}
+
+:root[data-panel='admin'] body h2 {
+  font-size: 22px;
+}
+
+/* El total de Cobros, que es el número más grande de la pantalla a propósito. */
+:root[data-panel='admin'] body [data-destacado] {
+  font-size: 34px;
 }
