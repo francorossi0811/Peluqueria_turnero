@@ -12,8 +12,10 @@ import { crearTurno, enviarConfirmacion, urlCalendario } from '../api/turnos'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import {
   esEmailValido,
+  esNombreValido,
   esTelefonoValido,
   MENSAJE_EMAIL_INVALIDO,
+  MENSAJE_NOMBRE_INVALIDO,
   MENSAJE_TELEFONO_INVALIDO,
 } from '../utils/validaciones'
 import type { DisponibilidadDia, ErrorApi, Servicio, Turno } from '../types/api'
@@ -311,7 +313,11 @@ function PasoDatos({
     e.preventDefault()
 
     const nuevos: typeof errores = {}
+    // Dos mensajes distintos a propósito: "no pusiste nada" y "eso no es un nombre" son
+    // dos problemas distintos, y decirle "solo letras" a quien dejó el campo vacío no le
+    // explica nada.
     if (!nombre.trim()) nuevos.nombre = 'Poné tu nombre y apellido.'
+    else if (!esNombreValido(nombre)) nuevos.nombre = MENSAJE_NOMBRE_INVALIDO
     if (!esTelefonoValido(telefono)) nuevos.telefono = MENSAJE_TELEFONO_INVALIDO
     // El email es opcional: solo se valida si escribió algo.
     if (email.trim() && !esEmailValido(email))

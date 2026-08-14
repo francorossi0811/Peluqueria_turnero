@@ -90,6 +90,56 @@ export async function crearBloqueoYCancelar(
   })
 }
 
+/**
+ * Cambia el rango o el motivo de un bloqueo que ya existe, cancelando los turnos que el
+ * rango nuevo se lleve puesto — mismo trato que al crearlo.
+ *
+ * ⚠️ Editar un bloqueo **puede cancelar turnos**, y por eso pasa por la misma confirmación
+ * de dos pasos que `crearBloqueoYCancelar` y no por un update pelado: correr una tarde
+ * libre de las 15:00 a las 14:00 agarra el turno de las 14:20 exactamente igual que si el
+ * bloqueo se hubiera creado así. Sin esto, editar sería la puerta de atrás que se saltea
+ * el aviso que la creación sí da.
+ *
+ * Lo que **no** hace es reabrir los turnos que el rango viejo había cancelado: es la misma
+ * regla que ya tiene levantar un bloqueo (HU-11). Un turno cancelado se le avisó al
+ * cliente, así que revivirlo por un cambio de rango sería devolverle un turno a alguien
+ * que ya se enteró de que no lo tiene.
+ */
+export async function actualizarBloqueoYCancelar(
+  id: string,
+  datos: DatosBloqueo,
+  turnosAfectados: Turno[],
+): Promise<BloqueoHorario> {
+  return prisma.$transaction(async (tx) => {
+    const existente = await tx.bloqueoHorario.findUnique({ where: { id } })
+    if (!existente) throw new BloqueoNoEncontradoError()
+
+    const bloqueo = await tx.bloqueoHorario.update({
+      where: { id },
+      data: {
+        fechaInicio: datos.fechaInicio,
+        horaInicio: datos.horaInicio,
+        fechaFin: datos.fechaFin,
+        horaFin: datos.horaFin,
+        motivo: datos.motivo ?? null,
+      },
+    })
+
+    if (turnosAfectados.length > 0) {
+      await tx.turno.updateMany({
+        where: { id: { in: turnosAfectados.map((t) => t.id) } },
+        data: {
+          estado: 'cancelado',
+          motivoCancelacion: 'Bloqueado por el local',
+          bloqueoCancelacionId: bloqueo.id,
+        },
+      })
+    }
+
+    return bloqueo
+  })
+}
+
 /** HU-11 — Levanta un bloqueo futuro. No reabre los turnos que ya canceló (ver especificacion-api.md);
  * el FK de esos turnos hacia este bloqueo queda en null por el ON DELETE SET NULL de la migración. */
 export async function eliminarBloqueo(id: string): Promise<void> {

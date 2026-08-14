@@ -42,9 +42,12 @@ import {
   formatearHora,
 } from '../utils/fechaHora'
 import {
+  esNombreValido,
   esTelefonoValido,
+  MENSAJE_NOMBRE_INVALIDO,
   MENSAJE_TELEFONO_INVALIDO,
 } from '../utils/validaciones'
+import { aE164 } from '../utils/telefono'
 import type { Turno } from '../../generated/prisma/client.ts'
 
 const horaSchema = z
@@ -55,7 +58,14 @@ const bodySchema = z.object({
   servicioId: z.uuid(),
   fecha: z.iso.date(),
   hora: horaSchema,
-  clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
+  // Solo letras (más espacios, apóstrofes y guiones). Es la misma clase de regla que el
+  // teléfono: sirve para que Ariel pueda ubicar y llamar a una persona, y "Juan123" o un
+  // campo lleno de símbolos no ubican a nadie.
+  clienteNombre: z
+    .string()
+    .trim()
+    .min(1, 'Falta el nombre.')
+    .refine(esNombreValido, MENSAJE_NOMBRE_INVALIDO),
   // El `min(6)` de antes dejaba pasar "abcdef": Ariel necesita este número para poder
   // llamar o escribir por WhatsApp, así que tiene que ser un teléfono de verdad.
   clienteTelefono: z
@@ -90,6 +100,13 @@ const reprogramarSchema = z.object({
 // Lo que **no** cambia: si escribió algo, tiene que ser un teléfono válido.
 const bodyManualSchema = bodySchema.extend({
   origen: z.enum(['telefono', 'whatsapp']),
+  // ⚠️ El nombre se **sobrescribe** para sacarle la regla de "solo letras", por el mismo
+  // motivo que el teléfono de acá abajo y con el mismo mecanismo (pisar el campo en este
+  // schema, no aflojar el de `bodySchema`). Ariel anota lo que le sirve para reconocer a
+  // la persona — "Señora del 3B", "Juan 2" — y esa es su agenda, no un formulario. Sin
+  // este override, extender `bodySchema` le heredaría la regla del cliente y le rompería
+  // la carga manual.
+  clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
   clienteTelefono: z.preprocess(
     (v) => (v === '' || v === null ? undefined : v),
     z
@@ -587,7 +604,22 @@ const telefonoSchema = z.object({
   clienteTelefono: z
     .string()
     .trim()
-    .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO),
+    .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
+    // ⚠️ Segundo filtro, y no es redundante: `esTelefonoValido` solo cuenta dígitos, así
+    // que acepta "12345678" y "99999999", que `aE164` no puede convertir porque no tienen
+    // característica real. Antes eso terminaba en un guardado a medias — el teléfono se
+    // escribía en el turno, `clienteId` quedaba en null, el endpoint contestaba 200 y el
+    // panel volvía a mostrar el mismo formulario vacío. Desde Ariel se veía como "no se
+    // guarda", que es exactamente el síntoma que reportó.
+    //
+    // Va acá y **solo acá** a propósito: este endpoint existe para armar la ficha, así que
+    // un número que no se puede convertir no cumple su único trabajo. En el alta de un
+    // turno la conversión que falla sí es tolerable (queda el turno sin ficha, que es un
+    // estado previsto), y por eso `bodySchema` no lleva este refine.
+    .refine(
+      (v) => aE164(v) !== null,
+      'Ese número no tiene una característica que podamos reconocer, así que no podemos armarle la ficha. Revisalo, ej: 351 459 3325.',
+    ),
 })
 
 export async function patchTelefonoTurno(req: Request, res: Response) {

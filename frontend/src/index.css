@@ -90,9 +90,24 @@
   /* Texto y bloques apoyados sobre el naranja o sobre el verde claro. */
   --color-agenda-tinta: #16130f;
 
-  /* Un turno que todavía no pasó. Va casi blanco y no miel: sobre el naranja fuerte, el
-     miel-suave se pierde. El color del bloque sigue diciendo el estado y nada más. */
-  --color-turno-proximo: #fffaf2;
+  /* Un turno pendiente se parte en dos según **cuándo** es, que es lo que Ariel pregunta
+     primero al mirar la semana: blanco el de hoy —lo que tiene entre manos— y mostaza el
+     de cualquier otro día. Es el único estado que se subdivide, y por eso no rompe la
+     regla de "el color dice el estado": los dos siguen queriendo decir "pendiente". */
+  --color-turno-hoy: #ffffff;
+  --color-turno-futuro: #f5d020;
+
+  /* Bloqueo (HU-10): violeta sólido. ⚠️ Comparte matiz con `feriado`, que es el rayado
+     que se come parte del día, y no se confunden porque aparecen en formas distintas —
+     un relleno contra unas rayas diagonales—, igual que `ahora` y `ausente` comparten el
+     rojo. Se declara aparte para poder cambiarle el violeta a uno sin tocarle el del
+     otro. */
+  --color-bloqueo: #6a1b9a;
+
+  /* HU-17 — El cartel "NUEVO" de un turno que Ariel todavía no vio. Azul: es el único
+     matiz que queda libre entre el naranja del fondo, el mostaza y el blanco de los
+     pendientes, el verde y el rojo de los cerrados y el violeta de los bloqueos. */
+  --color-nuevo: #1565c0;
 
   /* Realizado: verde fuerte, elegido para **no** confundirse con el verde claro de los
      días pasados, que es justo el fondo sobre el que casi siempre va a caer. Uno es un

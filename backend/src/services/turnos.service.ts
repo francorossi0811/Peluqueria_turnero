@@ -491,6 +491,13 @@ export async function cargarTelefonoDelTurno(
 ): Promise<TurnoConCliente> {
   const turno = await obtenerTurno(id)
 
+  // ⚠️ `vincularCliente` devuelve null cuando `aE164` no puede convertir el número, y eso
+  // acá dejaría el teléfono escrito con `clienteId` en null: un guardado a medias que
+  // devuelve 200 y se ve como "no se guardó". Lo ataja `telefonoSchema` en el controller,
+  // que es el único que llama a esta función — ahí un número inconvertible es un 400 y no
+  // llega hasta acá. Si alguna vez se la llama desde otro lado, hay que repetir ese
+  // chequeo: este endpoint existe para armar la ficha, así que quedarse sin ella no es un
+  // resultado aceptable (a diferencia de `crearTurno`, donde sí lo es).
   const clienteId = await vincularCliente(telefono, turno.clienteNombre)
 
   return prisma.turno.update({

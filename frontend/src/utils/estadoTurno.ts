@@ -28,7 +28,10 @@ export const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
  * `cancelado` y `reprogramado` siguen siendo neutros del tema: son estados que Ariel mira
  * de vez en cuando en el historial, no de un vistazo en la agenda. */
 export const ESTILO_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'bg-miel-suave text-miel',
+  // Amarillo fuerte, el mismo token con el que la grilla pinta un turno pendiente. En la
+  // grilla el pendiente **de hoy** va blanco, pero acá no: la vista Día ya está parada en
+  // un día, así que "es de hoy" no distingue nada y el blanco solo restaría contraste.
+  reservado: 'bg-turno-futuro text-agenda-tinta',
   cancelado: 'bg-borde-suave text-tinta-tenue',
   reprogramado: 'bg-borde-suave text-tinta-tenue',
   realizado: 'bg-realizado text-sobre-estado',

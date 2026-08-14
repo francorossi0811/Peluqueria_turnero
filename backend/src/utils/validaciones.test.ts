@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { esTelefonoValido } from './validaciones'
+import { esNombreValido, esTelefonoValido } from './validaciones'
 
 describe('esTelefonoValido', () => {
   it('acepta los formatos que la gente escribe de verdad', () => {
@@ -35,5 +35,36 @@ describe('esTelefonoValido', () => {
 
   it('solo acepta el + como prefijo internacional, no en el medio', () => {
     expect(esTelefonoValido('351+4593325')).toBe(false)
+  })
+})
+
+describe('esNombreValido', () => {
+  it('acepta nombres reales, con espacios y acentos', () => {
+    expect(esNombreValido('Juan')).toBe(true)
+    expect(esNombreValido('Ana María')).toBe(true)
+    expect(esNombreValido('José Muñoz')).toBe(true)
+    expect(esNombreValido('  Martínez  ')).toBe(true)
+  })
+
+  // El motivo de que estos tres estén fijados: "solo letras" tomado al pie de la letra los
+  // rechazaría, y con eso una persona no podría reservar con su propio nombre.
+  it('acepta apellidos con guión y con apóstrofe, en sus dos formas', () => {
+    expect(esNombreValido('Pérez-López')).toBe(true)
+    expect(esNombreValido("O'Brien")).toBe(true)
+    expect(esNombreValido('O’Brien')).toBe(true)
+  })
+
+  it('rechaza números y símbolos, que es lo que se pidió atajar', () => {
+    expect(esNombreValido('Juan123')).toBe(false)
+    expect(esNombreValido('Juan!')).toBe(false)
+    expect(esNombreValido('juan@mail.com')).toBe(false)
+    expect(esNombreValido('3514593325')).toBe(false)
+  })
+
+  it('rechaza vacío o solo separadores: los separadores no son un nombre', () => {
+    expect(esNombreValido('')).toBe(false)
+    expect(esNombreValido('   ')).toBe(false)
+    expect(esNombreValido('---')).toBe(false)
+    expect(esNombreValido("' '")).toBe(false)
   })
 })

@@ -70,12 +70,22 @@ export function FilaTurno({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {enCurso && (
-            <span className="border-ahora text-ahora inline-block rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase">
+            // Rojo, el mismo `ahora` que el recuadro de la fila y que la línea de la hora
+            // actual en la grilla: las tres cosas dicen lo mismo y son un solo color. El
+            // azul quedó entero para "Nuevo", así que en esta fila no hay dos carteles del
+            // mismo color diciendo cosas distintas.
+            //
+            // El borde va a 2 px (era 1) por lo mismo que todo el resto del panel: con la
+            // letra de 16 px, un contorno de 1 px se pierde.
+            <span className="border-ahora text-ahora inline-block rounded-full border-2 px-3 py-1 text-xs font-semibold tracking-wide uppercase">
               Ahora
             </span>
           )}
+          {/* Azul, el mismo del cartel de la grilla: "nuevo" es una sola cosa y no puede
+              tener un color acá y otro allá. Era miel, que además es el acento de marca y
+              aparece en media pantalla. */}
           {sinVer && (
-            <span className="bg-miel text-sobre-acento inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase">
+            <span className="bg-nuevo text-sobre-estado inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase">
               Nuevo
             </span>
           )}

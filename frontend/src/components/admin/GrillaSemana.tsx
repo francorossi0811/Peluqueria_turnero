@@ -63,6 +63,9 @@ interface GrillaSemanaProps {
   minutosAhora: number | null
   onElegirHueco: (fecha: string, hora: string) => void
   onElegirTurno: (turno: TurnoAdmin) => void
+  /** Abre el bloqueo para editarlo o levantarlo. Mismo gesto que tocar un turno: en la
+   * grilla, todo lo que ocupa un rato se toca y se abre. */
+  onElegirBloqueo: (bloqueo: Bloqueo) => void
 }
 
 function aHora(minutos: number): string {
@@ -122,9 +125,24 @@ function etiquetaFeriado(feriados: Feriado[], dia: string): string | null {
  *
  * El borde es negro y de 2 px para todos, igual que las divisiones de la grilla. */
 const CLASES_ESTADO: Record<string, string> = {
-  reservado: 'bg-turno-proximo text-agenda-tinta',
   realizado: 'bg-realizado text-sobre-estado',
   ausente: 'bg-ausente-fuerte text-sobre-estado',
+}
+
+/** El pendiente es el único estado que se parte en dos, y se parte por **cuándo**: blanco
+ * el de hoy, mostaza el de cualquier otro día.
+ *
+ * No contradice la regla de que el color dice el estado: los dos siguen queriendo decir
+ * "pendiente". Lo que agrega es la pregunta que Ariel se hace primero al abrir la semana —
+ * qué me queda hoy — sin tener que buscar la columna. El cerrado (realizado / ausente) no
+ * se parte porque ahí la pregunta ya no existe. */
+function clasesDeEstado(estado: string, esDeHoy: boolean): string {
+  if (estado === 'reservado') {
+    return esDeHoy
+      ? 'bg-turno-hoy text-agenda-tinta'
+      : 'bg-turno-futuro text-agenda-tinta'
+  }
+  return CLASES_ESTADO[estado] ?? 'bg-turno-futuro text-agenda-tinta'
 }
 
 /** Reparte en columnas los turnos que comparten un rato, para que ninguno tape a otro.
@@ -202,6 +220,7 @@ export function GrillaSemana({
   minutosAhora,
   onElegirHueco,
   onElegirTurno,
+  onElegirBloqueo,
 }: GrillaSemanaProps) {
   const tramos = franjasDeLaSemana(franjas)
 
@@ -289,6 +308,7 @@ export function GrillaSemana({
             minutosAhora={minutosAhora}
             onElegirHueco={onElegirHueco}
             onElegirTurno={onElegirTurno}
+            onElegirBloqueo={onElegirBloqueo}
             // El corte entre la mañana y la tarde: en la planilla es una franja verde, y
             // es lo que Ariel usa para no confundir un hueco de las 11 con uno de las 18.
             separado={i > 0}
@@ -316,6 +336,7 @@ function TramoGrilla({
   minutosAhora,
   onElegirHueco,
   onElegirTurno,
+  onElegirBloqueo,
   separado,
 }: TramoGrillaProps) {
   const duracion = tramo.fin - tramo.inicio
@@ -509,19 +530,25 @@ function TramoGrilla({
               if (hasta <= desde) return null
 
               return (
-                <div
+                // Se toca y se abre para editarlo o levantarlo, igual que un turno: en la
+                // grilla todo lo que ocupa un rato responde al mismo gesto. Antes era un
+                // `div` muerto y la única forma de tocarlo era irse a la vista Día.
+                <button
                   key={b.id}
-                  title={b.motivo ?? 'Bloqueado'}
-                  // Relleno negro: sobre el naranja, el ámbar pastel que tenía antes se
-                  // confundía con el fondo. Negro se lee de una como "acá no hay nada".
-                  className="border-agenda-linea bg-agenda-tinta text-sobre-estado absolute right-0 left-0 overflow-hidden rounded border-2 px-1 font-bold"
+                  onClick={() => onElegirBloqueo(b)}
+                  title={`${b.motivo ?? 'Bloqueado'} · tocar para editar`}
+                  // Violeta sólido. ⚠️ Es el mismo matiz que el rayado del feriado a
+                  // propósito: los dos dicen "este rato no está disponible", y se
+                  // distinguen por la forma —relleno contra rayas— y no por el color,
+                  // igual que `ahora` y `ausente` comparten el rojo.
+                  className="border-agenda-linea bg-bloqueo text-sobre-estado absolute right-0 left-0 overflow-hidden rounded border-2 px-1 text-left font-bold transition hover:brightness-110"
                   style={{
                     top: (desde - tramo.inicio) / MINUTOS_POR_PX,
                     height: (hasta - desde) / MINUTOS_POR_PX,
                   }}
                 >
                   {b.motivo ?? 'Bloqueado'}
-                </div>
+                </button>
               )
             })}
 
@@ -555,14 +582,10 @@ function TramoGrilla({
                   // `rounded-md` + `shadow-sm`: el relieve mínimo que despega el bloque del
                   // fondo sin que parezca una tarjeta. El `shadow` se refuerza a `md` solo
                   // en el turno en curso, junto con el borde grueso.
-                  className={`border-agenda-linea absolute overflow-hidden rounded-md border-2 px-1 text-left shadow-sm transition hover:brightness-110 ${
-                    CLASES_ESTADO[t.estado] ??
-                    'bg-turno-proximo text-agenda-tinta'
-                  } ${enCurso ? CLASES_EN_CURSO : ''} ${
-                    // Sin ver (HU-17): anillo negro grueso. Era miel, que sobre el naranja
-                    // de la grilla es casi el mismo color.
-                    t.vistoPorAdmin ? '' : 'ring-agenda-tinta ring-4'
-                  }`}
+                  className={`border-agenda-linea absolute overflow-hidden rounded-md border-2 text-left shadow-sm transition hover:brightness-110 ${clasesDeEstado(
+                    t.estado,
+                    dia === hoy,
+                  )} ${enCurso ? CLASES_EN_CURSO : ''}`}
                   style={{
                     top: (inicio - tramo.inicio) / MINUTOS_POR_PX,
                     height: t.servicio.duracionMinutos / MINUTOS_POR_PX,
@@ -574,6 +597,24 @@ function TramoGrilla({
                     width: `calc(${100 / columnas}% - 4px)`,
                   }}
                 >
+                  {/* HU-17 — El cartel "NUEVO", pegado al borde de arriba y de lado a
+                      lado. Antes esto era un anillo alrededor del bloque, que decía lo
+                      mismo pero había que saberlo de antemano: un cartel que dice la
+                      palabra no hay que aprendérselo.
+
+                      Desaparece solo al tocar "Marcar como vistos": lo único que lo dibuja
+                      es `t.vistoPorAdmin`, así que cuando esa mutación invalida la agenda
+                      el bloque vuelve sin cartel. No hay estado local que mantener.
+
+                      ⚠️ Es el tercer renglón de un bloque de 20 minutos, que ya se probó
+                      dos veces que no entra (las insignias de HU-25 y la marca de cobro de
+                      HU-27). Entra ahora porque el renglón pasó a 72 px, y se mide en el
+                      DOM — no se da por hecho. */}
+                  {!t.vistoPorAdmin && (
+                    <span className="bg-nuevo text-sobre-estado block w-full text-center leading-tight font-bold">
+                      Nuevo
+                    </span>
+                  )}
                   {/* El texto **hereda** el color del bloque (blanco sobre el verde y el
                       rojo fuertes, negro sobre el bloque claro de lo que viene) en vez de
                       fijar `text-tinta`. Antes iba siempre al color de la tinta del tema
@@ -592,7 +633,10 @@ function TramoGrilla({
                       y no tres, así que los círculos quedaban cortados por el borde del
                       bloque. Acá siempre entran, porque el que cede espacio es el nombre
                       (que ya se recorta con puntos suspensivos). */}
-                  <span className="flex items-start gap-1">
+                  {/* El `px-1` bajó del botón a cada renglón: el cartel "NUEVO" tiene que
+                      llegar de borde a borde, y con el padding en el botón quedaba
+                      flotando con dos franjas del color del bloque a los costados. */}
+                  <span className="flex items-start gap-1 px-1">
                     <span className="min-w-0 flex-1 truncate leading-tight font-bold uppercase">
                       {t.cliente?.apodo || t.clienteNombre}
                     </span>
@@ -620,7 +664,7 @@ function TramoGrilla({
                       Va en el renglón del servicio y no en uno propio por lo mismo que
                       las insignias de HU-25: un turno de 20 minutos son 34 píxeles y el
                       tercer renglón queda cortado. */}
-                  <span className="flex items-baseline gap-1">
+                  <span className="flex items-baseline gap-1 px-1">
                     <span className="min-w-0 flex-1 truncate leading-tight">
                       {t.servicio.nombre}
                     </span>

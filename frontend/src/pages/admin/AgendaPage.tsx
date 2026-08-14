@@ -29,7 +29,7 @@ import {
   domingoDeLaSemana,
   turnoEnCurso,
 } from '../../utils/fecha'
-import type { TurnoAdmin } from '../../types/api'
+import type { Bloqueo, TurnoAdmin } from '../../types/api'
 
 type Vista = 'dia' | 'semana'
 
@@ -75,6 +75,10 @@ export function AgendaPage() {
   const [fecha, setFecha] = useState(hoyIso())
   const [modalCargar, setModalCargar] = useState(false)
   const [modalBloquear, setModalBloquear] = useState(false)
+  // El bloqueo abierto desde la grilla, para editarlo o levantarlo. Es un estado propio y
+  // no un booleano compartido con `modalBloquear` porque son dos cosas distintas: crear
+  // uno nuevo sobre el día que se está mirando, y abrir uno que ya existe.
+  const [bloqueoEditar, setBloqueoEditar] = useState<Bloqueo | null>(null)
   const [modalBuscar, setModalBuscar] = useState(false)
   const [turnoEditar, setTurnoEditar] = useState<TurnoAdmin | null>(null)
   // HU-25 — El turno abierto desde la grilla. Es un estado aparte del de reprogramar
@@ -339,71 +343,95 @@ export function AgendaPage() {
           minutosAhora={minutosAhora}
           onElegirHueco={(f, h) => setHuecoElegido({ fecha: f, hora: h })}
           onElegirTurno={setTurnoDetalle}
+          onElegirBloqueo={setBloqueoEditar}
         />
       )}
 
       {agendaQuery.data && bloqueosQuery.data && vista === 'dia' && (
         <div className="flex flex-col gap-6">
           {dias.map((dia) => {
-            // Los que ya se resolvieron (realizado / ausente) caen al fondo: lo que le
-            // sirve a Ariel de un vistazo es qué le queda por atender, no lo que ya pasó.
-            // Dentro de cada grupo, por hora.
-            const turnosDelDia = turnos
-              .filter((t) => t.fecha === dia)
-              .sort((a, b) => {
-                const resuelto = (t: TurnoAdmin) =>
-                  t.estado === 'realizado' || t.estado === 'ausente' ? 1 : 0
-                return (
-                  resuelto(a) - resuelto(b) || a.hora.localeCompare(b.hora)
-                )
-              })
-            const bloqueosDelDia = bloqueosQuery.data.filter(
-              (b) => b.fechaInicio <= dia && b.fechaFin >= dia,
+            // Un solo orden para todo lo que ocupa un rato del día — turnos **y**
+            // bloqueos mezclados—, porque el día se lee de arriba abajo como pasa: un
+            // bloqueo de las 15:00 va entre el turno de las 14:40 y el de las 16:00, no
+            // arriba de todo. Antes los bloqueos salían todos juntos al principio, sin
+            // importar la hora.
+            //
+            // Dos claves, en este orden:
+            //  1. Lo ya resuelto (realizado / ausente) cae al fondo. Lo que le sirve a
+            //     Ariel de un vistazo es qué le queda por atender, no lo que ya pasó. Un
+            //     bloqueo nunca se resuelve, así que se queda arriba con los pendientes.
+            //  2. Dentro de cada grupo, por hora de menor a mayor.
+            //
+            // Un bloqueo de todo el día no tiene hora, y va a las 00:00: abarca el día
+            // entero, así que el lugar que le corresponde es antes que todo lo demás.
+            const filasDelDia = [
+              ...turnos
+                .filter((t) => t.fecha === dia)
+                .map((t) => ({
+                  clave: `t-${t.id}`,
+                  hora: t.hora,
+                  resuelto:
+                    t.estado === 'realizado' || t.estado === 'ausente' ? 1 : 0,
+                  turno: t,
+                  bloqueo: null,
+                })),
+              ...bloqueosQuery.data
+                .filter((b) => b.fechaInicio <= dia && b.fechaFin >= dia)
+                .map((b) => ({
+                  clave: `b-${b.id}`,
+                  hora: b.horaInicio ?? '00:00',
+                  resuelto: 0,
+                  turno: null,
+                  bloqueo: b,
+                })),
+            ].sort(
+              (a, b) => a.resuelto - b.resuelto || a.hora.localeCompare(b.hora),
             )
 
             return (
               <div key={dia}>
-                {turnosDelDia.length === 0 && bloqueosDelDia.length === 0 && (
+                {filasDelDia.length === 0 && (
                   <p className="text-tinta-suave text-sm">Sin turnos.</p>
                 )}
                 <div className="flex flex-col gap-2">
-                  {bloqueosDelDia.map((b) => (
-                    <FilaBloqueo
-                      key={b.id}
-                      bloqueo={b}
-                      levantando={
-                        levantarBloqueoMutation.isPending &&
-                        levantarBloqueoMutation.variables === b.id
-                      }
-                      onLevantar={() => levantarBloqueoMutation.mutate(b.id)}
-                    />
-                  ))}
-                  {turnosDelDia.map((t) => (
-                    <FilaTurno
-                      key={t.id}
-                      turno={t}
-                      enCurso={turnoEnCurso(t, dia, hoyIso(), minutosAhora)}
-                      onEditar={() => setTurnoEditar(t)}
-                      onCancelar={() => cancelarMutation.mutate(t.id)}
-                      // HU-27 — "Realizado" abre el cobro y desde ahí se guardan las dos
-                      // cosas juntas; "Ausente" no pasa por ningún modal, porque un
-                      // ausente no paga.
-                      onMarcarEstado={(estado) =>
-                        estado === 'realizado'
-                          ? setTurnoCobrar(t)
-                          : marcarMutation.mutate({ id: t.id, estado })
-                      }
-                      onCobrar={() => setTurnoCobrar(t)}
-                      cancelando={
-                        cancelarMutation.isPending &&
-                        cancelarMutation.variables === t.id
-                      }
-                      marcando={
-                        marcarMutation.isPending &&
-                        marcarMutation.variables?.id === t.id
-                      }
-                    />
-                  ))}
+                  {filasDelDia.map(({ clave, turno: t, bloqueo: b }) =>
+                    b ? (
+                      <FilaBloqueo
+                        key={clave}
+                        bloqueo={b}
+                        levantando={
+                          levantarBloqueoMutation.isPending &&
+                          levantarBloqueoMutation.variables === b.id
+                        }
+                        onLevantar={() => levantarBloqueoMutation.mutate(b.id)}
+                      />
+                    ) : (
+                      <FilaTurno
+                        key={clave}
+                        turno={t!}
+                        enCurso={turnoEnCurso(t, dia, hoyIso(), minutosAhora)}
+                        onEditar={() => setTurnoEditar(t)}
+                        onCancelar={() => cancelarMutation.mutate(t.id)}
+                        // HU-27 — "Realizado" abre el cobro y desde ahí se guardan las dos
+                        // cosas juntas; "Ausente" no pasa por ningún modal, porque un
+                        // ausente no paga.
+                        onMarcarEstado={(estado) =>
+                          estado === 'realizado'
+                            ? setTurnoCobrar(t)
+                            : marcarMutation.mutate({ id: t.id, estado })
+                        }
+                        onCobrar={() => setTurnoCobrar(t)}
+                        cancelando={
+                          cancelarMutation.isPending &&
+                          cancelarMutation.variables === t.id
+                        }
+                        marcando={
+                          marcarMutation.isPending &&
+                          marcarMutation.variables?.id === t.id
+                        }
+                      />
+                    ),
+                  )}
                 </div>
               </div>
             )
@@ -441,10 +469,7 @@ export function AgendaPage() {
       {/* HU-27 — El cobro. Mismo modal para las dos puertas de entrada: al marcar
           Realizado y al completar un cobro pendiente. */}
       {turnoCobrar && (
-        <ModalCobro
-          turno={turnoCobrar}
-          onClose={() => setTurnoCobrar(null)}
-        />
+        <ModalCobro turno={turnoCobrar} onClose={() => setTurnoCobrar(null)} />
       )}
       {turnoEditar && (
         <ModalEditarTurno
@@ -470,7 +495,18 @@ export function AgendaPage() {
           onClose={() => setModalBloquear(false)}
         />
       )}
-      {modalBuscar && <ModalBuscarTurno onClose={() => setModalBuscar(false)} />}
+      {/* El mismo componente que crea, con el bloqueo cargado: es el mismo formulario y
+          duplicarlo dejaría dos que hay que acordarse de cambiar juntos. */}
+      {bloqueoEditar && (
+        <ModalBloquear
+          fechaInicial={fecha}
+          bloqueo={bloqueoEditar}
+          onClose={() => setBloqueoEditar(null)}
+        />
+      )}
+      {modalBuscar && (
+        <ModalBuscarTurno onClose={() => setModalBuscar(false)} />
+      )}
     </div>
   )
 }
