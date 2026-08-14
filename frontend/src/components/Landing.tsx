@@ -33,33 +33,18 @@ function fotoParaServicio(servicio: Servicio, lockPorDefecto: number): string {
   return servicio.foto ?? fotoStock('barber,haircut', 500, 650, lockPorDefecto)
 }
 
-const PRODUCTOS = [
-  {
-    nombre: 'Shampoo',
-    categoria: 'Cabello',
-    desc: 'Limpieza diaria para todo tipo de cabello.',
-    foto: '/imagenes/producto-shampoo.jpg',
-  },
-  {
-    nombre: 'Aceite para barba',
-    categoria: 'Barba',
-    desc: 'Hidrata y da brillo.',
-    foto: '/imagenes/producto-aceite.jpg',
-  },
-  {
-    nombre: 'Cera moldeadora',
-    categoria: 'Peinado',
-    desc: 'Fijación y brillo natural.',
-    foto: '/imagenes/producto-cera.jpg',
-  },
-  {
-    nombre: 'Crema de afeitar',
-    categoria: 'Cuidado',
-    desc: 'Afeitado suave y preciso.',
-    foto: '/imagenes/producto-crema.jpg',
-  },
-]
-
+// La sección "Productos" (constante, sección y `ProductoCard`) se **borró** el 13/8/2026:
+// la peluquería no vende productos, así que era una vidriera inventada. Las cuatro fotos
+// `/imagenes/producto-*.jpg` se borraron con ella; si algún día vuelve, está en el
+// historial de git.
+//
+// ⚠️ "Beneficios" corrió otra suerte: está **comentado, no borrado**. Ariel pidió sacarlo
+// de la landing y Franco lo quiere conservar para poder volver a mostrarlo sin rehacerlo.
+// Para reactivarlo hay que descomentar **tres** bloques: esta constante, la sección oscura
+// dentro del `return` y el componente `BeneficioCard` del final. Las fotos
+// `/imagenes/beneficio-*.jpg` siguen en el repo por el mismo motivo — sin ellas,
+// descomentar no alcanzaría para que la sección vuelva a verse.
+/*
 const BENEFICIOS = [
   {
     label: 'Productos de calidad',
@@ -71,6 +56,7 @@ const BENEFICIOS = [
     foto: '/imagenes/beneficio-atencion.jpg',
   },
 ]
+*/
 
 function scrollA(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
@@ -89,12 +75,6 @@ export function Landing({ query, onElegir }: LandingProps) {
             className="text-tinta hover:text-miel hidden text-sm transition sm:inline"
           >
             Servicios
-          </button>
-          <button
-            onClick={() => scrollA('productos')}
-            className="text-tinta hover:text-miel hidden text-sm transition sm:inline"
-          >
-            Productos
           </button>
           <button
             onClick={() => scrollA('contacto')}
@@ -178,24 +158,9 @@ export function Landing({ query, onElegir }: LandingProps) {
 
       <hr className="border-borde mx-auto max-w-[1240px]" />
 
-      <section
-        id="productos"
-        className="mx-auto max-w-[1240px] scroll-mt-20 px-[clamp(20px,5vw,72px)] py-16 sm:py-20"
-      >
-        <Kicker>Productos</Kicker>
-        <h2 className="font-display text-tinta text-[34px] leading-tight font-normal">
-          Cuidado personal para llevar
-        </h2>
-        <p className="font-body text-tinta mt-2 mb-8 max-w-[60ch] opacity-78">
-          Los mismos productos que usamos en el sillón, a la venta en el local.
-        </p>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {PRODUCTOS.map((p) => (
-            <ProductoCard key={p.nombre} producto={p} />
-          ))}
-        </div>
-      </section>
-
+      {/* Bloque 2 de 3 de "Beneficios" comentado — ver la nota de la constante, arriba.
+          Al descomentarlo no hace falta agregarle un <hr>: la banda oscura se separa
+          sola del contacto que viene abajo.
       <section className="bg-[#181512] py-16 sm:py-20">
         <div className="mx-auto max-w-[1240px] px-[clamp(20px,5vw,72px)]">
           <h2 className="font-display mb-8 text-center text-[32px] leading-tight font-normal text-[#f3f2f2]">
@@ -208,8 +173,7 @@ export function Landing({ query, onElegir }: LandingProps) {
           </div>
         </div>
       </section>
-
-      <hr className="border-borde mx-auto max-w-[1240px]" />
+      */}
 
       <section
         id="contacto"
@@ -302,25 +266,8 @@ function ServicioCard({
   )
 }
 
-function ProductoCard({ producto }: { producto: (typeof PRODUCTOS)[number] }) {
-  return (
-    <div className="border-borde flex flex-col gap-2 rounded-md border p-3">
-      <div className="aspect-square overflow-hidden rounded-md">
-        <img
-          src={producto.foto}
-          alt={producto.nombre}
-          className="h-full w-full object-cover"
-        />
-      </div>
-      <span className="inline-block w-fit rounded bg-[#5a3b0a] px-2 py-0.5 text-[10px] tracking-wider text-white uppercase">
-        {producto.categoria}
-      </span>
-      <h3 className="font-display text-tinta text-[17px]">{producto.nombre}</h3>
-      <p className="text-tinta text-[13px] opacity-80">{producto.desc}</p>
-    </div>
-  )
-}
-
+// Bloque 3 de 3 de "Beneficios" comentado — ver la nota de la constante, arriba.
+/*
 function BeneficioCard({
   beneficio,
 }: {
@@ -336,3 +283,4 @@ function BeneficioCard({
     </div>
   )
 }
+*/

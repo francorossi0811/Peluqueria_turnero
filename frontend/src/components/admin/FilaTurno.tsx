@@ -1,26 +1,8 @@
 import { useState } from 'react'
 import { Button } from '../ui/Button'
 import { ETIQUETA_MEDIO_PAGO, formatearPesos } from '../../utils/dinero'
-import type { EstadoTurno, TurnoAdmin } from '../../types/api'
-
-const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'Reservado',
-  cancelado: 'Cancelado',
-  reprogramado: 'Reprogramado',
-  realizado: 'Realizado',
-  ausente: 'Ausente',
-}
-
-/** Los mismos tres colores que la grilla: miel lo que viene, verde lo que se hizo, rojo el
- * que no vino. `ausente` usaba `alerta` (ámbar-naranja) y en la grilla usaba un neutro:
- * eran tres colores distintos para el mismo estado según dónde lo miraras. */
-const ESTILO_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'bg-miel-suave text-miel',
-  cancelado: 'bg-borde-suave text-tinta-tenue',
-  reprogramado: 'bg-borde-suave text-tinta-tenue',
-  realizado: 'bg-bien-suave text-bien',
-  ausente: 'bg-ausente-suave text-ausente',
-}
+import { ESTILO_ESTADO, ETIQUETA_ESTADO } from '../../utils/estadoTurno'
+import type { TurnoAdmin } from '../../types/api'
 
 const ETIQUETA_ORIGEN: Record<TurnoAdmin['origen'], string> = {
   online: 'Online',
@@ -88,12 +70,22 @@ export function FilaTurno({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {enCurso && (
-            <span className="border-ahora text-ahora inline-block rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase">
+            // Rojo, el mismo `ahora` que el recuadro de la fila y que la línea de la hora
+            // actual en la grilla: las tres cosas dicen lo mismo y son un solo color. El
+            // azul quedó entero para "Nuevo", así que en esta fila no hay dos carteles del
+            // mismo color diciendo cosas distintas.
+            //
+            // El borde va a 2 px (era 1) por lo mismo que todo el resto del panel: con la
+            // letra de 16 px, un contorno de 1 px se pierde.
+            <span className="border-ahora text-ahora inline-block rounded-full border-2 px-3 py-1 text-xs font-semibold tracking-wide uppercase">
               Ahora
             </span>
           )}
+          {/* Azul, el mismo del cartel de la grilla: "nuevo" es una sola cosa y no puede
+              tener un color acá y otro allá. Era miel, que además es el acento de marca y
+              aparece en media pantalla. */}
           {sinVer && (
-            <span className="bg-miel text-sobre-acento inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase">
+            <span className="bg-nuevo text-sobre-estado inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase">
               Nuevo
             </span>
           )}

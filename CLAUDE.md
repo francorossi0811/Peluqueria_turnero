@@ -14,14 +14,34 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
 
 - **Trabajar siempre en la rama `v3-ajustes-de-ariel`**, nunca commitear en `main`. Mergear a `main` le cambiaría la app que está probando.
 - **No pushear ni mergear sin que Franco lo pida explícitamente.**
-- **Todo contra la base de desarrollo.** Antes de correr cualquier migración o script, verificar el host de `DATABASE_URL`: desarrollo es `ep-cool-field-acf4s3g8`. Si no coincide, parar y preguntar.
-- Render sirve **producción** y Vercel le apunta ahí. El entorno local (`localhost:3000` + `localhost:5173`) va contra **desarrollo**; `frontend/.env` tiene que decir `http://localhost:3000/api`.
-- Cuando se entregue, hay **ocho** migraciones que aplicar en producción con `migrate deploy` (`hacer_telefono_opcional`, `diagnostico_push`, `feriado_modalidad`, `fichas_de_clientes`, `login_por_email_y_roles`, `etiqueta_automatica`, `cobros` y `foto_de_servicio`). ⚠️ `foto_de_servicio` trae un `UPDATE` que asigna las fotos matcheando **por nombre**: si en producción algún servicio se llama distinto que en desarrollo, esa fila queda sin foto (cae a stock) y hay que completarla a mano. No es automático, y sin la primera el backend nuevo falla al guardar un turno sin teléfono. Después de aplicarlas, en este orden:
-  1. Cargar en Render `ADMIN_EMAIL` (el mail **real** de Ariel), `SUPER_ADMIN_USUARIO`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD` y `BREVO_API_KEY`.
-  2. Correr el **seed**, que le carga el email a la cuenta que ya existe y crea la del super admin. ⚠️ **Sin este paso Ariel no puede entrar**: el login es por email y su fila no tiene uno. El seed avisa con un warning si queda alguna cuenta así.
-  3. Correr `npm run backfill:clientes` una vez, para crear las fichas de los turnos que ya existían. ⚠️ El backfill **no** les pone la etiqueta "Nuevo": son clientes que ya venían, no nuevos.
-  4. Sentarse con Ariel a cargarle el **precio a cada servicio** (HU-27). No hay migración ni script que lo haga: los precios son suyos y nadie más los sabe. Sin esto el sistema anda igual, pero el cobro no le prellena el monto y lo tiene que tipear cada vez. La migración `cobros` **no necesita backfill**: los turnos ya realizados quedan sin cobro registrado a propósito.
+- Render sirve **producción** y Vercel le apunta ahí. `frontend/.env` tiene que decir `http://localhost:3000/api`.
 - ⚠️ **Las suscripciones push viven en la base a la que apuntaba el backend cuando se tocó "Activar".** Cambiar `DATABASE_URL` en Render deja huérfanos todos los dispositivos registrados hasta ese momento: el envío sale, pero a una lista vacía o vieja. Ya pasó — ver la nota del final de la Etapa 1.
+
+### ⚠️ Ya no hay base de desarrollo (13/8/2026)
+
+Hasta esta fecha este documento decía "**todo contra la base de desarrollo**, verificá que `DATABASE_URL` sea `ep-cool-field-acf4s3g8`". **Esa regla ya no se puede cumplir: esa branch de Neon no existe más.** El proyecto `Peluqueria Ariel` (`misty-flower-34174000`) tiene hoy **una sola** branch:
+
+| | |
+|---|---|
+| Branch | `production` (`br-icy-dust-acborrsz`), primary y default |
+| Compute | `ep-wispy-mud-acx20c4v` (read-write, `sa-east-1`) |
+
+O sea que **el entorno local pega contra producción**, porque no hay otra cosa contra la cual pegar. Franco lo autorizó explícitamente el 13/8/2026 **porque el negocio está cerrado** y no hay turnos entrando.
+
+⚠️ **Eso es una condición temporal, no la nueva normalidad.** Cuando la peluquería vuelva a abrir, cada escritura local cae en la agenda real de Ariel. Antes de correr cualquier cosa que escriba (reservar un turno de prueba, un script, una migración), preguntarle a Franco si el negocio sigue cerrado. Para **leer** el estado de producción conviene la MCP de Neon (`run_sql` sobre el proyecto y branch de arriba) antes que levantar el backend: es solo lectura y no puede escribir por accidente.
+
+⚠️ **Las credenciales del `.env` se vencen.** El 13/8/2026 los dos connection strings guardados (el de producción y el de la desaparecida desarrollo) daban `password authentication failed`. No es el formato —se descartó probando variantes de `sslmode` y `channel_binding`—, es la contraseña. Cuando pase, hay que sacar una nueva de la consola de Neon; **la MCP de Neon tiene bloqueado `get_connection_string` por permisos**, así que ese camino no sirve y la tiene que pegar Franco.
+
+### Estado real de producción (verificado el 13/8/2026)
+
+La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi toda hecha**. Verificado con `run_sql`, no leído:
+
+- ✅ **Las 13 migraciones están aplicadas**, incluidas las ocho de la v3 que este documento daba por pendientes. `foto_de_servicio` matcheó bien: los cinco servicios tienen su foto propia. (La fila duplicada de `servicio_corte_mujer` que aparece sin terminar tiene `rolled_back_at`, así que no bloquea un `migrate deploy` futuro.)
+- ✅ **El seed corrió.** Hay dos cuentas, las dos con email: `Ariel` (`admin`) y `Franco` (`super_admin`). **En producción no está el problema de las dos cuentas de Ariel** — eso era exclusivo de la base de desarrollo, que ya no existe, así que el punto se puede dar por cerrado.
+- ✅ **Los precios están cargados**: Corte clásico $16.000, Corte + Barba $25.000, Barba $10.000, Corte de Pelo mujer $20.000. Color está en `null` pero está **inactivo**, así que no molesta.
+- ✅ **Los feriados se sincronizaron** solos: 32 filas, de 2026-01-01 a 2027-12-25.
+- ✅ **Ariel ya está usando la v3 de verdad**: 2 turnos cobrados, 3 suscripciones push, y se creó su propia etiqueta **"suele faltar"** además de recolorear "Nuevo" a verde. Eso confirma en la práctica dos decisiones de diseño: que la etiqueta automática se busque por `clave` y no por nombre, y que el color lo elija él.
+- 🚧 **Lo único que sigue pendiente es el backfill.** Hay **2 turnos con teléfono y sin ficha** (`cliente_telefono IS NOT NULL AND cliente_id IS NULL`), de los 5 que hay. Los otros 3 tienen ficha porque `crearTurno` se la creó al reservar. Falta correr `npm run backfill:clientes` una vez. ⚠️ El backfill **no** les pone la etiqueta "Nuevo": son clientes que ya venían.
 
 ## Antes de hacer nada
 
@@ -70,7 +90,7 @@ La v1 está deployada y Ariel la está probando de verdad, contra la base de **p
   - Etapa 1 — sesión deslizante que no vence mientras Ariel use el panel, y cambio de contraseña desde "Mi cuenta" (HU-15, HU-16).
   - Etapa 2 — agenda que se actualiza sola con los turnos nuevos marcados, y aviso al celular por Web Push (HU-17, HU-18).
   - Etapa 3 — mail de confirmación al cliente con su link, y "agregar al calendario" (.ics) (HU-02, HU-19).
-- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapa 2 (WhatsApp) ✅ código terminado; **falta hacer los trámites con Meta para probarlo con mensajes reales**. Etapa 3 ✅ terminada entera: feriados + grilla semanal (primera mitad) y fichas de clientes (segunda mitad). Etapa 4 (cobros) ✅ código terminado. Ver abajo.
+- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapa 2 (WhatsApp) ✅ código terminado; **falta hacer los trámites con Meta para probarlo con mensajes reales**. Etapa 3 ✅ terminada entera: feriados + grilla semanal (primera mitad) y fichas de clientes (segunda mitad). Etapa 4 (cobros) ✅ código terminado. Limpieza de la landing (13/8/2026) ✅. Ver abajo.
 - ✅ **Brevo ya está configurado** en `backend/.env` (`BREVO_API_KEY` cargada, `MAIL_FROM` apuntando al mail de Franco). Este documento decía lo contrario hasta el 7/8/2026. En Render hay que cargarla aparte: es otra variable de entorno.
 
 ## v3 — lo que pidió Ariel
@@ -101,9 +121,9 @@ De ahí salen dos cosas que conviene tener presentes:
 - ⚠️ **Defecto conocido, sin arreglar:** el panel dice "avisos activados" mirando **solo el navegador** (`suscripcionActual()` en `lib/push.ts`), nunca al backend. Los dos estados pueden estar desincronizados y la pantalla no lo delata. El endpoint `GET /api/admin/push/dispositivos` ya devuelve lo que hace falta para reconciliarlo; falta usarlo en la UI.
 - Un **403** al enviar significa claves VAPID que no coinciden con las que firmaron esa suscripción — típico después de rotarlas. Esa fila no se borra sola (a diferencia de 404/410) y el dispositivo tiene que volver a activarse a mano.
 
-Dos cosas para no olvidar al entregar:
+Una cosa para no olvidar:
 
-- La migración `hacer_telefono_opcional` (`DROP NOT NULL`) y `diagnostico_push` están aplicadas **solo en desarrollo**. Hay que correr `migrate deploy` en producción.
+- ~~`hacer_telefono_opcional` y `diagnostico_push` están aplicadas solo en desarrollo~~ — **las dos están aplicadas en producción** desde antes del 13/8/2026, junto con el resto. Ver "Estado real de producción" arriba.
 - ⚠️ `diagnostico_push` lleva `DEFAULT CURRENT_TIMESTAMP` escrito a mano en el `updated_at`: Prisma lo genera sin default y la migración falla sobre una tabla con filas. Es exactamente el motivo del ritual de leer el SQL antes de aplicar.
 
 ### Etapa 2 — WhatsApp como canal principal ✅ código terminado (HU-22)
@@ -179,7 +199,7 @@ Sección "Clientes" en el panel, ficha dentro del detalle del turno, e insignias
 - ⚠️ **El anillo de la insignia usa `tinta` (el color del texto), no un gris fijo.** Ariel elige el color libre, así que tarde o temprano va a elegir uno casi igual al fondo. Como `tinta` contrasta contra la superficie por definición en los dos temas, el anillo también. Verificado con `#ffffff` y `#000000` en claro y en oscuro.
 - **`PATCH /api/admin/turnos/:id/telefono`** — le carga el número a un turno que se guardó sin él (HU-08) y lo engancha con su ficha. Sin esto, todos los turnos que Ariel carga con la persona enfrente quedaban fuera de las fichas para siempre. Endpoint propio y no dentro del `PATCH` de turno: aquel mueve el turno y revalida disponibilidad, esto solo completa un dato de contacto.
 - **No se integra Drive por OAuth**: lo que le servía de Drive era el acceso multiplataforma, y la app web ya lo es. ⚠️ **La exportación a CSV se construyó y después se sacó a pedido de Ariel** (endpoint, servicio, cliente de API y test incluidos, no solo el botón). El motivo por el que existía —"llevarse los datos"— resultó ser un problema que él no tiene: consulta las fichas en el panel, al lado del turno.
-- **Backfill:** `npm run backfill:clientes`. Es idempotente. En desarrollo dejó 17 turnos en 3 fichas; los 18 que no pudo interpretar son datos de prueba con números inventados. ⚠️ **Falta correrlo en producción**, después de las migraciones.
+- **Backfill:** `npm run backfill:clientes`. Es idempotente. ⚠️ **Sigue pendiente en producción, y es lo único que queda del checklist de entrega.** Al 13/8/2026 hay 2 turnos con teléfono y sin ficha, de 5 en total; los otros 3 la tienen porque `crearTurno` se la creó al reservar. (La medición vieja de "17 turnos en 3 fichas" era de la base de desarrollo, que ya no existe.)
 
 **Dos cosas que se encontraron mirando la pantalla, no compilando:**
 
@@ -224,7 +244,7 @@ Sección "Clientes" en el panel, ficha dentro del detalle del turno, e insignias
 
 - La columna `email` es **nullable** a propósito: se agregó sobre una base con una cuenta ya creada, y ponerle un email inventado para satisfacer un `NOT NULL` habría sido escribir un dato falso en la única fila que importaba. El seed la completa desde `ADMIN_EMAIL` sin tocar la contraseña.
 - ⚠️ **Una cuenta sin email no puede entrar.** El seed lo avisa con un warning al correr y la pantalla de administradores las marca en rojo.
-- ⚠️ **En la base de desarrollo hay dos cuentas de Ariel**: `ariel` (2/8, sin email, ya no puede entrar) y `Ariel` (6/8, la que se usa). No borré ninguna — es una decisión de Franco. Conviene revisar si en producción pasa lo mismo antes de migrar.
+- ~~**En la base de desarrollo hay dos cuentas de Ariel**~~ — **resuelto y cerrado (13/8/2026)**. Era un problema exclusivo de la base de desarrollo, que ya no existe. En producción hay **una sola** cuenta de Ariel (`admin`, con email) más la de Franco (`super_admin`, con email). Verificado con `run_sql`. No hay nada que decidir ni que borrar.
 - ⚠️ **Cambiar la contraseña en el `.env` NO cambia la contraseña.** El seed solo crea cuentas; nunca pisa la de una que ya existe, porque si lo hiciera, correrlo en producción le resetearía la contraseña a Ariel a la que hubiera quedado vieja en una variable de entorno. Pasó de verdad y costó un rato de confusión: se cambió `SUPER_ADMIN_PASSWORD`, el login empezó a rechazarla y no había ninguna pista. **Ahora el seed lo avisa** comparando contra el hash guardado. Para cambiarla de verdad: "Mi cuenta" (pide la actual) o que el super admin la fije desde "Administradores".
 - Las variables nuevas van en `.env`: `ADMIN_EMAIL`, `SUPER_ADMIN_USUARIO`, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`. El mail real de Ariel ya está cargado en el `.env` de desarrollo; **no se escribe acá** — este archivo se versiona en un repo público y es el dato personal de un tercero, que además no hace falta para trabajar (quien lo necesita lo tiene en el `.env`).
 - ⚠️ **Un email ya cargado no se podía cambiar por ningún lado** — el seed solo lo completa cuando está vacío. Como el login es por email, un mail mal tipeado dejaba la cuenta inutilizable sin entrar a la base. Se agregó `PATCH /admin/administradores/:id` y el botón "Datos" en la pantalla de administradores. **Sí funciona sobre la cuenta propia**, al revés que los de contraseña y rol: corregirse el mail no es un privilegio abusable, y prohibirlo dejaría al super admin sin arreglar su propia dirección.
@@ -277,6 +297,22 @@ Era la única etapa **sin historia de usuario escrita** —"Precios" figuraba te
 - El "Cerrar sesión" de `CuentaPage` también pasó a `replace`: sin eso rebotaba igual (lo ataja `RequireAuth`), pero el rebote se veía.
 - Verificado en el navegador con una sesión real: entrar a `/admin/login` logueado cae en la Agenda, atrás lleva a la landing con el token intacto, adelante vuelve al panel, todos los requests 200 y cero errores de consola. Después de salir, atrás **no** muestra el panel.
 
+### Limpieza de la landing — Productos y Beneficios (13/8/2026) ✅
+
+Pedido de Franco: sacar Productos, **comentar** Beneficios, y que la landing sea el turnero y el selector de servicios. Todo vive en `frontend/src/components/Landing.tsx` y es **puro frontend** — no hay tabla, ni endpoint, ni línea en `Docs/` para ninguna de las dos secciones. Eran arrays hardcodeados.
+
+⚠️ **La landing no es una ruta.** Es el paso 1 del wizard de `ReservarPage`, que vive en `/` (por eso "volver al inicio" resetea el wizard en vez de navegar). Cambiar la landing es recortar ese paso, no crear una página.
+
+**Productos se borró de verdad**: la constante, la sección, `ProductoCard`, el botón del nav y las cuatro fotos `/imagenes/producto-*.jpg`. La peluquería no vende productos, así que era una vidriera inventada. Si vuelve, está en el historial de git.
+
+⚠️ **Beneficios está comentado, no borrado, y son TRES bloques que van juntos**: la constante `BENEFICIOS`, la sección oscura dentro del `return` y el componente `BeneficioCard`. Ariel pidió sacarlo y Franco lo quiere conservar para poder volver a mostrarlo sin rehacerlo. **Las tres fotos `/imagenes/beneficio-*.jpg` NO se borraron** por el mismo motivo: sin ellas, descomentar no alcanzaría para que la sección vuelva a verse. La nota que explica esto vive arriba de la constante, en el código.
+
+- La sección oscura no necesita un `<hr>` propio al volver: su fondo la separa sola del contacto.
+- Quedaron **2** separadores en vez de 3, sin dos seguidos. Medido en el DOM: `header 0→137`, hero `137→865`, `hr 865`, `#servicios 866→1588`, `hr 1588`, `#contacto 1589→2401`, `footer 2401→2610`. Contiguo, sin huecos — las secciones borradas no dejaron espacio muerto.
+- El nav quedó en **Servicios · Contacto · Reservar turno**.
+
+**Verificado contra producción**, no solo compilado: los 4 servicios activos se dibujan con sus 4 fotos propias (las cuatro con `naturalWidth > 0`, o sea que **ninguna cayó al respaldo de stock**), y el HTML renderizado no contiene la cadena "producto" ni "beneficio" en ningún lado — que es la prueba de que los bloques comentados no se filtran. También se confirmó por API que **`/api/servicios` sigue sin devolver `precio`**: el mapeo campo por campo de `getServiciosPublico` aguanta contra la base real, con precios cargados de verdad.
+
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 
 Seña por Mercado Pago al reservar. **No lo pidió Ariel**; queda anotado porque es la continuación natural. Traería cuenta de MP, webhooks de pago, reembolsos al cancelar y qué hacer con un pago pendiente — o sea, trámites externos como los de WhatsApp. También quedaron afuera los pagos parciales, el historial de precios y la facturación.
@@ -288,6 +324,7 @@ Avanzar etapa por etapa. Cada etapa se valida con Franco antes de pasar a la sig
 Además, para este proyecto:
 
 - **Verificar de verdad, no solo compilar.** Los dos servidores locales y el navegador están a mano: medir los colores calculados, probar los endpoints con datos reales, mirar la pantalla. Varias cosas de la v3 se encontraron así y no con `tsc`.
-- **Ritual de migraciones:** siempre `--create-only`, leer el SQL generado y **borrar cualquier línea que toque `turnos_no_solapamiento`** (el `EXCLUDE USING gist` está escrito a mano en la migración inicial y no vive en `schema.prisma`, así que Prisma puede emitir un `DROP CONSTRAINT` al diffear). Después `migrate deploy` y confirmar contra `pg_constraint` que sigue existiendo.
-- Si se toca `schema.prisma`, correr `npx prisma generate` — si no, `tsc` falla con tipos viejos.
+- **Ritual de migraciones:** siempre `--create-only`, leer el SQL generado y **borrar cualquier línea que toque `turnos_no_solapamiento`** (el `EXCLUDE USING gist` está escrito a mano en la migración inicial y no vive en `schema.prisma`, así que Prisma puede emitir un `DROP CONSTRAINT` al diffear). Después `migrate deploy` y confirmar contra `pg_constraint` que sigue existiendo. ⚠️ **Ahora ese ritual corre contra producción**, porque no hay otra base — ver la sección de arriba. El paso de leer el SQL antes de aplicar dejó de ser una buena práctica y pasó a ser lo único que separa un diff mal generado de la agenda real de Ariel.
+- Si se toca `schema.prisma`, correr `npx prisma generate` — si no, `tsc` falla con tipos viejos. ⚠️ El cliente se genera en `backend/generated/` (gitignoreado) y **puede no estar** en un clon nuevo o después de limpiar: el síntoma es `Cannot find module '.prisma/client/default'` o un `PrismaClient` que pide un driver adapter. Se arregla con `npx prisma generate`, no tocando el código.
+- **Para un script suelto contra la base, reusar `src/config/prisma.ts`.** El proyecto usa el driver adapter de Prisma 7 (`PrismaPg`), así que un `new PrismaClient()` pelado tira `instantiated without any options`. Y el script tiene que empezar con `import 'dotenv/config'` y envolver todo en una `async function main()`: `tsx` compila a CJS y rechaza el `await` de nivel superior.
 - **El repo es público.** Los secretos van solo en `backend/.env` (gitignoreado), nunca en `.env.example`. Revisar el diff staged antes de commitear. Las variables `VITE_*` se compilan dentro del bundle público: nunca pueden ser secretas.

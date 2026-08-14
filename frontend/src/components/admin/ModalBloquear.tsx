@@ -4,40 +4,78 @@ import { isAxiosError } from 'axios'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { InputHora } from '../ui/InputHora'
-import { crearBloqueo } from '../../api/bloqueos'
-import type { ErrorBloqueoAfectaTurnos, TurnoAfectado } from '../../types/api'
+import {
+  actualizarBloqueo,
+  crearBloqueo,
+  eliminarBloqueo,
+} from '../../api/bloqueos'
+import type {
+  Bloqueo,
+  ErrorBloqueoAfectaTurnos,
+  TurnoAfectado,
+} from '../../types/api'
 
+// Crear y editar un bloqueo son **el mismo formulario**, así que son el mismo componente y
+// no dos. Lo único que cambia es de dónde salen los valores iniciales, a qué endpoint va y
+// que editando aparece "Borrar". Duplicarlo habría dejado dos formularios que hay que
+// acordarse de cambiar juntos — el mismo error que ya había pasado con los colores de
+// estado copiados en cuatro archivos.
 interface ModalBloquearProps {
+  /** El día que se toma como valor inicial al **crear**. Se ignora si viene `bloqueo`. */
   fechaInicial: string
+  /** Si viene, el modal edita ese bloqueo en vez de crear uno nuevo. */
+  bloqueo?: Bloqueo
   onClose: () => void
 }
 
-export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
+export function ModalBloquear({
+  fechaInicial,
+  bloqueo,
+  onClose,
+}: ModalBloquearProps) {
+  const editando = bloqueo != null
   const queryClient = useQueryClient()
-  const [fechaInicio, setFechaInicio] = useState(fechaInicial)
-  const [fechaFin, setFechaFin] = useState(fechaInicial)
-  const [todoElDia, setTodoElDia] = useState(true)
-  const [horaInicio, setHoraInicio] = useState('09:00')
-  const [horaFin, setHoraFin] = useState('18:00')
-  const [motivo, setMotivo] = useState('')
+  const [fechaInicio, setFechaInicio] = useState(
+    bloqueo?.fechaInicio ?? fechaInicial,
+  )
+  const [fechaFin, setFechaFin] = useState(bloqueo?.fechaFin ?? fechaInicial)
+  // Un bloqueo sin horas es "todo el día" — es la misma convención que ya usa el backend
+  // (`horaInicio: null` = desde el inicio del día), leída al revés para prender el check.
+  const [todoElDia, setTodoElDia] = useState(
+    bloqueo ? bloqueo.horaInicio === null && bloqueo.horaFin === null : true,
+  )
+  const [horaInicio, setHoraInicio] = useState(bloqueo?.horaInicio ?? '09:00')
+  const [horaFin, setHoraFin] = useState(bloqueo?.horaFin ?? '18:00')
+  const [motivo, setMotivo] = useState(bloqueo?.motivo ?? '')
   const [turnosAfectados, setTurnosAfectados] = useState<
     TurnoAfectado[] | null
   >(null)
+  const [confirmandoBorrar, setConfirmandoBorrar] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const invalidar = () => {
+    void queryClient.invalidateQueries({ queryKey: ['bloqueos'] })
+    void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+  }
+
+  const verbo = editando ? 'guardar los cambios' : 'crear el bloqueo'
+
   const mutation = useMutation({
-    mutationFn: (confirmarCancelaciones: boolean) =>
-      crearBloqueo({
+    mutationFn: (confirmarCancelaciones: boolean) => {
+      const datos = {
         fechaInicio,
         fechaFin,
         horaInicio: todoElDia ? undefined : horaInicio,
         horaFin: todoElDia ? undefined : horaFin,
         motivo: motivo.trim() || undefined,
         confirmarCancelaciones,
-      }),
+      }
+      return bloqueo
+        ? actualizarBloqueo(bloqueo.id, datos)
+        : crearBloqueo(datos)
+    },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['bloqueos'] })
-      void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      invalidar()
       onClose()
     },
     onError: (err) => {
@@ -47,17 +85,28 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
           return
         }
         setError(
-          err.response?.data.error.mensaje ??
-            'No pudimos crear el bloqueo. Probá de nuevo.',
+          err.response?.data.error.mensaje ?? `No pudimos ${verbo}. Probá de nuevo.`,
         )
         return
       }
-      setError('No pudimos crear el bloqueo. Probá de nuevo.')
+      setError(`No pudimos ${verbo}. Probá de nuevo.`)
     },
   })
 
+  const borrarMutation = useMutation({
+    mutationFn: () => eliminarBloqueo(bloqueo!.id),
+    onSuccess: () => {
+      invalidar()
+      onClose()
+    },
+    onError: () => setError('No pudimos borrar el bloqueo. Probá de nuevo.'),
+  })
+
   return (
-    <Modal titulo="Bloquear horario" onClose={onClose}>
+    <Modal
+      titulo={editando ? 'Editar bloqueo' : 'Bloquear horario'}
+      onClose={onClose}
+    >
       <div className="flex flex-col gap-4">
         <div className="flex gap-3">
           <label className="flex flex-1 flex-col gap-1">
@@ -165,8 +214,8 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
               onClick={() => mutation.mutate(true)}
             >
               {mutation.isPending
-                ? 'Bloqueando…'
-                : `Confirmar y bloquear (cancela ${turnosAfectados.length})`}
+                ? 'Guardando…'
+                : `Confirmar (cancela ${turnosAfectados.length})`}
             </Button>
           ) : (
             <Button
@@ -175,10 +224,47 @@ export function ModalBloquear({ fechaInicial, onClose }: ModalBloquearProps) {
               disabled={mutation.isPending}
               onClick={() => mutation.mutate(false)}
             >
-              {mutation.isPending ? 'Bloqueando…' : 'Bloquear'}
+              {mutation.isPending
+                ? 'Guardando…'
+                : editando
+                  ? 'Guardar cambios'
+                  : 'Bloquear'}
             </Button>
           )}
         </div>
+
+        {/* Borrar va abajo y separado, no al lado de "Guardar": levantar el bloqueo es la
+            acción destructiva y no tiene que estar pegada a la que Ariel viene a hacer.
+            Mismo criterio que "Cancelar turno" en `ModalTurno`, con la misma confirmación
+            en dos pasos — un toque de más contra un bloqueo borrado sin querer. */}
+        {editando && (
+          <div className="border-borde border-t pt-4">
+            {confirmandoBorrar ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-tinta-suave flex-1">
+                  ¿Levantar este bloqueo? Los turnos que ya canceló no vuelven.
+                </p>
+                <Button
+                  variant="ghost"
+                  onClick={() => setConfirmandoBorrar(false)}
+                >
+                  No
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={borrarMutation.isPending}
+                  onClick={() => borrarMutation.mutate()}
+                >
+                  {borrarMutation.isPending ? 'Borrando…' : 'Sí, levantar'}
+                </Button>
+              </div>
+            ) : (
+              <Button variant="ghost" onClick={() => setConfirmandoBorrar(true)}>
+                Borrar bloqueo
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   )

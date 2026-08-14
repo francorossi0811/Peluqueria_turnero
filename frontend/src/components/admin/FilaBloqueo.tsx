@@ -24,25 +24,32 @@ export function FilaBloqueo({
         ? `${bloqueo.fechaInicio} ${bloqueo.horaInicio} → ${bloqueo.fechaFin} ${bloqueo.horaFin}`
         : `${bloqueo.fechaInicio} → ${bloqueo.fechaFin} (todo el día)`
 
+  // Violeta sólido, el mismo relleno con el que la grilla semanal dibuja un bloqueo: es la
+  // misma cosa y tiene que verse igual se la mire donde se la mire. Era ámbar pastel, o sea
+  // el color que en esta app ya significa otra cosa.
+  //
+  // Los botones pasan de `ghost` a `outline`: sobre el violeta, un botón sin caja con texto
+  // tenue no se lee. `outline` es una pastilla clara que contrasta sola, sin tener que
+  // pelearle por especificidad a las clases de la variante.
   return (
-    <div className="border-alerta bg-alerta-suave rounded-lg border border-dashed p-3">
+    <div className="border-agenda-linea bg-bloqueo rounded-lg border-2 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-alerta font-medium">🚫 {rango}</p>
+          <p className="text-sobre-estado font-medium">🚫 {rango}</p>
           {bloqueo.motivo && (
-            <p className="text-tinta-suave text-sm">{bloqueo.motivo}</p>
+            <p className="text-sobre-estado text-sm">{bloqueo.motivo}</p>
           )}
         </div>
         {!confirmando && (
-          <Button variant="ghost" onClick={() => setConfirmando(true)}>
+          <Button variant="outline" onClick={() => setConfirmando(true)}>
             Levantar
           </Button>
         )}
       </div>
 
       {confirmando && (
-        <div className="border-borde mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-          <p className="text-tinta text-sm">¿Levantar este bloqueo?</p>
+        <div className="border-sobre-estado/40 mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+          <p className="text-sobre-estado text-sm">¿Levantar este bloqueo?</p>
           <Button
             variant="danger"
             disabled={levantando}
@@ -53,7 +60,7 @@ export function FilaBloqueo({
           >
             {levantando ? 'Levantando…' : 'Sí, levantar'}
           </Button>
-          <Button variant="ghost" onClick={() => setConfirmando(false)}>
+          <Button variant="outline" onClick={() => setConfirmando(false)}>
             No, volver
           </Button>
         </div>

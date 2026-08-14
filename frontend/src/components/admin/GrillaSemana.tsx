@@ -32,8 +32,19 @@ import type {
  * solo dibuja, allá manda. */
 const PASO_MINUTOS = 20
 
-/** Alto de un bloque de 20 minutos. Todo lo demás se deriva de esto. */
-const ALTO_PASO_PX = 34
+/** Alto de un bloque de 20 minutos. Todo lo demás se deriva de esto.
+ *
+ * Era 34 px, que es lo que necesitaban dos renglones de 11-12 px. Ariel pidió el panel
+ * entero con letra de 16 px como piso (tiene problemas de visión), y en 34 px el nombre y
+ * el servicio ya no entraban: con dos renglones de 16 px hacen falta ~44 px de contenido
+ * más el aire y el borde.
+ *
+ * ⚠️ Subir esta constante es **lo único** que hace falta para ensanchar los renglones: el
+ * alto de cada turno, la posición de la línea de ahora y el alto de cada tramo salen todos
+ * de `MINUTOS_POR_PX`, que se deriva de acá. Y como el eje sigue siendo tiempo continuo,
+ * el renglón "por defecto" son 20 minutos pero un turno más largo se estira solo — un
+ * corte + barba de 40 min ocupa dos renglones sin que nada lo redondee. */
+const ALTO_PASO_PX = 72
 
 const MINUTOS_POR_PX = PASO_MINUTOS / ALTO_PASO_PX
 
@@ -52,6 +63,9 @@ interface GrillaSemanaProps {
   minutosAhora: number | null
   onElegirHueco: (fecha: string, hora: string) => void
   onElegirTurno: (turno: TurnoAdmin) => void
+  /** Abre el bloqueo para editarlo o levantarlo. Mismo gesto que tocar un turno: en la
+   * grilla, todo lo que ocupa un rato se toca y se abre. */
+  onElegirBloqueo: (bloqueo: Bloqueo) => void
 }
 
 function aHora(minutos: number): string {
@@ -96,16 +110,39 @@ function etiquetaFeriado(feriados: Feriado[], dia: string): string | null {
   return `${feriado.nombre} · ${sufijo}`
 }
 
-/** El color dice el **estado**, y nada más: miel lo que viene, verde lo que se hizo, rojo
- * el que no vino. Los tres valen igual en claro y en oscuro porque salen de tokens que el
- * tema redefine; ninguno está escrito a mano acá.
+/** El color dice el **estado**, y nada más: claro lo que viene, verde fuerte lo que se
+ * hizo, rojo fuerte el que no vino. Los tres son tokens fijos que **no cambian con el
+ * tema**: son los colores con los que Ariel lee su día y el interruptor de "Mi cuenta" no
+ * tiene que poder tocarlos.
  *
- * El borde va más marcado que antes (`/70` en vez de `/40`): con `/40` sobre el fondo
- * oscuro el bloque casi no tenía contorno y todo se veía plano. */
+ * Los tres van sobre el naranja de la grilla, así que ninguno puede ser un pastel teñido
+ * como antes: el miel-suave sobre naranja fuerte no se distinguía del fondo.
+ *
+ * ⚠️ `realizado` es un verde **fuerte con texto blanco** y el fondo de los días pasados un
+ * verde **claro con texto negro**, que es el fondo sobre el que casi siempre va a caer.
+ * Son dos verdes en la misma pantalla a propósito y no se confunden por eso: relleno
+ * oscuro contra pastel.
+ *
+ * El borde es negro y de 2 px para todos, igual que las divisiones de la grilla. */
 const CLASES_ESTADO: Record<string, string> = {
-  reservado: 'bg-miel-suave text-miel border-miel/70',
-  realizado: 'bg-bien-suave text-bien border-bien/70',
-  ausente: 'bg-ausente-suave text-ausente border-ausente/70',
+  realizado: 'bg-realizado text-sobre-estado',
+  ausente: 'bg-ausente-fuerte text-sobre-estado',
+}
+
+/** El pendiente es el único estado que se parte en dos, y se parte por **cuándo**: blanco
+ * el de hoy, mostaza el de cualquier otro día.
+ *
+ * No contradice la regla de que el color dice el estado: los dos siguen queriendo decir
+ * "pendiente". Lo que agrega es la pregunta que Ariel se hace primero al abrir la semana —
+ * qué me queda hoy — sin tener que buscar la columna. El cerrado (realizado / ausente) no
+ * se parte porque ahí la pregunta ya no existe. */
+function clasesDeEstado(estado: string, esDeHoy: boolean): string {
+  if (estado === 'reservado') {
+    return esDeHoy
+      ? 'bg-turno-hoy text-agenda-tinta'
+      : 'bg-turno-futuro text-agenda-tinta'
+  }
+  return CLASES_ESTADO[estado] ?? 'bg-turno-futuro text-agenda-tinta'
 }
 
 /** Reparte en columnas los turnos que comparten un rato, para que ninguno tape a otro.
@@ -171,7 +208,7 @@ function repartirEnColumnas<T>(
  * Antes se pintaba de rojo, y estaba mal: mientras duraba, un turno reservado y uno ausente
  * se veían idénticos. La marca de "ahora" ya la dan la línea roja y la hora del margen,
  * como en Google Calendar; acá solo hace falta señalar cuál de los bloques es. */
-const CLASES_EN_CURSO = 'border-[3px] shadow-md'
+const CLASES_EN_CURSO = 'border-ahora border-[5px] shadow-md'
 
 export function GrillaSemana({
   dias,
@@ -183,6 +220,7 @@ export function GrillaSemana({
   minutosAhora,
   onElegirHueco,
   onElegirTurno,
+  onElegirBloqueo,
 }: GrillaSemanaProps) {
   const tramos = franjasDeLaSemana(franjas)
 
@@ -197,13 +235,17 @@ export function GrillaSemana({
   return (
     // El scroll horizontal es para el celular: cinco columnas no entran en 375 px sin
     // volverse ilegibles. La columna de horas queda fija para no perder la referencia.
-    <div className="border-borde overflow-x-auto rounded-lg border">
-      <div className="min-w-[640px]">
+    //
+    // El `min-w` subió de 640 a 900 px y la columna de horas de 3.5 a 4.5rem: con la letra
+    // de 16 px, "10:00" ya no entraba en 56 px y los nombres se recortaban a la segunda
+    // sílaba. Es el mismo scroll de antes, un poco más largo.
+    <div className="border-agenda-linea overflow-x-auto rounded-lg border-2">
+      <div className="min-w-[900px]">
         <div
           className="grid"
-          style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}
+          style={{ gridTemplateColumns: `4.5rem repeat(${dias.length}, 1fr)` }}
         >
-          <div className="bg-superficie-2 border-borde sticky left-0 z-20 border-r border-b" />
+          <div className="bg-agenda-fondo border-agenda-linea sticky left-0 z-20 border-r-2 border-b-2" />
           {/* Dos renglones, siempre los mismos dos: día+número arriba, feriado abajo.
               Antes eran tres elementos apilados (día, número, feriado) y solo la columna
               con feriado tenía el tercero, así que los días no alineaban entre columnas.
@@ -217,20 +259,24 @@ export function GrillaSemana({
             return (
               <div
                 key={dia}
-                className={`border-borde flex flex-col items-center justify-start border-b px-2 py-2 text-center ${
-                  feriado
-                    ? 'bg-feriado-suave'
-                    : dia === hoy
-                      ? 'bg-destacado'
-                      : 'bg-superficie-2'
+                className={`border-agenda-linea text-agenda-tinta flex flex-col items-center justify-start border-r-2 border-b-2 px-2 py-2 text-center last:border-r-0 ${
+                  // El fondo dice **cuándo**, no qué pasó: verde claro lo que ya pasó,
+                  // naranja hoy y lo que viene. El feriado ya no tiñe el encabezado —
+                  // ese eje se lo lleva el rayado violeta de adentro de la columna y el
+                  // nombre acá abajo—, porque dos ejes en el mismo fondo es exactamente
+                  // el problema que tenía la planilla.
+                  dia < hoy ? 'bg-agenda-pasado' : 'bg-agenda-fondo'
                 }`}
               >
+                {/* Hoy va en negrita y subrayado, no de otro color: el color del fondo ya
+                    está ocupado diciendo pasado/futuro, y adentro de la columna la línea
+                    roja de "ahora" termina de ubicarlo. */}
                 <p
-                  className={`text-sm font-semibold ${
-                    dia === hoy ? 'text-miel' : 'text-tinta-suave'
-                  }`}
+                  className={
+                    dia === hoy ? 'font-black underline decoration-2' : 'font-semibold'
+                  }
                 >
-                  <span className="text-xs tracking-wide uppercase">
+                  <span className="tracking-wide uppercase">
                     {DIAS_CORTOS[diaSemana(dia)]}
                   </span>{' '}
                   {Number(dia.slice(8, 10))}
@@ -241,7 +287,7 @@ export function GrillaSemana({
                     cortado en "Paso a la Inmo…" no dice ni qué feriado es ni cuánto
                     atiende. El `min-h` reserva el renglón aunque no haya feriado, que es
                     lo que mantiene alineados los días. */}
-                <p className="text-feriado min-h-[0.95rem] text-[10px] leading-tight text-balance">
+                <p className="min-h-[1.35rem] leading-tight font-bold text-balance">
                   {feriado}
                 </p>
               </div>
@@ -262,6 +308,7 @@ export function GrillaSemana({
             minutosAhora={minutosAhora}
             onElegirHueco={onElegirHueco}
             onElegirTurno={onElegirTurno}
+            onElegirBloqueo={onElegirBloqueo}
             // El corte entre la mañana y la tarde: en la planilla es una franja verde, y
             // es lo que Ariel usa para no confundir un hueco de las 11 con uno de las 18.
             separado={i > 0}
@@ -289,6 +336,7 @@ function TramoGrilla({
   minutosAhora,
   onElegirHueco,
   onElegirTurno,
+  onElegirBloqueo,
   separado,
 }: TramoGrillaProps) {
   const duracion = tramo.fin - tramo.inicio
@@ -320,23 +368,26 @@ function TramoGrilla({
 
   return (
     <div
-      className={`grid ${separado ? 'border-miel/30 border-t-4' : ''}`}
-      style={{ gridTemplateColumns: `3.5rem repeat(${dias.length}, 1fr)` }}
+      className={`grid ${separado ? 'border-agenda-linea border-t-4' : ''}`}
+      style={{ gridTemplateColumns: `4.5rem repeat(${dias.length}, 1fr)` }}
     >
       {/* Columna de horas */}
       <div
-        className="bg-superficie-2 border-borde sticky left-0 z-10 border-r"
+        className="bg-agenda-fondo border-agenda-linea sticky left-0 z-10 border-r-2"
         style={{ height: alto }}
       >
         {marcas.map((m) => (
+          // La hora de ahora va en rojo **relleno** y no en texto rojo: sobre el naranja
+          // de la columna, un rojo sobre naranja casi no se despega. Rellena, se ve desde
+          // el otro lado del local.
           <div
             key={m}
-            className={`pr-1 text-right text-[11px] leading-none ${
+            className={`border-agenda-linea/30 border-b px-1 text-right leading-none font-bold ${
               esLaMarcaDeAhora(m)
-                ? 'text-ahora font-bold'
-                : 'text-tinta-tenue'
+                ? 'bg-ahora text-sobre-estado'
+                : 'text-agenda-tinta'
             }`}
-            style={{ height: ALTO_PASO_PX, paddingTop: 2 }}
+            style={{ height: ALTO_PASO_PX, paddingTop: 4 }}
           >
             {aHora(m)}
           </div>
@@ -407,8 +458,11 @@ function TramoGrilla({
         return (
           <div
             key={dia}
-            className={`border-borde relative border-r last:border-r-0 ${
-              dia === hoy ? 'bg-destacado/40' : ''
+            // Naranja fuerte hoy y lo que viene, verde claro lo que ya pasó. Es el mismo
+            // criterio del encabezado, y por eso se lee de arriba abajo como una sola
+            // columna: "esto ya está" / "esto me falta".
+            className={`border-agenda-linea relative border-r-2 last:border-r-0 ${
+              dia < hoy ? 'bg-agenda-pasado' : 'bg-agenda-fondo'
             }`}
             style={{ height: alto }}
           >
@@ -422,7 +476,10 @@ function TramoGrilla({
                   key={m}
                   onClick={() => onElegirHueco(dia, aHora(m))}
                   title={`Cargar turno · ${aHora(m)}`}
-                  className="border-borde-suave hover:bg-miel-suave/50 block w-full border-b transition"
+                  // Las divisiones de 20 minutos, en negro y no en el crema `borde-suave`:
+                  // sobre el naranja fuerte una línea clara desaparece, y son justamente
+                  // las líneas con las que Ariel cuenta los ratos.
+                  className="border-agenda-linea/40 hover:bg-agenda-tinta/10 block w-full border-b transition"
                   style={{ height: ALTO_PASO_PX }}
                 />
               ) : abierto(m) ? (
@@ -430,7 +487,7 @@ function TramoGrilla({
                 // quién vino) pero no invita a tocarlo.
                 <div
                   key={m}
-                  className="border-borde-suave block w-full border-b"
+                  className="border-agenda-linea/40 block w-full border-b"
                   style={{ height: ALTO_PASO_PX }}
                 />
               ) : (
@@ -441,7 +498,7 @@ function TramoGrilla({
                       ? (etiquetaFeriado(feriados, dia) ?? 'Feriado')
                       : 'Cerrado'
                   }
-                  className="border-borde-suave block w-full border-b"
+                  className="border-agenda-linea/40 block w-full border-b"
                   style={{
                     height: ALTO_PASO_PX,
                     // Trama diagonal en vez de un fondo apenas más oscuro: Ariel usa
@@ -450,12 +507,16 @@ function TramoGrilla({
                     //
                     // El color separa los dos motivos: violeta si el feriado le comió ese
                     // rato, neutro si ese día simplemente no abre.
+                    // El rayado se hace más grueso y más junto (2 px cada 6 en vez de 1
+                    // cada 7) y el neutro pasa a negro: el crema de `borde` sobre el
+                    // naranja fuerte no se veía, que es justo lo contrario de lo que el
+                    // rayado tiene que lograr.
                     backgroundImage: `repeating-linear-gradient(45deg, ${
                       cerradoPorFeriado(m)
                         ? 'var(--color-feriado)'
-                        : 'var(--color-borde)'
-                    } 0 1px, transparent 1px 7px)`,
-                    opacity: cerradoPorFeriado(m) ? 0.75 : 0.5,
+                        : 'var(--color-agenda-linea)'
+                    } 0 2px, transparent 2px 6px)`,
+                    opacity: cerradoPorFeriado(m) ? 0.85 : 0.55,
                   }}
                 />
               ),
@@ -469,17 +530,25 @@ function TramoGrilla({
               if (hasta <= desde) return null
 
               return (
-                <div
+                // Se toca y se abre para editarlo o levantarlo, igual que un turno: en la
+                // grilla todo lo que ocupa un rato responde al mismo gesto. Antes era un
+                // `div` muerto y la única forma de tocarlo era irse a la vista Día.
+                <button
                   key={b.id}
-                  title={b.motivo ?? 'Bloqueado'}
-                  className="border-alerta/50 bg-alerta-suave text-alerta absolute right-0 left-0 overflow-hidden rounded border px-1 text-[11px]"
+                  onClick={() => onElegirBloqueo(b)}
+                  title={`${b.motivo ?? 'Bloqueado'} · tocar para editar`}
+                  // Violeta sólido. ⚠️ Es el mismo matiz que el rayado del feriado a
+                  // propósito: los dos dicen "este rato no está disponible", y se
+                  // distinguen por la forma —relleno contra rayas— y no por el color,
+                  // igual que `ahora` y `ausente` comparten el rojo.
+                  className="border-agenda-linea bg-bloqueo text-sobre-estado absolute right-0 left-0 overflow-hidden rounded border-2 px-1 text-left font-bold transition hover:brightness-110"
                   style={{
                     top: (desde - tramo.inicio) / MINUTOS_POR_PX,
                     height: (hasta - desde) / MINUTOS_POR_PX,
                   }}
                 >
                   {b.motivo ?? 'Bloqueado'}
-                </div>
+                </button>
               )
             })}
 
@@ -513,12 +582,10 @@ function TramoGrilla({
                   // `rounded-md` + `shadow-sm`: el relieve mínimo que despega el bloque del
                   // fondo sin que parezca una tarjeta. El `shadow` se refuerza a `md` solo
                   // en el turno en curso, junto con el borde grueso.
-                  className={`absolute overflow-hidden rounded-md border px-1 text-left shadow-sm transition hover:brightness-110 ${
-                    CLASES_ESTADO[t.estado] ??
-                    'bg-superficie-2 text-tinta-suave'
-                  } ${enCurso ? CLASES_EN_CURSO : ''} ${
-                    t.vistoPorAdmin ? '' : 'ring-miel ring-2'
-                  }`}
+                  className={`border-agenda-linea absolute overflow-hidden rounded-md border-2 text-left shadow-sm transition hover:brightness-110 ${clasesDeEstado(
+                    t.estado,
+                    dia === hoy,
+                  )} ${enCurso ? CLASES_EN_CURSO : ''}`}
                   style={{
                     top: (inicio - tramo.inicio) / MINUTOS_POR_PX,
                     height: t.servicio.duracionMinutos / MINUTOS_POR_PX,
@@ -530,11 +597,33 @@ function TramoGrilla({
                     width: `calc(${100 / columnas}% - 4px)`,
                   }}
                 >
-                  {/* Mayúsculas y `text-tinta` (blanco en el tema oscuro, que es el que
-                      usa Ariel; casi negro en el claro). El nombre es lo único que
-                      necesita leer de lejos, y usa lentes: el color del estado ya lo dan
-                      el fondo y el borde, así que el texto puede ir al máximo contraste
-                      en vez de teñirse.
+                  {/* HU-17 — El cartel "NUEVO", pegado al borde de arriba y de lado a
+                      lado. Antes esto era un anillo alrededor del bloque, que decía lo
+                      mismo pero había que saberlo de antemano: un cartel que dice la
+                      palabra no hay que aprendérselo.
+
+                      Desaparece solo al tocar "Marcar como vistos": lo único que lo dibuja
+                      es `t.vistoPorAdmin`, así que cuando esa mutación invalida la agenda
+                      el bloque vuelve sin cartel. No hay estado local que mantener.
+
+                      ⚠️ Es el tercer renglón de un bloque de 20 minutos, que ya se probó
+                      dos veces que no entra (las insignias de HU-25 y la marca de cobro de
+                      HU-27). Entra ahora porque el renglón pasó a 72 px, y se mide en el
+                      DOM — no se da por hecho. */}
+                  {!t.vistoPorAdmin && (
+                    <span className="bg-nuevo text-sobre-estado block w-full text-center leading-tight font-bold">
+                      Nuevo
+                    </span>
+                  )}
+                  {/* El texto **hereda** el color del bloque (blanco sobre el verde y el
+                      rojo fuertes, negro sobre el bloque claro de lo que viene) en vez de
+                      fijar `text-tinta`. Antes iba siempre al color de la tinta del tema
+                      porque los tres fondos eran pasteles; ahora dos de los tres son
+                      rellenos oscuros y `tinta` quedaría negro sobre verde oscuro.
+
+                      Las mayúsculas ya no se piden acá: el panel entero va en mayúscula
+                      desde `index.css`. Se deja la clase igual, que es lo que mantiene el
+                      componente legible fuera de ese contexto.
 
                       Se muestra el apodo si la ficha tiene uno (HU-25): Ariel piensa a
                       esa persona como "Flaco", no como el nombre que tipeó al reservar. */}
@@ -544,8 +633,11 @@ function TramoGrilla({
                       y no tres, así que los círculos quedaban cortados por el borde del
                       bloque. Acá siempre entran, porque el que cede espacio es el nombre
                       (que ya se recorta con puntos suspensivos). */}
-                  <span className="flex items-start gap-1">
-                    <span className="text-tinta min-w-0 flex-1 truncate text-xs leading-tight font-bold uppercase">
+                  {/* El `px-1` bajó del botón a cada renglón: el cartel "NUEVO" tiene que
+                      llegar de borde a borde, y con el padding en el botón quedaba
+                      flotando con dos franjas del color del bloque a los costados. */}
+                  <span className="flex items-start gap-1 px-1">
+                    <span className="min-w-0 flex-1 truncate leading-tight font-bold uppercase">
                       {t.cliente?.apodo || t.clienteNombre}
                     </span>
                     {t.cliente && t.cliente.etiquetas.length > 0 && (
@@ -556,10 +648,9 @@ function TramoGrilla({
                       </span>
                     )}
                   </span>
-                  {/* El servicio, también en `text-tinta` y no teñido del color del
-                      estado: con lentes, un ámbar sobre ámbar suave no se lee. Sigue
-                      siendo secundario por tamaño, que es lo que tiene que distinguirlo
-                      del nombre — no el contraste. */}
+                  {/* El servicio, en el mismo color heredado que el nombre. Se distingue
+                      del nombre por el peso (normal contra negrita) y no por el tamaño:
+                      con el piso de 16 px del panel, los dos renglones miden lo mismo. */}
                   {/* HU-27 — La marca del cobro va acá, pegada al servicio, y **no como
                       un color del bloque**: el color del bloque dice el estado y nada más
                       (HU-23), y meterle un segundo eje encima sería volver al problema de
@@ -573,22 +664,23 @@ function TramoGrilla({
                       Va en el renglón del servicio y no en uno propio por lo mismo que
                       las insignias de HU-25: un turno de 20 minutos son 34 píxeles y el
                       tercer renglón queda cortado. */}
-                  <span className="flex items-baseline gap-1">
-                    <span className="text-tinta min-w-0 flex-1 truncate text-[10px] leading-tight">
+                  <span className="flex items-baseline gap-1 px-1">
+                    <span className="min-w-0 flex-1 truncate leading-tight">
                       {t.servicio.nombre}
                     </span>
                     {t.estado === 'realizado' &&
                       (t.medioPago ? (
-                        <span
-                          aria-hidden
-                          className="text-tinta-tenue shrink-0 text-[10px] leading-tight"
-                        >
+                        // Cobrado: hereda el blanco del bloque y se calla.
+                        <span aria-hidden className="shrink-0 leading-tight">
                           $
                         </span>
                       ) : (
+                        // Falta cobrar: ámbar relleno. Antes era texto ámbar, que sobre el
+                        // verde fuerte del realizado no se despega — y es justo la marca
+                        // que tiene que llamar la atención.
                         <span
                           aria-hidden
-                          className="text-alerta shrink-0 text-[10px] leading-tight font-bold"
+                          className="bg-alerta text-sobre-estado shrink-0 rounded px-1 leading-tight font-bold"
                         >
                           $?
                         </span>
@@ -602,10 +694,10 @@ function TramoGrilla({
                 Comparte el color con el turno en curso — las dos cosas dicen "ahora". */}
             {ahoraEnTramo && dia === hoy && (
               <div
-                className="border-ahora pointer-events-none absolute right-0 left-0 z-10 border-t-2"
+                className="border-ahora pointer-events-none absolute right-0 left-0 z-10 border-t-4"
                 style={{ top: (minutosAhora! - tramo.inicio) / MINUTOS_POR_PX }}
               >
-                <span className="bg-ahora absolute -top-1 -left-1 block h-2 w-2 rounded-full" />
+                <span className="bg-ahora absolute -top-1.5 -left-1.5 block h-3 w-3 rounded-full" />
               </div>
             )}
           </div>

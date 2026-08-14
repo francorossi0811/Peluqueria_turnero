@@ -47,6 +47,7 @@ import {
 import {
   deleteBloqueo,
   getBloqueos,
+  patchBloqueo,
   postBloqueo,
 } from '../controllers/bloqueos.controller'
 import {
@@ -159,4 +160,5 @@ adminRouter.patch('/admin/feriados/:id', requireAuth, patchFeriado)
 
 adminRouter.get('/admin/bloqueos', requireAuth, getBloqueos)
 adminRouter.post('/admin/bloqueos', requireAuth, postBloqueo)
+adminRouter.patch('/admin/bloqueos/:id', requireAuth, patchBloqueo)
 adminRouter.delete('/admin/bloqueos/:id', requireAuth, deleteBloqueo)

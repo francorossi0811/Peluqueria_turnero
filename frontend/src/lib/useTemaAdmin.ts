@@ -29,6 +29,14 @@ export function useTemaAdmin(): void {
     if (enPanel && tema === 'oscuro') raiz.dataset.tema = 'oscuro'
     else delete raiz.dataset.tema
 
+    // "Estoy en el panel", que no es lo mismo que "estoy en oscuro": de esto cuelgan las
+    // mayúsculas y el piso de 16 px de `index.css`, que valen en los dos temas. Va en la
+    // misma raíz y por los mismos motivos que `data-tema` (`/admin/login` cuelga fuera
+    // de `AdminLayout`), y es lo que garantiza que nada de esto se filtre al lado del
+    // cliente.
+    if (enPanel) raiz.dataset.panel = 'admin'
+    else delete raiz.dataset.panel
+
     // El color de la barra del navegador se lee del propio token ya aplicado, en vez de
     // repetir el hex acá: si mañana cambia la paleta, esto la sigue solo.
     const meta = document.querySelector('meta[name="theme-color"]')

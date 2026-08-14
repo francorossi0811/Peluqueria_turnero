@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import {
+  actualizarBloqueoYCancelar,
   crearBloqueoYCancelar,
   eliminarBloqueo,
   listarBloqueos,
@@ -136,6 +137,72 @@ export async function postBloqueo(req: Request, res: Response) {
 
   const bloqueo = await crearBloqueoYCancelar(datos, turnosAfectados)
   res.status(201).json(bloqueoDto(bloqueo))
+}
+
+/** Editar un bloqueo. Mismo cuerpo y **mismo flujo de dos pasos** que crearlo: un rango
+ * nuevo puede llevarse turnos por delante igual que uno recién hecho, así que responde 409
+ * con la lista hasta que venga `confirmarCancelaciones`. Sin eso, editar sería la puerta
+ * de atrás que se saltea el aviso que la creación sí da. */
+export async function patchBloqueo(req: Request, res: Response) {
+  const parsedId = idSchema.safeParse(req.params)
+  if (!parsedId.success) {
+    respondErrorParametrosInvalidos(res, 'Id de bloqueo inválido.')
+    return
+  }
+
+  const parsed = bloqueoSchema.safeParse(req.body)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const datos = {
+    fechaInicio: fechaDesdeIso(parsed.data.fechaInicio),
+    horaInicio: parsed.data.horaInicio
+      ? horaDesdeString(parsed.data.horaInicio)
+      : null,
+    fechaFin: fechaDesdeIso(parsed.data.fechaFin),
+    horaFin: parsed.data.horaFin ? horaDesdeString(parsed.data.horaFin) : null,
+    motivo: parsed.data.motivo,
+  }
+
+  // Cuenta solo lo que sigue `reservado`, así que los turnos que este mismo bloqueo ya
+  // canceló no vuelven a aparecer en el aviso.
+  const turnosAfectados = await obtenerTurnosAfectados(datos)
+
+  if (turnosAfectados.length > 0 && !parsed.data.confirmarCancelaciones) {
+    res.status(409).json({
+      error: {
+        codigo: 'BLOQUEO_AFECTA_TURNOS',
+        mensaje: `Hay ${turnosAfectados.length} turno(s) en ese rango.`,
+      },
+      turnosAfectados: turnosAfectados.map(turnoAfectadoDto),
+    })
+    return
+  }
+
+  try {
+    const bloqueo = await actualizarBloqueoYCancelar(
+      parsedId.data.id,
+      datos,
+      turnosAfectados,
+    )
+    res.json(bloqueoDto(bloqueo))
+  } catch (err) {
+    if (err instanceof BloqueoNoEncontradoError) {
+      res.status(404).json({
+        error: {
+          codigo: 'BLOQUEO_NO_ENCONTRADO',
+          mensaje: 'No encontramos ese bloqueo.',
+        },
+      })
+      return
+    }
+    throw err
+  }
 }
 
 export async function deleteBloqueo(req: Request, res: Response) {

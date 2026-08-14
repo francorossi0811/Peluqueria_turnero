@@ -5,7 +5,8 @@ import { Insignia } from './Insignia'
 import { actualizarCliente, obtenerCliente } from '../../api/clientes'
 import { obtenerEtiquetas } from '../../api/etiquetas'
 import { fechaLegible } from '../../utils/fecha'
-import type { EstadoTurno, TurnoDeHistorial } from '../../types/api'
+import { ESTILO_ESTADO, ETIQUETA_ESTADO } from '../../utils/estadoTurno'
+import type { TurnoDeHistorial } from '../../types/api'
 
 // HU-25 — La ficha editable de un cliente.
 //
@@ -174,22 +175,6 @@ export function FichaCliente({
       {conHistorial && <Historial turnos={ficha.turnos} />}
     </div>
   )
-}
-
-const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'Reservado',
-  cancelado: 'Cancelado',
-  reprogramado: 'Reprogramado',
-  realizado: 'Realizado',
-  ausente: 'Ausente',
-}
-
-const ESTILO_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'bg-miel-suave text-miel',
-  cancelado: 'bg-borde-suave text-tinta-tenue',
-  reprogramado: 'bg-borde-suave text-tinta-tenue',
-  realizado: 'bg-bien-suave text-bien',
-  ausente: 'bg-ausente-suave text-ausente',
 }
 
 /** El historial completo, sin filtrar por estado.

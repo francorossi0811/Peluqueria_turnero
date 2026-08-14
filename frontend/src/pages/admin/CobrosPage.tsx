@@ -148,7 +148,14 @@ export function CobrosPage() {
                   mismo, lo que engaña es el glifo — y en el número más grande de la
                   pantalla. Lora lo dibuja con barra simple, igual que el resto de los
                   montos del panel. */}
-              <p className="text-tinta text-[clamp(28px,5vw,40px)] leading-tight font-extrabold">
+              {/* `data-destacado` es lo que lo exceptúa del piso de 16 px del panel (ver
+                  `index.css`): esa regla aplana todos los tamaños para que nada quede
+                  chico, y sin esto el número más grande de la pantalla quedaría igual de
+                  grande que el resto. */}
+              <p
+                data-destacado
+                className="text-tinta text-[clamp(28px,5vw,40px)] leading-tight font-extrabold"
+              >
                 {formatearPesos(resumen.total)}
               </p>
               <p className="text-tinta-suave text-sm">

@@ -8,7 +8,8 @@ import { cancelarTurnoAdmin, cargarTelefonoTurno } from '../../api/agenda'
 import { esTelefonoValido, MENSAJE_TELEFONO_INVALIDO } from '../../utils/validaciones'
 import { fechaLegible } from '../../utils/fecha'
 import { ETIQUETA_MEDIO_PAGO, formatearPesos } from '../../utils/dinero'
-import type { ErrorApi, EstadoTurno, TurnoAdmin } from '../../types/api'
+import { ESTILO_ESTADO, ETIQUETA_ESTADO } from '../../utils/estadoTurno'
+import type { ErrorApi, TurnoAdmin } from '../../types/api'
 
 // HU-25 — El detalle de un turno de la grilla.
 //
@@ -19,22 +20,6 @@ import type { ErrorApi, EstadoTurno, TurnoAdmin } from '../../types/api'
 //
 // La vista Día no cambia: ahí las acciones están inline en la fila, y ese es el flujo con
 // el que Ariel opera durante la jornada. Meterle un modal en el medio sería más lento.
-
-const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'Reservado',
-  cancelado: 'Cancelado',
-  reprogramado: 'Reprogramado',
-  realizado: 'Realizado',
-  ausente: 'Ausente',
-}
-
-const ESTILO_ESTADO: Record<EstadoTurno, string> = {
-  reservado: 'bg-miel-suave text-miel',
-  cancelado: 'bg-borde-suave text-tinta-tenue',
-  reprogramado: 'bg-borde-suave text-tinta-tenue',
-  realizado: 'bg-bien-suave text-bien',
-  ausente: 'bg-ausente-suave text-ausente',
-}
 
 const ETIQUETA_ORIGEN: Record<TurnoAdmin['origen'], string> = {
   online: 'Reservó online',
@@ -223,7 +208,10 @@ export function ModalTurno({
  */
 function SinFicha({ turno }: { turno: TurnoAdmin }) {
   const queryClient = useQueryClient()
-  const [telefono, setTelefono] = useState('')
+  // Arranca con el número que el turno ya tenga, para que Ariel corrija en vez de volver a
+  // tipear. Con el campo vacío sobre un turno que sí tiene teléfono, la pantalla lo estaba
+  // escondiendo.
+  const [telefono, setTelefono] = useState(turno.clienteTelefono ?? '')
   const [error, setError] = useState<string | null>(null)
 
   const mutation = useMutation({
@@ -240,12 +228,19 @@ function SinFicha({ turno }: { turno: TurnoAdmin }) {
     },
   })
 
+  // ⚠️ Que no haya ficha no quiere decir que no haya teléfono: son dos cosas distintas y
+  // el modal las trataba como una sola. Un turno puede tener el número cargado y seguir
+  // sin ficha (los que quedaron de antes de HU-25, que espera el backfill), y ahí el
+  // cartel afirmaba "este turno no tiene teléfono" con el número escrito al lado.
+  const yaTieneTelefono = Boolean(turno.clienteTelefono)
+
   return (
     <div className="flex flex-col gap-2">
       <p className="text-tinta font-medium">{turno.clienteNombre}</p>
       <p className="text-tinta-suave text-sm">
-        Este turno no tiene teléfono, así que todavía no tiene ficha. Cargalo y se
-        crea sola.
+        {yaTieneTelefono
+          ? `Este turno tiene el teléfono ${turno.clienteTelefono} pero todavía no tiene ficha. Confirmá el número y se crea sola.`
+          : 'Este turno no tiene teléfono, así que todavía no tiene ficha. Cargalo y se crea sola.'}
       </p>
 
       {error && <p className="text-vino text-sm">{error}</p>}
