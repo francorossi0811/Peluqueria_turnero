@@ -342,6 +342,34 @@ export async function enviarAvisoDeCancelacion(turno: Turno): Promise<void> {
   await enviarAvisoDeTurno(turno, 'cancelado')
 }
 
+/** CU-03 — Los avisos de una cancelación en masa: Ariel bloquea un rango y se lleva puestos
+ * los turnos que había adentro.
+ *
+ * Existe porque este era el **único** camino de baja que no avisaba. Los otros dos —el
+ * cliente que cancela desde su link y Ariel que cancela un turno desde el panel— mandan el
+ * mensaje desde HU-22, y justamente acá es donde más falta hace: son varios clientes de una,
+ * ninguno lo pidió, y sin aviso se enteran recién si abren su link.
+ *
+ * ⚠️ Va **secuencial** y no con `Promise.all`. Bloquear una semana entera puede cancelar
+ * decenas de turnos, y disparar decenas de mensajes en paralelo contra la Cloud API es la
+ * forma de comerse un rate limit de Meta justo cuando más importa que lleguen. Tardar más no
+ * cuesta nada: esto corre después de responder y nadie lo está esperando.
+ *
+ * Cada envío se traga sus propios errores (`intentarAvisoPorWhatsapp` y `enviarAvisoPorMail`
+ * loguean y siguen), así que un turno sin teléfono ni mail no corta la lista para el resto.
+ *
+ * ⚠️ El mensaje **no dice por qué** se canceló: la plantilla `turno_cancelado` está aprobada
+ * con tres variables (nombre, servicio, cuándo) y no tiene lugar para el motivo. Agregárselo
+ * es volver a pasar por la aprobación de Meta, así que queda para cuando haya otro cambio de
+ * plantilla que lo justifique. */
+export async function enviarAvisosDeCancelacionEnMasa(
+  turnos: Turno[],
+): Promise<void> {
+  for (const turno of turnos) {
+    await enviarAvisoDeCancelacion(turno)
+  }
+}
+
 async function enviarAvisoDeTurno(
   turno: Turno,
   tipo: TipoAviso,

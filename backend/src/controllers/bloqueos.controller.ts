@@ -8,6 +8,7 @@ import {
   obtenerTurnosAfectados,
 } from '../services/bloqueos.service'
 import { BloqueoNoEncontradoError } from '../services/errores'
+import { enviarAvisosDeCancelacionEnMasa } from '../services/notificaciones.service'
 import {
   fechaDesdeIso,
   formatearFecha,
@@ -137,6 +138,13 @@ export async function postBloqueo(req: Request, res: Response) {
 
   const bloqueo = await crearBloqueoYCancelar(datos, turnosAfectados)
   res.status(201).json(bloqueoDto(bloqueo))
+
+  // CU-03 — Recién acá, después de responder y sin `await`: es el mismo criterio que el
+  // resto de los avisos, un mensaje caído no puede hacer fallar un bloqueo ya guardado.
+  //
+  // Fuera de la transacción a propósito: mandar mensajes por HTTP adentro de una la
+  // mantendría abierta todo lo que tarde Meta en contestar, por cada turno.
+  void enviarAvisosDeCancelacionEnMasa(turnosAfectados)
 }
 
 /** Editar un bloqueo. Mismo cuerpo y **mismo flujo de dos pasos** que crearlo: un rango
@@ -191,6 +199,12 @@ export async function patchBloqueo(req: Request, res: Response) {
       turnosAfectados,
     )
     res.json(bloqueoDto(bloqueo))
+
+    // Igual que al crear el bloqueo: editar el rango cancela turnos exactamente igual, así
+    // que tiene que avisar exactamente igual. Sin esto, editar sería la puerta de atrás que
+    // se saltea el aviso — el mismo argumento por el que ya pasa por la confirmación de dos
+    // pasos.
+    void enviarAvisosDeCancelacionEnMasa(turnosAfectados)
   } catch (err) {
     if (err instanceof BloqueoNoEncontradoError) {
       res.status(404).json({
