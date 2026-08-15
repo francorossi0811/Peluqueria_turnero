@@ -1,5 +1,5 @@
 # Wireframes / Diseño UI
-### Turnero — La Peluquería de Ariel Enrique | v1
+### Turnero — La Peluquería de Ariel Enrique
 
 ---
 
@@ -46,9 +46,19 @@ esta pantalla. Los dos de contacto están **siempre**, no solo cuando ya pasó l
 60 minutos: el cartel de "contactá directamente a Ariel" decía qué hacer sin decir cómo, y
 este cliente nunca entró a la página principal, donde está el número — llegó por su link.
 
-⚠️ **Ninguna de estas pantallas muestra precios (HU-27).** Los precios existen desde la
-v3, pero son un dato interno de Ariel: el servicio se sigue eligiendo por nombre y
-duración, exactamente como antes. Este lado no se tocó.
+⚠️ **Estas pantallas SÍ muestran el precio desde el 14/8/2026.** Hasta esa fecha acá decía
+lo contrario ("son un dato interno de Ariel… este lado no se tocó") y era la regla de HU-27;
+Franco la cambió porque el cliente quiere saber cuánto sale antes de reservar. El precio
+acompaña a la duración en la tarjeta del servicio y en los pasos 2, 3 y 4, y aparece también
+en la pantalla 5.
+
+- Va **en el mismo renglón que los minutos**, no en uno propio: la tarjeta es una foto con
+  texto encima y un cuarto renglón la vuelve un cartel.
+- ⚠️ **Nunca en `font-hero`.** Playfair dibuja el `$` con doble barra, que es la convención
+  del dólar, y el peso argentino lleva barra simple. Engaña el glifo, no el texto.
+- Un servicio sin precio cargado simplemente no lo muestra: `null` no es `$ 0`.
+- Lo que **no** se muestra en ninguna de estas pantallas es el **cobro** (cómo pagó y
+  cuánto), que sigue siendo solo del panel.
 
 ### Admin (Ariel, autenticado, pensado para escritorio/tablet en el mostrador)
 
@@ -205,6 +215,87 @@ en cualquier idioma.
 Deja de bloquear el alta. Se agrega "Elegir de mis contactos", que solo aparece donde el
 navegador lo soporta —Chrome en Android— y en el resto directamente no se renderiza, para
 no dejar un botón que no hace nada.
+
+⚠️ **El error del teléfono va pegado al campo, en los dos formularios** (14/8/2026). Antes,
+en la carga manual el rechazo del servidor aparecía en un cartel arriba del botón, lejos del
+input, y en la reserva del cliente lo mandaba de vuelta al paso del horario con un mensaje
+genérico — o sea, lo alejaba justo del campo que tenía que corregir y le hablaba de otra
+cosa. Ahora el mensaje sale abajo del input, con el borde en rojo, y el wizard **se queda en
+el paso de datos**.
+
+### Qué lleva la landing (pantalla 1)
+
+La landing **no es una ruta**: es el paso 1 del wizard de reserva, que vive en `/`. Por eso
+"volver al inicio" resetea el wizard en vez de navegar, y por eso cambiarla es recortar ese
+paso y no editar una página aparte.
+
+Quedó en cuatro bloques: **hero → Servicios → Beneficios → Contacto**, con el nav en
+Servicios · Contacto · Reservar turno.
+
+- **"Productos" se borró** (13/8/2026): la peluquería no tiene una vidriera de productos, así
+  que era una sección inventada.
+- **"Beneficios" se sacó y volvió** (14/8/2026), ahora titulada *"Beneficios de venir a este
+  salón"*. Son tres tarjetas con foto: **Gel modelador**, Equipo de calidad y Atención
+  personalizada. El primero cambió de una foto de stock genérica al gel, que es el único
+  producto que Ariel vende de verdad.
+- ⚠️ **La foto del gel es un flyer publicitario vertical con el precio impreso.** Encuadra
+  bien en la tarjeta `4/5` porque el recorte se come las bandas negras de arriba y abajo,
+  pero el precio del flyer va a quedar viejo y su paleta rojo/azul no es la del sitio. Está
+  así porque es la foto que hay.
+- El hero dice "Corte, barba y **estilo**" desde que se eliminó el servicio Color.
+- La banda de Beneficios no lleva separador propio: su fondo oscuro la separa sola del
+  contacto.
+
+### Registrar un turno que ya pasó (HU-08)
+
+Ariel atiende clientes de vidriera y los registra cuando tiene un rato libre, así que el
+modal de carga ofrece los últimos **7 días** además de las próximas dos semanas. El pedido
+de Franco fue textual: *"que sea interactivo y que no se preste para confusión"*. Cuatro
+señales, de la más débil a la más fuerte:
+
+1. **Los chips de día y de hora que ya pasaron se pintan en ámbar** (`alerta`), y se tocan
+   igual que los demás: el color informa, no bloquea. La partición Mañana/Tarde no se toca —
+   es la lectura que Ariel tiene incorporada de la planilla, y un tercer grupo "Ya pasó" se
+   comería los otros dos en un día entero pasado.
+2. Un renglón arriba de los horarios cuando el día elegido pasó entero.
+3. **Un cartel ámbar arriba de los botones** con el día y la hora en texto largo: *"⚠ Estás
+   registrando un turno que YA PASÓ · martes 11 de agosto · 15:20"*. Va pegado al botón y no
+   arriba de todo, porque para cuando llega ahí ya se olvidó de qué chip tocó.
+4. **El botón cambia de texto**: "Cargar turno" → **"Registrar turno pasado"**, y el título
+   del modal también. Es la defensa más fuerte: lo último que toca dice qué hace.
+
+Se decidió **no** poner un checkbox de confirmación. Ariel va a hacer esto seguido y el
+cartel más el botón renombrado ya cierran el hueco; si en el uso resulta poco, agregarlo son
+cinco líneas.
+
+En la grilla semanal, los huecos de días pasados **vuelven a ser tocables** dentro de esos 7
+días (antes estaban muertos, porque el backend no los aceptaba). Más viejo que eso siguen
+muertos, para no reintroducir el defecto original —un hueco que abre un modal donde no se
+puede elegir nada— corrido una semana. **El hueco pasado no lleva color propio**: el fondo
+verde de la columna ya dice que ese día pasó, y pintarle un segundo tratamiento encima sería
+repetir el error de la planilla, donde un mismo color quería decir dos cosas.
+
+El **origen** pasó de dos opciones a tres (Presencial · Llamada · WhatsApp) y arranca en
+"Presencial" cuando el hueco elegido ya pasó, que es el caso real del cliente de vidriera.
+
+### Ir a una fecha sin pasar las flechitas
+
+La barra de la agenda tenía `‹ fecha ›` y "Hoy", así que llegar a una fecha lejana era
+clickear de a un día o de a una semana. Se agregó un **selector de fecha nativo entre la
+flecha derecha y "Hoy"**: `‹ etiqueta ›` son una unidad ("dónde estoy parado") y
+`[fecha] [Hoy]` la otra ("saltar a otro lado").
+
+- En vista Semana no hace falta ningún caso especial: el rango se ancla al domingo, así que
+  elegir un jueves muestra la semana del jueves.
+- Sin fecha mínima ni máxima: la agenda es el registro de lo que pasó, tiene que poder
+  mirarse entera para atrás y para adelante.
+- ⚠️ A 375 px las cinco piezas no entran en un renglón, así que el grupo envuelve en dos.
+
+**El buscador de turnos gana "Ver ese día"**, que es la otra mitad del mismo pedido: buscar
+por nombre es la forma natural de llegar a una fecha cuando uno no se acuerda cuál era, y
+hasta ahora el modal te decía dónde estaba el turno y no te llevaba. Dice "Ver ese día" y no
+"Ver el turno" a propósito: la búsqueda devuelve los cinco estados y la agenda dibuja tres,
+así que prometer el turno y aterrizar en un día donde no aparece sería peor que no ofrecerlo.
 
 ### Avisos que no dependen del celular (HU-20)
 

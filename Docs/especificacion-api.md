@@ -1,5 +1,5 @@
 # Especificación de la API REST
-### Turnero — La Peluquería de Ariel Enrique | v1
+### Turnero — La Peluquería de Ariel Enrique
 
 ---
 
@@ -545,6 +545,15 @@ endpoint idempotente:
    - Con la confirmación (o si no había turnos afectados), crea el bloqueo, cancela esos
      turnos (`estado = "cancelado"`, `motivoCancelacion = "bloqueado por el local"`,
      `bloqueoCancelacionId` apuntando al bloqueo nuevo) y responde `201`.
+3. **Después de responder**, le manda a cada cliente afectado el aviso de cancelación
+   (HU-22), uno atrás del otro. Vale igual para `PATCH`: editar el rango cancela turnos
+   exactamente igual que crearlo, así que avisa exactamente igual.
+   - ⚠️ *Esto se enganchó el 14/8/2026. Era el único camino de baja que cancelaba sin
+     avisar: el mecanismo existía desde HU-22 y este flujo no lo usaba, así que los clientes
+     de un bloqueo se enteraban recién si abrían su link.*
+   - Va fuera de la transacción y sin `await`, como el resto de los avisos: un mensaje
+     caído no puede hacer fallar un bloqueo ya guardado, y mandar HTTP dentro de una
+     transacción la mantendría abierta todo lo que tarde Meta en contestar.
 
 ### Feriados
 

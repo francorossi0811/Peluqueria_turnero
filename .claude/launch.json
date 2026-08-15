@@ -5,7 +5,8 @@
       "name": "frontend",
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": [".claude/dev-frontend.sh"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": false
     },
     {
       "name": "backend",
