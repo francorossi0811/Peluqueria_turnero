@@ -124,9 +124,9 @@ las dos primeras son tablas de configuración que alimentan el cálculo de dispo
 | `nombre` | varchar, not null | |
 | `duracion_minutos` | int, not null | |
 | `activo` | boolean, default true | Desactivar sin borrar — no puede desaparecer un servicio que ya tiene turnos históricos asociados |
-| `orden` | int, default 0 | Posición en la que se le muestran al cliente, del más pedido al menos. Es un dato propio porque no se deduce de ningún otro: el orden que quiere Ariel (Corte clásico, Corte + Barba, Barba, Color) no coincide ni con el alfabético ni con la duración. Menor va primero, y el nombre desempata para que dos servicios con el mismo valor no queden en un orden que cambie entre consultas. Un servicio nuevo se crea con el máximo + 1, o sea al final |
-| `precio` | int, **null** | Cuánto sale, en **pesos enteros** (HU-27). ⚠️ **Dato interno:** lo carga y lo ve Ariel, y el endpoint público no lo manda — ver abajo. `null` = todavía no le puso precio, que no es lo mismo que `0` |
-| `foto` | varchar, **null** | La foto que ve el cliente en la landing (`/imagenes/servicio-corte.jpg`). `null` = cae a una foto de stock. Al revés que `precio`, **sí** sale por la API pública: es justamente lo que se dibuja del lado del cliente |
+| `orden` | int, default 0 | Posición en la que se le muestran al cliente, del más pedido al menos. Es un dato propio porque no se deduce de ningún otro: el orden que quiere Ariel (Corte clásico, Corte + Barba, Barba, Corte de Pelo mujer) no coincide ni con el alfabético ni con la duración. Menor va primero, y el nombre desempata para que dos servicios con el mismo valor no queden en un orden que cambie entre consultas. Un servicio nuevo se crea con el máximo + 1, o sea al final |
+| `precio` | int, **null** | Cuánto sale, en **pesos enteros** (HU-27). ⚠️ **Sale por la API pública desde el 14/8/2026** — hasta esa fecha era un dato interno; ver abajo. `null` = todavía no le puso precio, que no es lo mismo que `0` |
+| `foto` | varchar, **null** | La foto que ve el cliente en la landing (`/imagenes/servicio-corte.jpg`). `null` = cae a una foto de stock. Igual que `precio`, sale por la API pública: es lo que se dibuja del lado del cliente |
 | `created_at` / `updated_at` | timestamptz | |
 
 ⚠️ **`foto` es una columna y no un mapa `nombre → archivo` en el frontend**, que es como
@@ -145,11 +145,21 @@ asigna en la base o en una migración, que es donde también se le pone a un ser
 de punto flotante en ninguna suma. Vale para `servicios.precio` y para
 `turnos.monto_cobrado`.
 
-⚠️ **El precio no sale nunca por la API pública.** `GET /api/servicios` mapea campo por
-campo (`id`, `nombre`, `duracion_minutos`) y ese mapeo explícito *es* lo que cumple la
-promesa de HU-27 de que el cliente no vea los precios — no es un detalle de estilo.
-Devolver la fila entera o reusar el DTO de admin lo publicaría sin que nada falle ni lo
-avise.
+⚠️ **El precio sí sale por la API pública desde el 14/8/2026**, y eso **enmienda a HU-27**,
+que hasta esa fecha decía que era interno y que el cliente no lo veía nunca. Franco lo
+cambió: quiere que sepa cuánto sale antes de reservar. Sale por `GET /api/servicios` y,
+dentro de `servicio`, por `GET /api/turnos/:id`.
+
+Lo que **sigue sin salir** es el cobro (`turnos.medio_pago`, `turnos.monto_cobrado`). Y el
+mapeo campo por campo de `getServiciosPublico` se conserva igual de explícito: no era una
+promesa sobre `precio` en particular, sino el mecanismo que obliga a decidir dato por dato
+qué se publica. Devolver la fila entera o reusar el DTO de admin publicaría cualquier
+columna interna futura sin que nada falle ni lo avise.
+
+⚠️ **El precio que ve el cliente es el de hoy, no el del día en que reservó.** Al revés que
+`servicio_nombre_snapshot` y `servicio_duracion_snapshot`, que sí quedan congelados. No es
+una incoherencia: la duración se congela porque decide la disponibilidad, y el precio que
+importa es el que se le va a cobrar cuando venga — la misma regla que `monto_cobrado`.
 
 ### `horario_laboral` — HU-14, CU-04
 
@@ -324,7 +334,7 @@ seguridad.
 |---|---|---|
 | `id` | uuid, PK, default `gen_random_uuid()` | Se usa directamente como **token del link único** que recibe el cliente — no adivinable, sin necesidad de un campo separado |
 | `cliente_nombre` | varchar, not null | |
-| `cliente_telefono` | varchar, **null** | Obligatorio cuando reserva el cliente por la web (HU-01) y opcional cuando el turno lo carga Ariel (HU-08). La diferencia la impone la validación de cada endpoint, no la columna: no hay forma de expresar "obligatorio según quién lo cree" en el esquema |
+| `cliente_telefono` | varchar, **null** | Obligatorio cuando reserva el cliente por la web (HU-01) y opcional cuando el turno lo carga Ariel (HU-08). La diferencia la impone la validación de cada endpoint, no la columna: no hay forma de expresar "obligatorio según quién lo cree" en el esquema. Si viene, tiene que estar bien escrito **y** poder existir (característica real) — desde el 14/8/2026 las dos reglas corren en las tres puertas, ver HU-01 |
 | `cliente_email` | varchar, null | Opcional (HU-19): muchos clientes de Ariel no usan mail. Si está, recibe la confirmación con el link y el `.ics` |
 | `cliente_id` | uuid, null, FK → `clientes.id` | La ficha a la que pertenece el turno (HU-25). `null` cuando no hay teléfono: sin número no hay identidad, y una ficha vacía por cada turno suelto sería peor que no tenerla. **No reemplaza a `cliente_nombre`/`cliente_telefono`**, que siguen siendo la copia de lo que se escribió al reservar |
 | `servicio_id` | uuid, FK → `servicios.id`, not null | |
@@ -334,7 +344,7 @@ seguridad.
 | `hora_inicio` | time, not null | |
 | `hora_fin` | time, not null | Calculada (`hora_inicio` + duración snapshot) y guardada, para usarla directo en el constraint anti-solapamiento |
 | `estado` | varchar, `CHECK` | `reservado` \| `cancelado` \| `reprogramado` \| `realizado` \| `ausente` |
-| `origen` | varchar, `CHECK` | `online` \| `telefono` \| `whatsapp` (HU-08) |
+| `origen` | enum `OrigenTurno` | `online` \| `presencial` \| `llamada` \| `whatsapp` (HU-08). `presencial` es el cliente de vidriera, que no llamó ni escribió; `llamada` se llamaba `telefono` hasta el 14/8/2026 y se renombró porque se confundía con `cliente_telefono`, que es un dato de contacto y no un canal. La migración usó `ALTER TYPE … RENAME VALUE`, así que las filas viejas se conservaron |
 | `visto_por_admin` | boolean, not null, default `false` | HU-17: si Ariel ya vio el turno en el panel. Los que carga él mismo nacen en `true` |
 | `motivo_cancelacion` | text, null | |
 | `medio_pago` | enum (`efectivo`, `transferencia`, `mercado_pago`, `tarjeta`), **null** | Cómo pagó (HU-27). `null` = todavía no se registró el cobro |
@@ -400,7 +410,9 @@ dispositivo.
 
 | Regla | Cómo se implementa |
 |---|---|
-| Dos clientes no pueden reservar el mismo horario (caso borde) | `EXCLUDE` constraint de PostgreSQL sobre `tsrange(fecha + hora_inicio, fecha + hora_fin)`, activo solo `WHERE estado = 'reservado'`. Lo impone la base de datos, no solo la aplicación |
+| Dos clientes no pueden reservar el mismo horario (caso borde) | `EXCLUDE` constraint de PostgreSQL sobre `tsrange(fecha + hora_inicio, fecha + hora_fin)`, activo `WHERE estado IN ('reservado','realizado')`. Lo impone la base de datos, no solo la aplicación |
+| Un turno **realizado** no se puede pisar (14/8/2026) | Mismo `EXCLUDE` de arriba: `realizado` entró al predicado. Antes solo miraba `reservado`, y eso era inofensivo mientras nadie pudiera cargar un turno en el pasado; con HU-08 ampliada pasó a ser un agujero alcanzable. La misma lista vive en el cálculo de disponibilidad (`obtenerDetalleDelDia`), así que la aplicación no ofrece esos ratos y la base los rechaza igual. ⚠️ Consecuencia: marcar Realizado puede fallar con `409 TURNO_SE_SOLAPA_CON_REALIZADO` |
+| Un turno **ausente o cancelado** libera el rato | Los dos quedan **afuera** del predicado del `EXCLUDE`, a propósito. Marcar Ausente para meter a otro cliente es el flujo que Ariel usa todos los días: endurecerlo a los tres estados que la agenda dibuja rompería justo eso |
 | Servicio largo que no entra antes del cierre/descanso (caso borde) | Se valida en el cálculo de disponibilidad del backend (CU-04); no es una constraint de tabla, depende de `horario_laboral` y `bloqueos_horario` vigentes en el momento de la consulta |
 | Cambio de duración de un servicio no afecta turnos ya reservados (caso borde) | Columnas `servicio_nombre_snapshot` / `servicio_duracion_snapshot` en `turnos`, independientes de `servicios` |
 | Un turno nunca se borra físicamente | La aplicación nunca hace `DELETE` sobre `turnos`; todo cambio es un `UPDATE` de `estado` (+ `updated_at`) |

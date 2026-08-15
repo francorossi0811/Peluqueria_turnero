@@ -5,7 +5,7 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { GrillaHorarios } from '../GrillaHorarios'
 import { editarTurno } from '../../api/agenda'
-import { obtenerDisponibilidad } from '../../api/disponibilidad'
+import { obtenerDisponibilidadAdmin } from '../../api/disponibilidad'
 import { hoyIso, sumarDias, fechaLegible } from '../../utils/fecha'
 import type { ErrorApi, TurnoAdmin } from '../../types/api'
 
@@ -25,9 +25,14 @@ export function ModalEditarTurno({ turno, onClose }: ModalEditarTurnoProps) {
   const desde = hoyIso()
   const hasta = sumarDias(desde, DIAS_A_MOSTRAR - 1)
 
+  // Endpoint admin, pero **sin** `incluirPasado`: mover un turno a un horario que ya pasó
+  // no es lo que HU-08 habilitó (eso es *registrar* algo que ya ocurrió) y sería
+  // indistinguible de un error de dedo. Lo que sí hereda de esta ruta es el margen 0: el
+  // backend ya lo aceptaba en `editarTurno`, pero esta pantalla pedía la disponibilidad al
+  // endpoint del cliente, así que le sobraban los 30 minutos de antelación.
   const disponibilidadQuery = useQuery({
-    queryKey: ['disponibilidad', turno.servicio.id, desde, hasta],
-    queryFn: () => obtenerDisponibilidad(turno.servicio.id, desde, hasta),
+    queryKey: ['disponibilidad-admin', turno.servicio.id, desde, hasta],
+    queryFn: () => obtenerDisponibilidadAdmin(turno.servicio.id, desde, hasta),
   })
 
   const editarMutation = useMutation({
@@ -44,7 +49,7 @@ export function ModalEditarTurno({ turno, onClose }: ModalEditarTurnoProps) {
       if (codigo === 'HORARIO_NO_DISPONIBLE') {
         setError('Ese horario se acaba de ocupar. Elegí otro.')
         setHora(null)
-        void queryClient.invalidateQueries({ queryKey: ['disponibilidad'] })
+        void queryClient.invalidateQueries({ queryKey: ['disponibilidad-admin'] })
         return
       }
       if (codigo === 'TURNO_NO_MODIFICABLE') {

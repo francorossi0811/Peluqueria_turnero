@@ -23,3 +23,7 @@ export class EtiquetaDuplicadaError extends Error {}
 // paga, y un cancelado tampoco. Aceptarlo en silencio dejaría entrar plata que no existe
 // y los totales dejarían de cerrar contra la realidad.
 export class TurnoNoCobrableError extends Error {}
+// HU-08 — Un turno realizado no se puede pisar con otro realizado (el EXCLUDE de la base
+// lo impide). Se puede llegar acá marcando Realizado un turno cuyo rato ya se le dio a
+// otro que también se hizo: pasó por Ausente en el medio, que libera el horario.
+export class TurnoSeSolapaConRealizadoError extends Error {}

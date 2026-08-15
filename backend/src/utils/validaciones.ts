@@ -1,3 +1,5 @@
+import { aE164 } from './telefono'
+
 // Validaciones de los datos que carga el cliente al reservar.
 //
 // Viven acá y no sueltas en el schema de zod porque son reglas de negocio con criterio
@@ -28,6 +30,33 @@ export function esTelefonoValido(valor: string): boolean {
 
 export const MENSAJE_TELEFONO_INVALIDO =
   'El teléfono no parece válido. Poné el número con característica, ej: 351 459 3325.'
+
+/** ¿Este teléfono **sirve** para lo que lo necesitamos, además de estar bien escrito?
+ *
+ * `esTelefonoValido` solo cuenta dígitos y caracteres: acepta `99999999` y `2954123456`,
+ * que están bien escritos y no existen. `aE164` usa la metadata `max` de
+ * `libphonenumber-js`, que conoce los rangos realmente asignados, así que sabe la
+ * diferencia.
+ *
+ * ⚠️ Por qué esta regla vive en las **tres** puertas (reserva pública, carga manual y el
+ * PATCH de teléfono) y no solo en la última, que era donde estaba:
+ *
+ * Un número que pasa la regla laxa y no la estricta se guardaba igual, pero
+ * `vincularCliente` no podía normalizarlo, así que el turno quedaba **sin ficha** (HU-25).
+ * Cuando Ariel intentaba arreglarlo cargándolo a mano, el PATCH sí aplicaba la regla
+ * estricta y le decía "número inválido" sobre un número que el sistema ya había aceptado.
+ * O sea: una regla decidía si entraba y otra distinta si servía, en momentos distintos, y
+ * el que se comía el problema era el que ya no podía corregirlo.
+ *
+ * Ahora se rechaza en la reserva, que es el único momento en que la persona está ahí para
+ * mirar el número y arreglarlo. El costo asumido: un número real pero fuera de la metadata
+ * queda afuera. Por eso el mensaje dice qué revisar. */
+export function esTelefonoUtilizable(valor: string): boolean {
+  return esTelefonoValido(valor) && aE164(valor) !== null
+}
+
+export const MENSAJE_TELEFONO_INEXISTENTE =
+  'Revisá el número: esa característica no existe. Ej: 351 459 3325.'
 
 /** Lo que se acepta como nombre: letras, espacios, apóstrofes y guiones.
  *

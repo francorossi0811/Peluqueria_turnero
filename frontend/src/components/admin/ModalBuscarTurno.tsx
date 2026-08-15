@@ -16,7 +16,18 @@ import type { TurnoAdmin } from '../../types/api'
 const INPUT =
   'border-borde bg-superficie text-tinta focus:border-miel w-full rounded-md border px-3 py-2 outline-none'
 
-export function ModalBuscarTurno({ onClose }: { onClose: () => void }) {
+export function ModalBuscarTurno({
+  onClose,
+  onIrALaFecha,
+}: {
+  onClose: () => void
+  /** Lleva la agenda al día de ese turno y cierra el modal. Buscar por nombre es la forma
+   * natural de llegar a una fecha cuando no te acordás cuál era — hasta ahora el modal te
+   * decía dónde estaba el turno y no te llevaba.
+   *
+   * Opcional para no obligar a quien abra este modal desde otro lado a saber navegar. */
+  onIrALaFecha?: (fecha: string) => void
+}) {
   const [nombre, setNombre] = useState('')
   const [telefono, setTelefono] = useState('')
 
@@ -86,7 +97,11 @@ export function ModalBuscarTurno({ onClose }: { onClose: () => void }) {
       {mutation.isSuccess && mutation.data.length > 0 && (
         <div className="flex flex-col gap-2">
           {mutation.data.map((t) => (
-            <FilaResultado key={t.id} turno={t} />
+            <FilaResultado
+              key={t.id}
+              turno={t}
+              onIrALaFecha={onIrALaFecha}
+            />
           ))}
         </div>
       )}
@@ -94,7 +109,13 @@ export function ModalBuscarTurno({ onClose }: { onClose: () => void }) {
   )
 }
 
-function FilaResultado({ turno }: { turno: TurnoAdmin }) {
+function FilaResultado({
+  turno,
+  onIrALaFecha,
+}: {
+  turno: TurnoAdmin
+  onIrALaFecha?: (fecha: string) => void
+}) {
   const [copiado, setCopiado] = useState(false)
   const link = `${window.location.origin}/turno/${turno.id}`
 
@@ -116,6 +137,15 @@ function FilaResultado({ turno }: { turno: TurnoAdmin }) {
         >
           {ETIQUETA_ESTADO[turno.estado]}
         </span>
+        {/* Dice "Ver ese día" y no "Ver el turno" a propósito: la búsqueda devuelve todos
+            los estados y la agenda solo dibuja tres, así que un turno cancelado o
+            reprogramado no está ahí. Prometer el turno y aterrizar en un día donde no
+            aparece es peor que no ofrecer nada; el día sí es cierto para los cinco. */}
+        {onIrALaFecha && (
+          <Button variant="outline" onClick={() => onIrALaFecha(turno.fecha)}>
+            Ver ese día
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={() => {

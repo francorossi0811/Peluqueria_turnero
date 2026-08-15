@@ -18,6 +18,16 @@ import type {
 const PASO_MINUTOS = 20
 const MARGEN_MINIMO_MINUTOS = 30
 
+/** HU-08 — Hasta cuántos días atrás puede Ariel registrar un turno que ya atendió.
+ *
+ * Vive acá, al lado de las otras dos, porque es la tercera regla de la misma familia:
+ * qué momentos existen para reservar. La duplica el frontend (`utils/fecha.ts`) con la
+ * nota de siempre: allá dibuja, acá manda.
+ *
+ * El tope existe porque sin él la API acepta un turno en 2019 y la agenda deja de ser un
+ * registro de lo que pasó. */
+export const DIAS_PASADOS_ADMIN = 7
+
 const MINUTO_MS = 60_000
 
 export interface Franja {
@@ -41,6 +51,71 @@ export interface ParametrosDia {
   // online (30 min). Las acciones de Ariel (carga manual, mover un turno) pasan 0 —
   // no tiene sentido protegerlo de sí mismo.
   margenMinutos?: number
+  /** HU-08 — Ofrecer también los horarios que ya pasaron. Solo lo enciende la carga
+   * manual de Ariel: atiende clientes de vidriera y los registra cuando tiene un rato.
+   *
+   * Cuando es `true`, el filtro contra "ahora" no se aplica y `margenMinutos` deja de
+   * mirarse: no hay antelación que exigirle a un momento que ya ocurrió.
+   *
+   * Es un flag y no un `margenMinutos` negativo a propósito. Un número negativo mezclaría
+   * dos conceptos ("cuánta antelación exijo" y "cuánto pasado admito") en la misma
+   * variable, y dejaría sin sentido el test que fija el default de 30 min del cliente.
+   *
+   * ⚠️ NO afloja el cierre: quien decide que el turno entre completo
+   * (`inicio + duración <= cierre`, CU-04) es `candidatosDeLaFranja`, que ni siquiera
+   * genera los que no entran, y este flag no lo toca. */
+  permitirPasado?: boolean
+}
+
+/** En qué momentos podría **empezar** un turno de `duracionMs` dentro de esta franja.
+ *
+ * Son dos fuentes, y la segunda es la que hace que la agenda no desperdicie ratos:
+ *
+ * 1. La grilla de `PASO_MINUTOS` anclada al inicio de la franja: los horarios "redondos"
+ *    de siempre (10:00, 10:20, 10:40…).
+ * 2. **El final de cada rato ocupado.** Sin esto la grilla nunca se re-ancla a lo que ya
+ *    está agendado, y entre que un turno termina y llega el próximo múltiplo de 20 queda
+ *    un hueco que el sistema no ofrece aunque esté libre: una Barba de 15 minutos a las
+ *    17:00 termina 17:15 y el siguiente horario ofrecido era 17:20; un Corte + Barba de 30
+ *    a las 18:00 termina 18:30 y el siguiente era 18:40. Con la agenda llena eso son 5 a 10
+ *    minutos tirados por turno.
+ *
+ * La cadena se arma sola: si alguien reserva a las 17:15 un corte de 20 minutos, ese turno
+ * termina 17:35 y en el próximo cálculo 17:35 ya es candidato. No hace falta nada más.
+ *
+ * ⚠️ El candidato pegado al final de otro turno pasa por **el mismo filtro de cierre** que
+ * los de la grilla (`inicio + duración <= fin de franja`, CU-04): entra en el `Set` solo si
+ * el turno completo sigue entrando antes de que Ariel cierre.
+ *
+ * Sale ordenado y sin repetidos: un turno que termina justo sobre la grilla (20 minutos a
+ * las 17:00 → 17:20) no tiene que ofrecer el mismo horario dos veces.
+ */
+function candidatosDeLaFranja(
+  inicioFranja: Date,
+  finFranja: Date,
+  duracionMs: number,
+  ocupados: Intervalo[],
+): Date[] {
+  const entraCompleto = (desde: number) =>
+    desde >= inicioFranja.getTime() &&
+    desde + duracionMs <= finFranja.getTime()
+
+  const momentos = new Set<number>()
+
+  for (
+    let t = inicioFranja.getTime();
+    t + duracionMs <= finFranja.getTime();
+    t += PASO_MINUTOS * MINUTO_MS
+  ) {
+    momentos.add(t)
+  }
+
+  for (const ocupado of ocupados) {
+    const fin = ocupado.fin.getTime()
+    if (entraCompleto(fin)) momentos.add(fin)
+  }
+
+  return [...momentos].sort((a, b) => a - b).map((t) => new Date(t))
 }
 
 /**
@@ -51,11 +126,14 @@ export interface ParametrosDia {
  * 4.   Se descartan los que solapan con un turno activo o un bloqueo.
  * Además: si es feriado bloqueado no hay horarios, y no se ofrece nada dentro del
  * margen mínimo de reserva.
+ *
+ * Los candidatos no son solo la grilla de 20 minutos — ver `candidatosDeLaFranja`.
  */
 export function calcularHorariosDelDia(params: ParametrosDia): string[] {
   const { fecha, franjas, ocupados, feriadoBloquea, duracionMinutos, ahora } =
     params
   const margenMinutos = params.margenMinutos ?? MARGEN_MINIMO_MINUTOS
+  const permitirPasado = params.permitirPasado ?? false
 
   if (feriadoBloquea) return []
 
@@ -68,19 +146,26 @@ export function calcularHorariosDelDia(params: ParametrosDia): string[] {
     const horaInicioFranja = combinarFechaHora(fecha, franja.horaInicio)
     const horaFinFranja = combinarFechaHora(fecha, franja.horaFin)
 
-    let candidato = horaInicioFranja
-    while (candidato.getTime() + duracionMs <= horaFinFranja.getTime()) {
+    const candidatos = candidatosDeLaFranja(
+      horaInicioFranja,
+      horaFinFranja,
+      duracionMs,
+      ocupados,
+    )
+
+    for (const candidato of candidatos) {
       const finCandidato = new Date(candidato.getTime() + duracionMs)
 
+      const noEsDemasiadoPronto =
+        permitirPasado || candidato.getTime() >= limite.getTime()
+
       const libre =
-        candidato.getTime() >= limite.getTime() &&
+        noEsDemasiadoPronto &&
         !ocupados.some((o) =>
           seSolapan(candidato, finCandidato, o.inicio, o.fin),
         )
 
       if (libre) horarios.push(formatearHora(candidato))
-
-      candidato = new Date(candidato.getTime() + PASO_MINUTOS * MINUTO_MS)
     }
   }
 
@@ -97,6 +182,7 @@ export interface OpcionesHorariosDelDia {
   // Para HU-09 (mover un turno): no chocar contra sí mismo en la lista de ocupados.
   excluirTurnoId?: string
   margenMinutos?: number
+  permitirPasado?: boolean
 }
 
 /** Por qué un día no tiene horarios. Sin esto el frontend solo ve una lista vacía y no
@@ -156,10 +242,18 @@ export async function obtenerDetalleDelDia(
     prisma.bloqueoHorario.findMany({
       where: { fechaInicio: { lte: fecha }, fechaFin: { gte: fecha } },
     }),
+    // Qué turnos tapan un rato. `reservado` es obvio; `realizado` entró con HU-08: desde
+    // que Ariel puede registrar en el pasado, un turno que ya atendió es un rato ocupado
+    // de verdad y pisarlo sería perder uno de los dos.
+    //
+    // ⚠️ `ausente` NO está, y no es un olvido: marcarlo Ausente libera el rato es el flujo
+    // que Ariel usa todos los días (el cliente no vino a los 10 minutos, lo marca y mete a
+    // otro). `cancelado` y `reprogramado` tampoco, por lo mismo — ese rato volvió a estar
+    // libre. Es la misma lista que el predicado del EXCLUDE en la base.
     prisma.turno.findMany({
       where: {
         fecha,
-        estado: 'reservado',
+        estado: { in: ['reservado', 'realizado'] },
         ...(opciones.excluirTurnoId
           ? { id: { not: opciones.excluirTurnoId } }
           : {}),
@@ -227,6 +321,7 @@ export async function obtenerDetalleDelDia(
     duracionMinutos: servicio.duracionMinutos,
     ahora,
     margenMinutos: opciones.margenMinutos,
+    permitirPasado: opciones.permitirPasado,
   })
 
   if (horarios.length > 0) {
@@ -278,10 +373,18 @@ export interface DisponibilidadDia extends DetalleDia {
   fecha: string
 }
 
+/** Las opciones que acepta el cálculo de un rango. Las usa solo el endpoint admin: el
+ * público llama sin opciones y se comporta exactamente igual que siempre. */
+export interface OpcionesDisponibilidad {
+  margenMinutos?: number
+  permitirPasado?: boolean
+}
+
 export async function calcularDisponibilidad(
   servicioId: string,
   desde: Date,
   hasta: Date,
+  opciones: OpcionesDisponibilidad = {},
 ): Promise<DisponibilidadDia[]> {
   const servicio = await obtenerServicioActivo(servicioId)
   const ahora = ahoraArgentina()
@@ -292,7 +395,7 @@ export async function calcularDisponibilidad(
     fecha.getTime() <= hasta.getTime();
     fecha = new Date(fecha.getTime() + 24 * 60 * MINUTO_MS)
   ) {
-    const detalle = await obtenerDetalleDelDia(servicio, fecha, ahora)
+    const detalle = await obtenerDetalleDelDia(servicio, fecha, ahora, opciones)
     resultado.push({ fecha: formatearFecha(fecha), ...detalle })
   }
 

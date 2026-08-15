@@ -10,6 +10,7 @@ import {
   editarTurno,
   esCobrable,
   estaDentroDeVentanaDeCambio,
+  fechaCargableComoAdmin,
   guardarEmailDelCliente,
   listarTurnosEnRango,
   marcarTurno,
@@ -26,8 +27,10 @@ import {
   TurnoNoCobrableError,
   TurnoNoEncontradoError,
   TurnoNoModificableError,
+  TurnoSeSolapaConRealizadoError,
   TurnoYaTieneEmailError,
 } from '../services/errores'
+import { DIAS_PASADOS_ADMIN } from '../services/disponibilidad.service'
 import {
   enviarAvisoDeCancelacion,
   enviarConfirmacionDeTurno,
@@ -43,11 +46,12 @@ import {
 } from '../utils/fechaHora'
 import {
   esNombreValido,
+  esTelefonoUtilizable,
   esTelefonoValido,
   MENSAJE_NOMBRE_INVALIDO,
+  MENSAJE_TELEFONO_INEXISTENTE,
   MENSAJE_TELEFONO_INVALIDO,
 } from '../utils/validaciones'
-import { aE164 } from '../utils/telefono'
 import type { Turno } from '../../generated/prisma/client.ts'
 
 const horaSchema = z
@@ -68,10 +72,14 @@ const bodySchema = z.object({
     .refine(esNombreValido, MENSAJE_NOMBRE_INVALIDO),
   // El `min(6)` de antes dejaba pasar "abcdef": Ariel necesita este número para poder
   // llamar o escribir por WhatsApp, así que tiene que ser un teléfono de verdad.
+  //
+  // Los dos refines van en este orden porque dicen cosas distintas y el primero que falla
+  // es el que se muestra: "está mal escrito" antes que "ese número no existe".
   clienteTelefono: z
     .string()
     .trim()
-    .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO),
+    .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
+    .refine(esTelefonoUtilizable, MENSAJE_TELEFONO_INEXISTENTE),
   // HU-19 — Opcional. El `preprocess` es necesario porque un input de texto vacío llega
   // como `""`, que no pasa la validación de email; sin esto, dejar el campo en blanco
   // daría error en vez de significar "no dejó mail".
@@ -99,7 +107,7 @@ const reprogramarSchema = z.object({
 // llega como `""`, y sin esto no pasaría la validación en vez de significar "no lo sé".
 // Lo que **no** cambia: si escribió algo, tiene que ser un teléfono válido.
 const bodyManualSchema = bodySchema.extend({
-  origen: z.enum(['telefono', 'whatsapp']),
+  origen: z.enum(['presencial', 'llamada', 'whatsapp']),
   // ⚠️ El nombre se **sobrescribe** para sacarle la regla de "solo letras", por el mismo
   // motivo que el teléfono de acá abajo y con el mismo mecanismo (pisar el campo en este
   // schema, no aflojar el de `bodySchema`). Ariel anota lo que le sirve para reconocer a
@@ -113,6 +121,7 @@ const bodyManualSchema = bodySchema.extend({
       .string()
       .trim()
       .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
+      .refine(esTelefonoUtilizable, MENSAJE_TELEFONO_INEXISTENTE)
       .optional(),
   ),
 })
@@ -159,7 +168,7 @@ const rangoSchema = z
     path: ['hasta'],
   })
 
-function turnoADto(turno: Turno) {
+function turnoADto(turno: TurnoConCliente) {
   return {
     id: turno.id,
     estado: turno.estado,
@@ -172,6 +181,12 @@ function turnoADto(turno: Turno) {
       id: turno.servicioId,
       nombre: turno.servicioNombreSnapshot,
       duracionMinutos: turno.servicioDuracionSnapshot,
+      // ⚠️ El nombre y la duración son el snapshot de la reserva; el precio es el de HOY.
+      // No es una inconsistencia: la duración se congela porque decide la disponibilidad,
+      // y el precio es el que se le va a cobrar cuando venga (misma regla que
+      // `montoCobrado`, HU-27). Enmienda a HU-27: hasta el 14/8/2026 el cliente no veía
+      // ningún precio.
+      precio: turno.servicio.precio,
     },
   }
 }
@@ -246,6 +261,18 @@ function manejarErroresComunes(err: unknown, res: Response): boolean {
         codigo: 'FUERA_DE_VENTANA_CANCELACION',
         mensaje:
           'Ya no podés cancelar ni reprogramar online. Contactá directamente a Ariel.',
+      },
+    })
+    return true
+  }
+  // HU-08 — El mensaje nombra el problema concreto porque la salida no es obvia: hay que
+  // decidir cuál de los dos turnos se hizo de verdad y marcar el otro Ausente.
+  if (err instanceof TurnoSeSolapaConRealizadoError) {
+    res.status(409).json({
+      error: {
+        codigo: 'TURNO_SE_SOLAPA_CON_REALIZADO',
+        mensaje:
+          'Ese rato ya lo ocupa otro turno realizado. Marcá Ausente al que no atendiste.',
       },
     })
     return true
@@ -397,6 +424,18 @@ export async function postTurnoManual(req: Request, res: Response) {
     clienteEmail,
     origen,
   } = parsed.data
+
+  // HU-08 — La ventana hacia atrás se valida acá para poder explicarla. `crearTurno` la
+  // vuelve a chequear, pero desde adentro solo puede tirar `HorarioNoDisponibleError`, que
+  // responde 409 "Ese horario se acaba de ocupar" — y eso sería mentira. Mismo reparto que
+  // `esCobrable`: el schema/controller rechaza con 400, el service se niega igual.
+  if (!fechaCargableComoAdmin(fechaDesdeIso(fecha), ahoraArgentina())) {
+    respondErrorParametrosInvalidos(
+      res,
+      `No se pueden cargar turnos de más de ${DIAS_PASADOS_ADMIN} días atrás.`,
+    )
+    return
+  }
 
   try {
     const turno = await crearTurno({
@@ -600,26 +639,17 @@ export async function postCancelarTurnoAdmin(req: Request, res: Response) {
 // HU-25 — Cargarle el teléfono a un turno que se guardó sin él (HU-08), para que entre a
 // las fichas. Acá el teléfono es obligatorio: el endpoint existe para completarlo, así
 // que vaciarlo no es un caso de uso — para eso está no llamarlo.
+// ⚠️ El segundo refine ya no es exclusivo de este endpoint (14/8/2026): lo llevan también
+// `bodySchema` y `bodyManualSchema`. Antes vivía solo acá y esa asimetría era el defecto:
+// un número que pasaba la regla laxa entraba en la reserva, se guardaba sin ficha porque
+// `vincularCliente` no lo podía normalizar, y cuando Ariel lo quería completar a mano este
+// endpoint le decía "inválido" sobre un número que el sistema ya había aceptado.
 const telefonoSchema = z.object({
   clienteTelefono: z
     .string()
     .trim()
     .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
-    // ⚠️ Segundo filtro, y no es redundante: `esTelefonoValido` solo cuenta dígitos, así
-    // que acepta "12345678" y "99999999", que `aE164` no puede convertir porque no tienen
-    // característica real. Antes eso terminaba en un guardado a medias — el teléfono se
-    // escribía en el turno, `clienteId` quedaba en null, el endpoint contestaba 200 y el
-    // panel volvía a mostrar el mismo formulario vacío. Desde Ariel se veía como "no se
-    // guarda", que es exactamente el síntoma que reportó.
-    //
-    // Va acá y **solo acá** a propósito: este endpoint existe para armar la ficha, así que
-    // un número que no se puede convertir no cumple su único trabajo. En el alta de un
-    // turno la conversión que falla sí es tolerable (queda el turno sin ficha, que es un
-    // estado previsto), y por eso `bodySchema` no lleva este refine.
-    .refine(
-      (v) => aE164(v) !== null,
-      'Ese número no tiene una característica que podamos reconocer, así que no podemos armarle la ficha. Revisalo, ej: 351 459 3325.',
-    ),
+    .refine(esTelefonoUtilizable, MENSAJE_TELEFONO_INEXISTENTE),
 })
 
 export async function patchTelefonoTurno(req: Request, res: Response) {

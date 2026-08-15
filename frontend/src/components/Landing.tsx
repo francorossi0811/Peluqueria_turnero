@@ -1,6 +1,7 @@
 import { Kicker } from './ui/Kicker'
 import { BTN_OUTLINE, BTN_GHOST } from './ui/estilosBoton'
 import { DIRECCION, TELEFONO_LEGIBLE, WHATSAPP_URL } from '../utils/contacto'
+import { formatearPesos } from '../utils/dinero'
 import type { Servicio } from '../types/api'
 import type { UseQueryResult } from '@tanstack/react-query'
 
@@ -34,21 +35,19 @@ function fotoParaServicio(servicio: Servicio, lockPorDefecto: number): string {
 }
 
 // La sección "Productos" (constante, sección y `ProductoCard`) se **borró** el 13/8/2026:
-// la peluquería no vende productos, así que era una vidriera inventada. Las cuatro fotos
-// `/imagenes/producto-*.jpg` se borraron con ella; si algún día vuelve, está en el
-// historial de git.
+// la peluquería no vende productos como vidriera propia, así que era una sección
+// inventada. Las cuatro fotos `/imagenes/producto-*.jpg` se borraron con ella; si algún
+// día vuelve, está en el historial de git.
 //
-// ⚠️ "Beneficios" corrió otra suerte: está **comentado, no borrado**. Ariel pidió sacarlo
-// de la landing y Franco lo quiere conservar para poder volver a mostrarlo sin rehacerlo.
-// Para reactivarlo hay que descomentar **tres** bloques: esta constante, la sección oscura
-// dentro del `return` y el componente `BeneficioCard` del final. Las fotos
-// `/imagenes/beneficio-*.jpg` siguen en el repo por el mismo motivo — sin ellas,
-// descomentar no alcanzaría para que la sección vuelva a verse.
-/*
+// "Beneficios" estuvo comentado entre el 13 y el 14/8/2026 y **volvió** a pedido de
+// Franco. Lo único que cambió al volver: el título y el primer beneficio, que pasó de una
+// foto de stock genérica de productos al **gel**, que es el único producto que Ariel
+// vende de verdad. `beneficio-productos.jpg` queda en el repo sin usar, por si alguna vez
+// se quiere volver a una foto genérica.
 const BENEFICIOS = [
   {
-    label: 'Productos de calidad',
-    foto: '/imagenes/beneficio-productos.jpg',
+    label: 'Gel modelador',
+    foto: '/imagenes/gel.jpeg',
   },
   { label: 'Equipo de calidad', foto: '/imagenes/beneficio-equipo.jpg' },
   {
@@ -56,7 +55,6 @@ const BENEFICIOS = [
     foto: '/imagenes/beneficio-atencion.jpg',
   },
 ]
-*/
 
 function scrollA(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
@@ -97,7 +95,7 @@ export function Landing({ query, onElegir }: LandingProps) {
             Ariel Enrique
           </h1>
           <p className="font-body text-tinta mt-4 max-w-[52ch] text-lg leading-relaxed opacity-85">
-            Corte, barba y color con la dedicación de siempre. Un espacio para
+            Corte, barba y estilo con la dedicación de siempre. Un espacio para
             todos, atendido por Ariel Enrique.
           </p>
           {/* Un solo CTA: el "Ver servicios" que había al lado hacía exactamente lo
@@ -158,13 +156,11 @@ export function Landing({ query, onElegir }: LandingProps) {
 
       <hr className="border-borde mx-auto max-w-[1240px]" />
 
-      {/* Bloque 2 de 3 de "Beneficios" comentado — ver la nota de la constante, arriba.
-          Al descomentarlo no hace falta agregarle un <hr>: la banda oscura se separa
-          sola del contacto que viene abajo.
+      {/* La banda oscura no lleva <hr> propio: su fondo la separa sola del contacto. */}
       <section className="bg-[#181512] py-16 sm:py-20">
         <div className="mx-auto max-w-[1240px] px-[clamp(20px,5vw,72px)]">
           <h2 className="font-display mb-8 text-center text-[32px] leading-tight font-normal text-[#f3f2f2]">
-            Nuestros beneficios
+            Beneficios de venir a este salón
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {BENEFICIOS.map((b) => (
@@ -173,7 +169,6 @@ export function Landing({ query, onElegir }: LandingProps) {
           </div>
         </div>
       </section>
-      */}
 
       <section
         id="contacto"
@@ -258,24 +253,38 @@ function ServicioCard({
         <h3 className="font-display text-xl text-[#f3f2f2]">
           {servicio.nombre}
         </h3>
+        {/* El precio va en el mismo renglón que la duración y no en uno propio: la tarjeta
+            es una foto con tres líneas de texto encima y una cuarta la vuelve un cartel.
+            ⚠️ Sin `font-display`: Playfair dibuja el `$` con doble barra (la convención del
+            dólar) y acá el peso es peso. Ver utils/dinero.ts. */}
         <span className="text-sm text-[#f3f2f2] opacity-85">
           {servicio.duracionMinutos} min
+          {servicio.precio !== null && ` · ${formatearPesos(servicio.precio)}`}
         </span>
       </div>
     </button>
   )
 }
 
-// Bloque 3 de 3 de "Beneficios" comentado — ver la nota de la constante, arriba.
-/*
 function BeneficioCard({
   beneficio,
 }: {
   beneficio: (typeof BENEFICIOS)[number]
 }) {
   return (
-    <div className="relative aspect-[4/5] overflow-hidden rounded-md">
-      <img src={beneficio.foto} alt="" className="h-full w-full object-cover" />
+    <div className="relative aspect-[4/5] overflow-hidden rounded-md bg-[#12100e]">
+      {/* Mismo respaldo que `ServicioCard`, y no por simetría: la foto del gel es un
+          archivo recién subido, así que es justamente la que puede faltar en un deploy. */}
+      <img
+        src={beneficio.foto}
+        alt=""
+        onError={(e) => {
+          const img = e.currentTarget
+          const respaldo = fotoStock('barber,grooming', 500, 625, 70)
+          if (img.src !== respaldo) img.src = respaldo
+        }}
+        className="h-full w-full object-cover"
+      />
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent" />
       <span className="absolute inset-x-4 bottom-4 text-xs font-semibold tracking-wider text-[#f3f2f2] uppercase">
         {beneficio.label}
@@ -283,4 +292,3 @@ function BeneficioCard({
     </div>
   )
 }
-*/

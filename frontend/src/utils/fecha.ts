@@ -70,6 +70,30 @@ export function turnoEnCurso(
   )
 }
 
+/** HU-08 — Cuántos días para atrás puede Ariel registrar un turno ya atendido.
+ *
+ * ⚠️ Tiene que coincidir con `DIAS_PASADOS_ADMIN` de
+ * `backend/src/services/disponibilidad.service.ts`, que es quien decide de verdad. Igual
+ * que `PASO_MINUTOS`: acá dibuja, allá manda. */
+export const DIAS_CARGA_HACIA_ATRAS = 7
+
+/** ¿Este día y hora ya ocurrieron?
+ *
+ * Vive acá y no en cada componente porque lo usan la grilla de horarios, el modal de
+ * carga y la grilla semanal, y tienen que coincidir: una hora marcada como pasada en un
+ * lado y no en el otro es peor que no marcarla en ninguno. Mismo motivo que
+ * `turnoEnCurso`. */
+export function yaPaso(
+  fechaIso: string,
+  hora: string,
+  hoy: string,
+  minutosAhora: number,
+): boolean {
+  if (fechaIso < hoy) return true
+  if (fechaIso > hoy) return false
+  return minutosDeHora(hora) < minutosAhora
+}
+
 /** Indexados por `getDay()` (0 = domingo), misma convención que `horario_laboral`. */
 export const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 

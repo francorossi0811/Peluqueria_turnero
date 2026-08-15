@@ -1,23 +1,27 @@
 // Tipos que espejan los contratos de Docs/especificacion-api.md
 
-// ⚠️ HU-27 — Este es el servicio que ve el **cliente**, y por eso no tiene `precio`: el
-// precio es interno de Ariel y el endpoint público no lo manda. Agregárselo acá sería
-// empezar a esperarlo en el flujo de reserva.
+// El servicio que ve el **cliente**.
+//
+// ⚠️ Desde el 14/8/2026 incluye `precio`, y eso **enmienda a HU-27**, que decía que el
+// precio era interno y el cliente no lo veía nunca. Franco lo cambió: quiere que sepa
+// cuánto sale antes de reservar. Lo que sigue siendo interno es el cobro (`medioPago`,
+// `montoCobrado`), que vive en el turno y solo va en el DTO de admin.
 export interface Servicio {
   id: string
   nombre: string
   duracionMinutos: number
+  /** Pesos enteros. `null` = todavía no le puso precio, que no es lo mismo que `0` — por
+   * eso se dibuja con `formatearPesosOpcional` y no con `formatearPesos`. */
+  precio: number | null
   /** La foto de la landing. Viene de la base y **no** de un mapa por nombre en el
    * frontend: el nombre lo edita Ariel y renombrar un servicio le borraba la foto en
    * silencio. `null` = cae a una foto de stock. */
   foto: string | null
 }
 
-// Vista de admin: incluye los inactivos, el propio estado y el precio (HU-27).
+// Vista de admin: incluye además los inactivos y el propio estado.
 export interface ServicioAdmin extends Servicio {
   activo: boolean
-  /** Pesos enteros. `null` = todavía no le puso precio, que no es lo mismo que `0`. */
-  precio: number | null
 }
 
 export interface DatosServicio {
@@ -71,7 +75,14 @@ export interface Reprogramacion {
   hora: string // "HH:mm"
 }
 
-export type OrigenTurno = 'online' | 'telefono' | 'whatsapp'
+// `presencial` es el cliente de vidriera que Ariel atiende y registra después (HU-08):
+// no llamó ni escribió. `llamada` se llamaba `telefono` y se renombró porque se confundía
+// con `clienteTelefono`, que es un dato de contacto y no un canal de reserva.
+export type OrigenTurno = 'online' | 'presencial' | 'llamada' | 'whatsapp'
+
+/** Los orígenes que Ariel puede elegir al cargar un turno a mano: todos menos `online`,
+ * que es el que se pone solo cuando reserva un cliente por la web. */
+export type OrigenManual = Exclude<OrigenTurno, 'online'>
 
 /** HU-25 — Una insignia: un círculo de color con el nombre que le puso Ariel. */
 export interface Etiqueta {
@@ -192,7 +203,7 @@ export interface DatosCliente {
 // (`NuevoTurno`) sigue siendo obligatorio, que es donde de verdad hace falta.
 export interface NuevoTurnoManual extends Omit<NuevoTurno, 'clienteTelefono'> {
   clienteTelefono?: string
-  origen: 'telefono' | 'whatsapp'
+  origen: OrigenManual
 }
 
 export interface EditarTurno {

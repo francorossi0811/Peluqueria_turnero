@@ -23,10 +23,12 @@ se fueron construyendo — por eso no siguen el agrupamiento por actor de las pr
 
 **HU-01 — Reservar turno**
 Como cliente, quiero reservar un turno eligiendo servicio, día y horario, para no tener que escribirle a Ariel por WhatsApp y esperar respuesta.
-- Solo se muestran horarios realmente disponibles (considerando la duración del servicio elegido).
+- Solo se muestran horarios realmente disponibles (considerando la duración del servicio elegido). Eso incluye los que quedan **pegados al final de otro turno** y no caen en la grilla redonda: si una Barba termina 17:15, las 17:15 se pueden reservar (ver CU-04).
+- **Veo cuánto sale cada servicio** antes de reservar, en la tarjeta y en todo el flujo (enmienda a HU-27 del 14/8/2026 — antes el precio no se mostraba nunca).
 - Al confirmar, recibo un link único para administrar mi turno.
 - No necesito crear cuenta ni contraseña.
-- El teléfono es obligatorio y se valida de verdad: entre 8 y 15 dígitos, admitiendo espacios, guiones, paréntesis y un `+` inicial. Es el único dato con el que Ariel me puede ubicar si algo cambia, así que no puede quedar en cualquier cosa. El email es opcional, pero si lo dejo tiene que tener formato válido. (Solo es obligatorio **acá**: cuando el turno lo carga Ariel a mano, ver HU-08, puede quedar vacío.)
+- El teléfono es obligatorio y se valida en dos niveles: **cómo está escrito** (entre 8 y 15 dígitos, admitiendo espacios, guiones, paréntesis y un `+` inicial) y **si el número puede existir** (que la característica sea real). Es el único dato con el que Ariel me puede ubicar si algo cambia, así que no puede quedar en cualquier cosa. El email es opcional, pero si lo dejo tiene que tener formato válido. (Solo es obligatorio **acá**: cuando el turno lo carga Ariel a mano, ver HU-08, puede quedar vacío.)
+  - ⚠️ *La segunda regla se agregó el 14/8/2026 y corre en las tres puertas. Antes solo estaba en el endpoint con el que Ariel completa un teléfono, y esa asimetría hacía que un número bien escrito pero inexistente entrara al reservar, dejara el turno sin ficha, y después le dijera "inválido" a Ariel sobre un número que el sistema ya había aceptado. Ahora el error aparece mientras el cliente está ahí para corregirlo, pegado al campo y sin sacarlo del paso de datos.*
 
 **HU-02 — Recibir confirmación**
 Como cliente, quiero recibir una confirmación clara de mi turno, para saber que quedó agendado correctamente.
@@ -68,7 +70,24 @@ Como Ariel, quiero ver la semana completa, para planificar con anticipación (ej
 **HU-08 — Cargar turno manual**
 Como Ariel, quiero cargar un turno a mano cuando un cliente me escribe o llama, para los que no usan la web directamente.
 - Mismas validaciones de disponibilidad que una reserva online (no se pueden pisar turnos).
-- Puedo marcar el origen (teléfono / WhatsApp) para saber de dónde vino.
+- Puedo marcar el origen (**presencial / llamada / WhatsApp**) para saber de dónde vino.
+  "Presencial" es el cliente de vidriera: no llamó ni escribió, entró y lo atendí. (Hasta el
+  14/8/2026 las opciones eran solo "teléfono" y "WhatsApp", así que cada walk-in quedaba
+  registrado con un canal falso.)
+- **Puedo cargar un turno en un horario que ya pasó, hasta 7 días para atrás** (14/8/2026).
+  Muchas veces entran varios clientes de vidriera seguidos, los atiendo y los registro
+  después, cuando tengo un rato libre; antes eso era imposible y esos turnos no quedaban en
+  ningún lado. La pantalla tiene que dejarlo clarísimo para que no confunda un turno viejo
+  con uno que viene: el día y la hora se marcan en ámbar, aparece un cartel antes de
+  confirmar y el botón cambia a **"Registrar turno pasado"**. Si el hueco que toqué ya pasó,
+  el origen arranca en "Presencial".
+  - Más de 7 días atrás no puedo: la agenda es el registro de lo que pasó, no un formulario
+    de carga histórica.
+  - Es **solo para mí**. El cliente que reserva por la web sigue con su antelación mínima de
+    30 minutos y nunca ve una hora que ya pasó.
+  - **Un turno realizado no se puede pisar.** Si el rato que quiero usar ya lo ocupa un turno
+    que se hizo, no me lo ofrece; para liberarlo tengo que marcar Ausente al que no atendí.
+    Un turno **ausente o cancelado** sí libera el rato, como siempre.
 - **El teléfono es opcional acá**, al revés que en la reserva del cliente (HU-01). Muchas veces cargo el turno con la persona enfrente y no me sé el número de memoria; que fuera obligatorio me trababa el alta por un dato que puedo completar después. Si escribo algo, igual tiene que ser un teléfono válido.
 - En el celular puedo elegir el número de mi agenda de contactos en vez de tipearlo. Es una comodidad: donde el navegador no lo permite, el botón directamente no aparece y el campo se escribe a mano.
 
@@ -92,7 +111,15 @@ Como Ariel, quiero marcar si el cliente vino o no, para llevar un registro (sin 
 
 **HU-13 — Configurar servicios**
 Como Ariel, quiero poder agregar, editar o desactivar servicios y sus duraciones, sin depender de que alguien le toque el código.
-- También les pongo el **precio** (HU-27). Es un dato mío: me sirve para que el cobro venga con el monto puesto y para los totales, y **el cliente no lo ve en ningún momento**.
+- También les pongo el **precio** (HU-27). Me sirve para que el cobro venga con el monto puesto y para los totales.
+  - ⚠️ **Enmienda del 14/8/2026: el cliente SÍ ve el precio.** Hasta esa fecha esta línea
+    decía "el cliente no lo ve en ningún momento" y era una decisión explícita de HU-27.
+    Franco la cambió: el precio se muestra en la tarjeta del servicio, en todo el flujo de
+    reserva y en el link de gestión del turno. Lo que sigue siendo **solo mío** es lo del
+    cobro —cómo me pagaron y cuánto entró—, que vive en el turno y no sale del panel.
+  - El precio que ve el cliente es **el de hoy**, no una foto del día que reservó: es el que
+    le voy a cobrar cuando venga. Es la misma regla del monto cobrado, y al revés que la
+    duración, que sí queda congelada porque decide la disponibilidad.
 - Un servicio puede no tener precio todavía. No es lo mismo que valga $0: cuando no lo cargué, el cobro simplemente no me prellena nada.
 
 **HU-14 — Configurar horario laboral**
@@ -388,7 +415,7 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
   2. Sistema detecta que hay uno o más turnos activos en ese rango.
   3. Sistema le muestra la lista de turnos afectados y pide confirmación explícita.
   4. Si confirma, esos turnos pasan a *Cancelado* (con motivo "bloqueado por el local") y el rango queda bloqueado.
-  - *Nota: esto no le avisa al cliente — el turno queda cancelado y Ariel se lo comunica por WhatsApp a mano. Es el caso donde más se nota que no hay aviso automático de cancelación: el cliente se entera recién si abre su link. Con el email ya guardado el mecanismo existiría (un mail de "Ariel canceló tu turno"), pero es funcionalidad nueva, no está implementada.*
+  - ⚠️ *Nota (corregida el 14/8/2026): **esta baja sigue sin avisarle al cliente**, y ahora es una excepción y no la regla. Hasta la v2 no había aviso de cancelación en ningún lado; HU-22 lo construyó y sale por los **dos** caminos de baja individuales — el cliente que cancela desde su link y Ariel que cancela desde el panel. Este tercer camino, la cancelación en masa por un bloqueo (`bloqueos.service.ts`), cancela los turnos dentro de una transacción y **no llama a `enviarAvisoDeCancelacion`**. O sea que el mecanismo ya existe y este flujo no lo usa: el cliente se entera recién si abre su link, o si Ariel le escribe a mano. Queda anotado como pendiente real, no como funcionalidad inexistente.*
 
 ### CU-04 — Cálculo de disponibilidad
 
@@ -400,6 +427,24 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
   4. No existe otro turno activo que se solape con `[H, H+D)`.
 - Este cálculo es el corazón del sistema — cualquier cambio en servicios u horarios pasa siempre por esta misma función, tanto para reservas nuevas como para reprogramaciones.
 
+**De qué `H` se prueban** (14/8/2026). No alcanza con una grilla fija: los candidatos son la
+grilla de 20 minutos anclada al inicio de la franja **más el momento exacto en que termina
+cada turno o bloqueo de ese día**.
+
+- El motivo, del uso real: los servicios no duran todos 20 minutos. Una Barba de 15 a las
+  17:00 termina 17:15, pero el siguiente horario ofrecido era 17:20; un Corte + Barba de 30
+  a las 18:00 termina 18:30 y el siguiente era 18:40. Con la agenda llena eso son 5 a 10
+  minutos tirados **por turno**, y a Ariel el sistema le impedía cargar un turno en un rato
+  que él tenía libre de verdad.
+- Se encadena solo: si alguien reserva a las 17:15 un corte de 20, ese turno termina 17:35 y
+  17:35 pasa a ser candidato. La agenda se compacta turno a turno sin ninguna regla extra.
+- ⚠️ El horario pegado al final de otro turno **pasa por los mismos cuatro filtros**, en
+  particular el 3: si el turno no entra completo antes del cierre, no se ofrece. Hay un test
+  que lo fija sobre ese borde.
+- Vale igual para el cliente y para Ariel: es una sola cuenta de disponibilidad. Que el
+  cliente y el panel vieran grillas distintas es la clase de problema que ya costó caro con
+  el margen de antelación.
+
 ---
 
 ## 4. Casos borde identificados
@@ -407,7 +452,7 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
 | Caso | Resolución propuesta |
 |---|---|
 | Dos clientes reservan el mismo horario casi simultáneamente | Constraint de unicidad a nivel base de datos (no confiar solo en la validación del frontend) |
-| Servicio de larga duración (ej. Color, 90 min) cerca del cierre o del descanso | No se ofrece como horario válido si no entra completo (ver CU-04) |
+| Servicio de larga duración cerca del cierre o del descanso | No se ofrece como horario válido si no entra completo (ver CU-04). Vale igual para los horarios pegados al final de otro turno, que son candidatos desde el 14/8/2026 |
 | Ariel cambia la duración de un servicio después de que ya hay turnos reservados con la duración vieja | El turno guarda una "foto" del servicio (nombre + duración) al momento de reservar, no una referencia que cambie después |
 | Ariel cambia el horario laboral general | Los turnos ya reservados fuera del nuevo horario se mantienen válidos; solo los horarios *nuevos* respetan la config actualizada |
 | Cliente pierde su link único | Si dejó email, el link le llegó por mail y además quedó dentro del evento del calendario (HU-02, HU-19). Si no dejó email, no hay recuperación automática: le escribe a Ariel, que busca el turno en su panel y le reenvía el link |
