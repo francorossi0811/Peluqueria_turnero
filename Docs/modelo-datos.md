@@ -1,5 +1,5 @@
 # Modelo de Datos / ERD
-### Turnero — La Peluquería de Ariel Enrique | v1
+### Turnero — La Peluquería de Ariel Enrique
 
 ---
 

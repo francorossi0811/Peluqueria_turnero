@@ -1,5 +1,5 @@
 # Historias de Usuario y Casos de Uso
-### Turnero — La Peluquería de Ariel Enrique | v1
+### Turnero — La Peluquería de Ariel Enrique
 
 ---
 
@@ -351,9 +351,16 @@ Ariel efectivamente cobra. Es a propósito distinto de la **duración**, que sí
 reservar (ver §4): la duración decide si el turno entra en la agenda, así que cambiarla
 movería turnos ya dados; el precio no afecta nada hasta el momento de cobrar.
 
-*Por qué el cliente no ve los precios:* es lo que pidió Ariel. Y además, un precio
-publicado que no se actualiza es peor que ninguno — el sistema le estaría mintiendo al
-cliente sin que nadie se entere. El flujo de reserva no se tocó en nada.
+⚠️ *Sobre que el cliente vea los precios — **esto cambió el 14/8/2026**.* Acá decía que el
+cliente no los veía porque era lo que había pedido Ariel, y que "el flujo de reserva no se
+tocó en nada". **Franco lo revirtió:** el precio se muestra en la tarjeta del servicio, en
+todo el flujo de reserva y en el link de gestión.
+
+El riesgo que motivaba la regla vieja sigue siendo cierto y ahora es responsabilidad de
+Ariel: **un precio publicado que no se actualiza es peor que ninguno.** Lo que lo hace
+manejable es que el precio que se muestra es siempre el de hoy —no una foto del día de la
+reserva—, así que apenas lo edita en el panel, lo que ve el cliente cambia. Lo que **no** ve
+sigue siendo el cobro: cómo pagó y cuánto entró.
 
 *Por qué los medios de pago son una lista fija y las etiquetas no:* en las etiquetas
 (HU-25) el texto que escribe Ariel *es* el contenido, y por eso se configuran. Acá el
@@ -415,7 +422,10 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
   2. Sistema detecta que hay uno o más turnos activos en ese rango.
   3. Sistema le muestra la lista de turnos afectados y pide confirmación explícita.
   4. Si confirma, esos turnos pasan a *Cancelado* (con motivo "bloqueado por el local") y el rango queda bloqueado.
-  - ⚠️ *Nota (corregida el 14/8/2026): **esta baja sigue sin avisarle al cliente**, y ahora es una excepción y no la regla. Hasta la v2 no había aviso de cancelación en ningún lado; HU-22 lo construyó y sale por los **dos** caminos de baja individuales — el cliente que cancela desde su link y Ariel que cancela desde el panel. Este tercer camino, la cancelación en masa por un bloqueo (`bloqueos.service.ts`), cancela los turnos dentro de una transacción y **no llama a `enviarAvisoDeCancelacion`**. O sea que el mecanismo ya existe y este flujo no lo usa: el cliente se entera recién si abre su link, o si Ariel le escribe a mano. Queda anotado como pendiente real, no como funcionalidad inexistente.*
+  5. **A cada cliente afectado le llega el aviso de cancelación** (HU-22), igual que en las otras dos vías de baja.
+  - ⚠️ *Nota (14/8/2026): hasta esta fecha este era el **único** camino de baja que no avisaba. Acá decía que el aviso automático de cancelación "es funcionalidad nueva, no está implementada", y eso dejó de ser cierto con HU-22 — pero el flujo del bloqueo nunca se enganchó, así que el documento y el código se contradecían en direcciones opuestas. Ya está cerrado: es justo el caso donde más falta hacía, porque son varios clientes de una y ninguno lo pidió.*
+  - *Los avisos salen **después** de responder y **uno atrás del otro**, no en paralelo: bloquear una semana puede cancelar decenas de turnos, y mandar decenas de mensajes de golpe a la Cloud API es la forma de comerse un rate limit de Meta justo cuando más importa que lleguen.*
+  - ⚠️ *El mensaje **no dice el motivo**: la plantilla `turno_cancelado` está aprobada con tres variables y no tiene lugar para él. Cambiarlo implica volver a pasar por la aprobación de Meta.*
 
 ### CU-04 — Cálculo de disponibilidad
 
