@@ -6,7 +6,8 @@ import type { TurnoAdmin } from '../../types/api'
 
 const ETIQUETA_ORIGEN: Record<TurnoAdmin['origen'], string> = {
   online: 'Online',
-  telefono: 'Teléfono',
+  presencial: 'Presencial',
+  llamada: 'Llamada',
   whatsapp: 'WhatsApp',
 }
 

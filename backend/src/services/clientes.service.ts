@@ -25,13 +25,19 @@ export type ClienteConEtiquetas = Prisma.ClienteGetPayload<{
   include: { etiquetas: { include: { etiqueta: true } } }
 }>
 
-/** Lo que hay que pedirle a Prisma para que un turno traiga la ficha de su cliente.
+/** Lo que hay que pedirle a Prisma para que un turno venga completo para los DTO.
  *
- * Está acá y no repetido en cada consulta porque `turnoAdminDto` cuenta con que la
- * relación venga cargada: si una consulta se olvidara, la agenda mostraría turnos sin
- * insignias y sin apodo sin que nada falle. */
+ * Está acá y no repetido en cada consulta porque los DTO cuentan con que las relaciones
+ * vengan cargadas: si una consulta se olvidara, la agenda mostraría turnos sin insignias y
+ * sin apodo sin que nada falle.
+ *
+ * `servicio` trae **solo el precio**, y solo el de hoy: el nombre y la duración que se
+ * muestran salen del snapshot del turno, que es lo que no se recalcula. El precio, al
+ * revés, es siempre el actual — misma regla que `montoCobrado` en HU-27, porque con
+ * inflación un turno de hace tres semanas se cobra al precio de ahora. */
 export const INCLUDE_CLIENTE = {
   cliente: { include: { etiquetas: { include: { etiqueta: true } } } },
+  servicio: { select: { precio: true } },
 } as const
 
 /** Un turno con la ficha de su cliente resuelta. Es lo que devuelven las consultas de

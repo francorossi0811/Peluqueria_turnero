@@ -1,8 +1,10 @@
 import { Insignia } from './Insignia'
 import {
+  DIAS_CARGA_HACIA_ATRAS,
   DIAS_CORTOS,
   diaSemana,
   minutosDeHora as aMinutos,
+  sumarDias,
   turnoEnCurso,
 } from '../../utils/fecha'
 import type {
@@ -436,12 +438,15 @@ function TramoGrilla({
             (f) => desde >= f.inicio && desde + PASO_MINUTOS <= f.fin,
           )
 
-        // Un horario que ya pasó no se puede reservar —el backend no lo ofrece ni con las
-        // acciones de Ariel, que van sin margen— así que tampoco se toca. Si no, navegar
-        // a una semana anterior para mirar el historial deja toda la pantalla llena de
-        // huecos que al tocarlos abren un modal donde no se puede elegir nada.
-        const pasado = (desde: number) =>
-          dia < hoy || (dia === hoy && minutosAhora !== null && desde < minutosAhora)
+        // Hasta HU-08 un horario pasado no se tocaba: el backend no lo ofrecía ni con las
+        // acciones de Ariel, así que el hueco abría un modal donde no se podía elegir
+        // nada. Ahora sí se puede — registrar al cliente de vidriera que ya atendió es
+        // exactamente eso: cargar un turno sobre un rato que pasó.
+        //
+        // Lo que sigue sin tocarse es lo que el backend no acepta: más de
+        // DIAS_CARGA_HACIA_ATRAS días atrás. Sin ese corte volvería el defecto original,
+        // solo que corrido una semana.
+        const cargable = dia >= sumarDias(hoy, -DIAS_CARGA_HACIA_ATRAS)
 
         // El fin se calcula con la duración del snapshot, que es **la misma cuenta con la
         // que se dibuja el alto** unas líneas más abajo. Podría salir de `t.horaFin`, que
@@ -471,20 +476,30 @@ function TramoGrilla({
                 son botones: mostrar como libre un rato en el que está cerrado es peor que
                 no mostrarlo. */}
             {marcas.map((m) =>
-              abierto(m) && !pasado(m) ? (
+              abierto(m) && cargable ? (
                 <button
                   key={m}
                   onClick={() => onElegirHueco(dia, aHora(m))}
-                  title={`Cargar turno · ${aHora(m)}`}
+                  title={
+                    dia < hoy
+                      ? `Registrar turno atendido · ${aHora(m)}`
+                      : `Cargar turno · ${aHora(m)}`
+                  }
                   // Las divisiones de 20 minutos, en negro y no en el crema `borde-suave`:
                   // sobre el naranja fuerte una línea clara desaparece, y son justamente
                   // las líneas con las que Ariel cuenta los ratos.
+                  //
+                  // El hueco pasado no lleva color propio: el fondo verde de la columna
+                  // (`bg-agenda-pasado`) ya dice que ese día pasó, y pintarle encima un
+                  // segundo tratamiento sería repetir el error de la planilla, donde un
+                  // mismo color quería decir dos cosas.
                   className="border-agenda-linea/40 hover:bg-agenda-tinta/10 block w-full border-b transition"
                   style={{ height: ALTO_PASO_PX }}
                 />
               ) : abierto(m) ? (
-                // Ya pasó: se ve como hueco (Ariel mira semanas anteriores para saber
-                // quién vino) pero no invita a tocarlo.
+                // Demasiado viejo para cargarlo: se sigue viendo como hueco (Ariel mira
+                // semanas anteriores para saber quién vino) pero no invita a tocarlo,
+                // porque el backend lo rechazaría.
                 <div
                   key={m}
                   className="border-agenda-linea/40 block w-full border-b"

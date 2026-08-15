@@ -102,6 +102,150 @@ describe('calcularHorariosDelDia', () => {
     expect(horarios).toContain('18:00')
   })
 
+  // La grilla de 20 minutos no es la única fuente de horarios: también se ofrece el
+  // momento exacto en que termina un turno. Sin esto, entre que un turno termina y llega
+  // el próximo múltiplo de 20 queda un rato libre que el sistema nunca ofrecía.
+  describe('los horarios se re-anclan a lo que ya está agendado', () => {
+    // Los dos casos que reportó Franco desde el uso real, con las duraciones reales de
+    // Ariel (Barba 15, Corte clásico 20, Corte + Barba y Corte de Pelo mujer 30).
+    it('después de una Barba de 15 min a las 17:00 se puede reservar a las 17:15', () => {
+      const ocupados: Intervalo[] = [
+        {
+          inicio: new Date(Date.UTC(2026, 7, 4, 17, 0)),
+          fin: new Date(Date.UTC(2026, 7, 4, 17, 15)),
+        },
+      ]
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados,
+        feriadoBloquea: false,
+        duracionMinutos: 20, // Corte clásico
+        ahora: AHORA_MADRUGADA,
+      })
+      expect(horarios).toContain('17:15')
+      expect(horarios).not.toContain('17:00') // sigue ocupado
+    })
+
+    it('después de un turno de 30 min a las 18:00 se puede reservar a las 18:30', () => {
+      const ocupados: Intervalo[] = [
+        {
+          inicio: new Date(Date.UTC(2026, 7, 4, 18, 0)),
+          fin: new Date(Date.UTC(2026, 7, 4, 18, 30)),
+        },
+      ]
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados,
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: AHORA_MADRUGADA,
+      })
+      expect(horarios).toContain('18:30')
+      // El que se ofrecía antes sigue estando: 18:30 se suma, no reemplaza a nadie.
+      expect(horarios).toContain('18:40')
+    })
+
+    // El encadenado es lo que hace que la agenda se compacte sola turno a turno.
+    it('encadena: dos turnos seguidos corren el próximo horario dos veces', () => {
+      const ocupados: Intervalo[] = [
+        {
+          inicio: new Date(Date.UTC(2026, 7, 4, 17, 0)),
+          fin: new Date(Date.UTC(2026, 7, 4, 17, 15)),
+        },
+        {
+          inicio: new Date(Date.UTC(2026, 7, 4, 17, 15)),
+          fin: new Date(Date.UTC(2026, 7, 4, 17, 35)),
+        },
+      ]
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados,
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: AHORA_MADRUGADA,
+      })
+      expect(horarios).toContain('17:35')
+      expect(horarios).not.toContain('17:15')
+      expect(horarios).not.toContain('17:20')
+    })
+
+    // El borde que importa: el horario pegado al final de otro turno pasa por la misma
+    // regla de cierre que los de la grilla. Un turno de 30 min que termina 19:50 deja
+    // libre 19:50-20:00, y ahí no entra nada.
+    it('el horario pegado al final NO se ofrece si el turno no entra antes del cierre', () => {
+      const ocupados: Intervalo[] = [
+        {
+          inicio: new Date(Date.UTC(2026, 7, 4, 19, 20)),
+          fin: new Date(Date.UTC(2026, 7, 4, 19, 50)),
+        },
+      ]
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados,
+        feriadoBloquea: false,
+        duracionMinutos: 20, // 19:50 + 20 = 20:10, se pasa del cierre de las 20:00
+        ahora: AHORA_MADRUGADA,
+      })
+      expect(horarios).not.toContain('19:50')
+    })
+
+    it('un bloqueo también re-ancla: termina 17:10 y ahí se puede reservar', () => {
+      const ocupados: Intervalo[] = [
+        {
+          inicio: new Date(Date.UTC(2026, 7, 4, 17, 0)),
+          fin: new Date(Date.UTC(2026, 7, 4, 17, 10)),
+        },
+      ]
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados,
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: AHORA_MADRUGADA,
+      })
+      expect(horarios).toContain('17:10')
+    })
+
+    it('no repite el horario cuando el turno termina justo sobre la grilla', () => {
+      const ocupados: Intervalo[] = [
+        {
+          inicio: new Date(Date.UTC(2026, 7, 4, 17, 0)),
+          fin: new Date(Date.UTC(2026, 7, 4, 17, 20)),
+        },
+      ]
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados,
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: AHORA_MADRUGADA,
+      })
+      expect(horarios.filter((h) => h === '17:20')).toHaveLength(1)
+    })
+
+    // Espejo defensivo: sin nada agendado, la grilla tiene que ser exactamente la de
+    // antes. Es el que se rompe si alguien empieza a generar candidatos de la nada.
+    it('sin turnos ni bloqueos, la grilla sigue siendo la de 20 minutos', () => {
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados: [],
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: AHORA_MADRUGADA,
+      })
+      expect(horarios.every((h) => ['00', '20', '40'].includes(h.slice(3)))).toBe(
+        true,
+      )
+    })
+  })
+
   it('un servicio largo (90 min) no se ofrece si no entra completo antes del cierre', () => {
     const horarios = calcularHorariosDelDia({
       fecha: FECHA,
@@ -179,6 +323,92 @@ describe('calcularHorariosDelDia', () => {
       ahora,
     })
     expect(horarios).not.toContain('10:20')
+  })
+
+  // HU-08 — Ariel atiende clientes de vidriera y los registra cuando tiene un rato libre,
+  // así que necesita que le ofrezcan horarios que ya pasaron.
+  describe('permitirPasado (carga manual de Ariel)', () => {
+    // Hoy al mediodía: las 10:00 y las 11:40 ya pasaron.
+    const MEDIODIA = new Date(Date.UTC(2026, 7, 4, 12, 0))
+
+    // El más importante de todos: abrir el pasado no puede aflojar el cierre. Los dos
+    // bordes van juntos por el mismo motivo que en el test de más arriba.
+    it('NO afloja el cierre: el que termina justo entra, el que se pasa no', () => {
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados: [],
+        feriadoBloquea: false,
+        duracionMinutos: 60,
+        ahora: MEDIODIA,
+        permitirPasado: true,
+      })
+      expect(horarios).toContain('12:00') // 12:00 + 60min = 13:00, la hora de cierre exacta
+      expect(horarios).not.toContain('12:20') // 12:20 + 60min = 13:20, se pasa
+    })
+
+    it('ofrece los horarios que ya pasaron', () => {
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados: [],
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: MEDIODIA,
+        permitirPasado: true,
+      })
+      expect(horarios).toContain('10:00')
+      expect(horarios).toContain('11:40')
+    })
+
+    it('ignora margenMinutos: no hay antelación que exigirle a lo que ya pasó', () => {
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados: [],
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: MEDIODIA,
+        margenMinutos: 30,
+        permitirPasado: true,
+      })
+      expect(horarios).toContain('11:40')
+    })
+
+    it('sigue respetando los ratos ocupados', () => {
+      const ocupados: Intervalo[] = [
+        {
+          inicio: new Date(Date.UTC(2026, 7, 4, 10, 0)),
+          fin: new Date(Date.UTC(2026, 7, 4, 10, 20)),
+        },
+      ]
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados,
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: MEDIODIA,
+        permitirPasado: true,
+      })
+      expect(horarios).not.toContain('10:00')
+      expect(horarios).toContain('10:20')
+    })
+
+    // Espejo defensivo: es el que se rompe si alguien invierte el default del flag.
+    it('sin el flag, un horario ya pasado no se ofrece ni con margen 0', () => {
+      const horarios = calcularHorariosDelDia({
+        fecha: FECHA,
+        franjas: FRANJAS,
+        ocupados: [],
+        feriadoBloquea: false,
+        duracionMinutos: 20,
+        ahora: MEDIODIA,
+        margenMinutos: 0,
+      })
+      expect(horarios).not.toContain('10:00')
+      expect(horarios).not.toContain('11:40')
+    })
   })
 })
 

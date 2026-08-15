@@ -23,7 +23,8 @@ import type { ErrorApi, TurnoAdmin } from '../../types/api'
 
 const ETIQUETA_ORIGEN: Record<TurnoAdmin['origen'], string> = {
   online: 'Reservó online',
-  telefono: 'Cargado por teléfono',
+  presencial: 'Vino al local',
+  llamada: 'Cargado por llamada',
   whatsapp: 'Cargado por WhatsApp',
 }
 

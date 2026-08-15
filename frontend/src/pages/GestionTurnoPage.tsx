@@ -17,6 +17,7 @@ import {
 } from '../api/turnos'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
+import { formatearPesos } from '../utils/dinero'
 import { TELEFONO_URL, WHATSAPP_URL } from '../utils/contacto'
 import type { ErrorApi, EstadoTurno } from '../types/api'
 
@@ -143,6 +144,8 @@ export function GestionTurnoPage({ id }: { id: string }) {
         </h1>
         <p className="text-tinta-suave mb-4 text-sm">
           {turno.servicio.nombre} · {turno.servicio.duracionMinutos} min
+          {turno.servicio.precio !== null &&
+            ` · ${formatearPesos(turno.servicio.precio)}`}
         </p>
 
         {errorAccion && (
@@ -213,6 +216,8 @@ export function GestionTurnoPage({ id }: { id: string }) {
         </p>
         <p className="text-tinta mt-1 text-sm">
           {fechaLegible(turno.fecha)} · {turno.hora}
+          {turno.servicio.precio !== null &&
+            ` · ${formatearPesos(turno.servicio.precio)}`}
         </p>
       </Card>
 

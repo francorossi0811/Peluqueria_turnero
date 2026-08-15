@@ -5,12 +5,24 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { GrillaHorarios } from '../GrillaHorarios'
 import { obtenerServicios } from '../../api/servicios'
-import { obtenerDisponibilidad } from '../../api/disponibilidad'
+import { obtenerDisponibilidadAdmin } from '../../api/disponibilidad'
 import { cargarTurnoManual } from '../../api/agenda'
 import { elegirContacto, soportaElegirContacto } from '../../lib/contactos'
-import { hoyIso, sumarDias } from '../../utils/fecha'
-import type { ErrorApi, Servicio } from '../../types/api'
+import { useMinutosAhora } from '../../lib/useMinutosAhora'
+import {
+  esTelefonoValido,
+  MENSAJE_TELEFONO_INVALIDO,
+} from '../../utils/validaciones'
+import {
+  DIAS_CARGA_HACIA_ATRAS,
+  fechaLegible,
+  hoyIso,
+  sumarDias,
+  yaPaso,
+} from '../../utils/fecha'
+import type { ErrorApi, OrigenManual, Servicio } from '../../types/api'
 
+/** Días hacia adelante, contando hoy. Hacia atrás manda `DIAS_CARGA_HACIA_ATRAS`. */
 const DIAS_A_MOSTRAR = 14
 
 interface ModalCargarTurnoProps {
@@ -33,20 +45,42 @@ export function ModalCargarTurno({
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteEmail, setClienteEmail] = useState('')
-  const [origen, setOrigen] = useState<'telefono' | 'whatsapp'>('telefono')
   const [error, setError] = useState<string | null>(null)
+  const [errorTelefono, setErrorTelefono] = useState<string | null>(null)
 
-  const desde = hoyIso()
-  const hasta = sumarDias(desde, DIAS_A_MOSTRAR - 1)
+  const hoy = hoyIso()
+  const minutosAhora = useMinutosAhora()
+  const desde = sumarDias(hoy, -DIAS_CARGA_HACIA_ATRAS)
+  // ⚠️ Se cuenta desde HOY, no desde `desde`. Con `sumarDias(desde, …)` la ventana entera
+  // se correría una semana para atrás y desaparecerían los últimos 7 días futuros, sin que
+  // nada falle ni avise.
+  const hasta = sumarDias(hoy, DIAS_A_MOSTRAR - 1)
+
+  // HU-08 — Un turno cargado sobre un horario que ya pasó es, casi siempre, el cliente de
+  // vidriera que Ariel atendió y está registrando ahora. Arrancar en 'presencial' le
+  // evita corregir el origen todas las veces.
+  const esPasado = Boolean(
+    fecha && hora && yaPaso(fecha, hora, hoy, minutosAhora),
+  )
+  const [origen, setOrigen] = useState<OrigenManual>('llamada')
+  useEffect(() => {
+    if (esPasado) setOrigen('presencial')
+  }, [esPasado])
 
   const serviciosQuery = useQuery({
     queryKey: ['servicios'],
     queryFn: obtenerServicios,
   })
 
+  // ⚠️ Clave distinta a la de la reserva pública (`['disponibilidad', …]`) a propósito: el
+  // mismo servicio y el mismo rango devuelven contenidos distintos según la ruta, y
+  // compartir cache entre las dos sería el bug más difícil de encontrar de todo esto.
   const disponibilidadQuery = useQuery({
-    queryKey: ['disponibilidad', servicio?.id, desde, hasta],
-    queryFn: () => obtenerDisponibilidad(servicio!.id, desde, hasta),
+    queryKey: ['disponibilidad-admin', servicio?.id, desde, hasta],
+    queryFn: () =>
+      obtenerDisponibilidadAdmin(servicio!.id, desde, hasta, {
+        incluirPasado: true,
+      }),
     enabled: Boolean(servicio),
   })
 
@@ -74,14 +108,20 @@ export function ModalCargarTurno({
       if (datos?.codigo === 'HORARIO_NO_DISPONIBLE') {
         setError('Ese horario se acaba de ocupar. Elegí otro.')
         setHora(null)
-        void queryClient.invalidateQueries({ queryKey: ['disponibilidad'] })
+        void queryClient.invalidateQueries({ queryKey: ['disponibilidad-admin'] })
         return
       }
       // El backend valida el teléfono y el mail (backend/src/utils/validaciones.ts).
       // Su mensaje dice qué campo está mal; el genérico de abajo dejaría a Ariel
       // adivinando.
+      //
+      // El del teléfono va **pegado al input** y no en el cartel de abajo: es el único
+      // campo donde el backend es más estricto que lo que se puede chequear acá (necesita
+      // la metadata de características de `libphonenumber-js`), así que es el error que
+      // más veces va a aparecer, y a 40 cm del campo no se entiende de cuál habla.
       if (datos?.codigo === 'PARAMETROS_INVALIDOS') {
-        setError(datos.mensaje)
+        if (clienteTelefono.trim()) setErrorTelefono(datos.mensaje)
+        else setError(datos.mensaje)
         return
       }
       setError('No pudimos cargar el turno. Probá de nuevo.')
@@ -122,7 +162,10 @@ export function ModalCargarTurno({
   const listo = servicio && fecha && hora && clienteNombre
 
   return (
-    <Modal titulo="Cargar turno" onClose={onClose}>
+    <Modal
+      titulo={esPasado ? 'Registrar turno pasado' : 'Cargar turno'}
+      onClose={onClose}
+    >
       <div className="flex flex-col gap-4">
         <label className="flex flex-col gap-1">
           <span className="text-tinta-tenue text-xs tracking-wide uppercase">
@@ -176,6 +219,7 @@ export function ModalCargarTurno({
                   setHora(null)
                 }}
                 onElegirHora={setHora}
+                pasado={{ hoy, minutosAhora }}
               />
             )}
           </div>
@@ -215,10 +259,30 @@ export function ModalCargarTurno({
               <input
                 type="tel"
                 value={clienteTelefono}
-                onChange={(e) => setClienteTelefono(e.target.value)}
+                onChange={(e) => {
+                  setErrorTelefono(null)
+                  setClienteTelefono(e.target.value)
+                }}
                 placeholder="Si no lo sabés, dejalo vacío"
-                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+                className={`bg-superficie text-tinta rounded-md border px-3 py-2 outline-none ${
+                  errorTelefono
+                    ? 'border-vino'
+                    : 'border-borde focus:border-miel'
+                }`}
               />
+              {errorTelefono ? (
+                <span className="text-vino text-xs">{errorTelefono}</span>
+              ) : (
+                // Chequeo laxo local, solo para el caso obvio (letras, muy corto). El de
+                // verdad lo hace el backend: saber si una característica existe necesita
+                // metadata que no vale traer al bundle.
+                clienteTelefono.trim() !== '' &&
+                !esTelefonoValido(clienteTelefono) && (
+                  <span className="text-vino text-xs">
+                    {MENSAJE_TELEFONO_INVALIDO}
+                  </span>
+                )
+              )}
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-tinta-tenue text-xs tracking-wide uppercase">
@@ -237,31 +301,42 @@ export function ModalCargarTurno({
                 Origen
               </span>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setOrigen('telefono')}
-                  className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
-                    origen === 'telefono'
-                      ? 'border-vino bg-vino-suave text-vino'
-                      : 'border-borde text-tinta-suave'
-                  }`}
-                >
-                  Teléfono
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOrigen('whatsapp')}
-                  className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
-                    origen === 'whatsapp'
-                      ? 'border-vino bg-vino-suave text-vino'
-                      : 'border-borde text-tinta-suave'
-                  }`}
-                >
-                  WhatsApp
-                </button>
+                {(
+                  [
+                    ['presencial', 'Presencial'],
+                    ['llamada', 'Llamada'],
+                    ['whatsapp', 'WhatsApp'],
+                  ] as const
+                ).map(([valor, etiqueta]) => (
+                  <button
+                    key={valor}
+                    type="button"
+                    onClick={() => setOrigen(valor)}
+                    className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
+                      origen === valor
+                        ? 'border-vino bg-vino-suave text-vino'
+                        : 'border-borde text-tinta-suave'
+                    }`}
+                  >
+                    {etiqueta}
+                  </button>
+                ))}
               </div>
             </div>
           </>
+        )}
+
+        {/* HU-08 — Lo último que Ariel lee antes de confirmar. Va acá, pegado al botón, y
+            no arriba de todo: para cuando llegó hasta acá ya se olvidó de qué chip tocó. */}
+        {esPasado && (
+          <div className="border-alerta bg-alerta-suave text-alerta rounded-md border px-3 py-2 text-sm">
+            <p className="font-semibold">
+              ⚠ Estás registrando un turno que YA PASÓ
+            </p>
+            <p className="mt-0.5">
+              {fechaLegible(fecha!)} · {hora}
+            </p>
+          </div>
         )}
 
         {error && (
@@ -280,7 +355,11 @@ export function ModalCargarTurno({
             disabled={!listo || cargarMutation.isPending}
             onClick={() => cargarMutation.mutate()}
           >
-            {cargarMutation.isPending ? 'Cargando…' : 'Cargar turno'}
+            {cargarMutation.isPending
+              ? 'Cargando…'
+              : esPasado
+                ? 'Registrar turno pasado'
+                : 'Cargar turno'}
           </Button>
         </div>
       </div>

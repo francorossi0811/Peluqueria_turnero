@@ -12,7 +12,10 @@ const SERVICIOS = [
   { nombre: 'Corte clásico', duracionMinutos: 30, orden: 1 },
   { nombre: 'Corte + Barba', duracionMinutos: 45, orden: 2 },
   { nombre: 'Barba', duracionMinutos: 20, orden: 3 },
-  { nombre: 'Color', duracionMinutos: 90, orden: 4 },
+  // "Color" vivía acá con orden 4. Se sacó el 14/8/2026 junto con la migración que borra
+  // la fila: Ariel no ofrece más ese servicio. ⚠️ Las dos cosas hacen falta — este seed
+  // busca por nombre y crea el que no encuentra, así que dejarlo acá lo resucitaría en el
+  // próximo `npm run seed`, y encima activo y sin foto.
 ]
 
 function hora(h: number, m = 0): Date {

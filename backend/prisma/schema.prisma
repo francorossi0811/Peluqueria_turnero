@@ -18,9 +18,14 @@ enum EstadoTurno {
   ausente
 }
 
+// Por dónde entró la reserva. `presencial` es el cliente de vidriera que Ariel atiende y
+// registra después (HU-08): no llamó ni escribió, así que meterlo en `llamada` sería un
+// dato falso. `llamada` se llamaba `telefono` y se renombró porque se confundía con
+// `cliente_telefono`, que es un dato de contacto y no un canal.
 enum OrigenTurno {
   online
-  telefono
+  presencial
+  llamada
   whatsapp
 }
 

@@ -10,6 +10,7 @@ import { obtenerServicios } from '../api/servicios'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { crearTurno, enviarConfirmacion, urlCalendario } from '../api/turnos'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
+import { formatearPesos } from '../utils/dinero'
 import {
   esEmailValido,
   esNombreValido,
@@ -48,6 +49,10 @@ export function ReservarPage() {
   const [clienteEmail, setClienteEmail] = useState('')
   const [turnoCreado, setTurnoCreado] = useState<Turno | null>(null)
   const [errorHorario, setErrorHorario] = useState<string | null>(null)
+  // El rechazo del teléfono que solo sabe el backend. Ver el `onError` de la mutación.
+  const [errorTelefonoServidor, setErrorTelefonoServidor] = useState<
+    string | null
+  >(null)
 
   const desde = hoyIso()
   const hasta = sumarDias(desde, DIAS_A_MOSTRAR - 1)
@@ -79,17 +84,33 @@ export function ReservarPage() {
       setPaso('confirmacion')
     },
     onError: (err) => {
+      const datos = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error
+        : null
+
       if (isAxiosError<ErrorApi>(err) && err.response?.status === 409) {
         setErrorHorario('Ese horario se acaba de ocupar. Elegí otro.')
         setHora(null)
         setPaso('horario')
         queryClient.invalidateQueries({ queryKey: ['disponibilidad'] })
-      } else {
-        setErrorHorario(
-          'Hubo un problema al confirmar el turno. Probá de nuevo.',
-        )
-        setPaso('horario')
+        return
       }
+
+      // El backend es más estricto que el chequeo local en un solo campo: el teléfono
+      // (`esTelefonoUtilizable` sabe qué características existen de verdad, y para eso
+      // haría falta traerse `libphonenumber-js` al bundle público). Así que un 400 de
+      // parámetros es, en la práctica, siempre el número.
+      //
+      // Se queda en el paso de datos con el mensaje pegado al campo. Mandarlo de vuelta al
+      // paso del horario, como hacía antes, lo alejaba justo del campo que tiene que
+      // corregir y le hablaba de otra cosa.
+      if (datos?.codigo === 'PARAMETROS_INVALIDOS') {
+        setErrorTelefonoServidor(datos.mensaje)
+        return
+      }
+
+      setErrorHorario('Hubo un problema al confirmar el turno. Probá de nuevo.')
+      setPaso('horario')
     },
   })
 
@@ -183,8 +204,14 @@ export function ReservarPage() {
             telefono={clienteTelefono}
             email={clienteEmail}
             enviando={crearTurnoMutation.isPending}
+            errorTelefonoServidor={errorTelefonoServidor}
             onNombreChange={setClienteNombre}
-            onTelefonoChange={setClienteTelefono}
+            onTelefonoChange={(v) => {
+              // Tocar el número borra el rechazo del servidor: si no, el error queda
+              // pegado mientras la persona ya lo está corrigiendo.
+              setErrorTelefonoServidor(null)
+              setClienteTelefono(v)
+            }}
             onEmailChange={setClienteEmail}
             onVolver={() => setPaso('horario')}
             onSubmit={confirmar}
@@ -235,6 +262,7 @@ function PasoHorario({
       </h1>
       <p className="font-body text-tinta mb-4 opacity-75">
         Elegí el día y el horario para tu turno · {servicio.duracionMinutos} min
+        {servicio.precio !== null && ` · ${formatearPesos(servicio.precio)}`}
       </p>
 
       {error && (
@@ -281,6 +309,7 @@ function PasoDatos({
   telefono,
   email,
   enviando,
+  errorTelefonoServidor,
   onNombreChange,
   onTelefonoChange,
   onEmailChange,
@@ -294,6 +323,9 @@ function PasoDatos({
   telefono: string
   email: string
   enviando: boolean
+  /** El rechazo que solo puede dar el backend: un número bien escrito cuya característica
+   * no existe. Se dibuja en el mismo lugar que los errores locales. */
+  errorTelefonoServidor: string | null
   onNombreChange: (v: string) => void
   onTelefonoChange: (v: string) => void
   onEmailChange: (v: string) => void
@@ -333,6 +365,10 @@ function PasoDatos({
     setErrores((prev) => (prev[campo] ? { ...prev, [campo]: undefined } : prev))
   }
 
+  // El error local gana sobre el del servidor: si la persona rompió el número después de
+  // que el backend lo rechazara, lo primero que tiene que arreglar es lo que se ve ahora.
+  const errorTelefono = errores.telefono ?? errorTelefonoServidor
+
   return (
     <div>
       <Kicker>Un paso más</Kicker>
@@ -341,6 +377,7 @@ function PasoDatos({
       </h1>
       <p className="font-body text-tinta mb-4 opacity-80">
         {servicio.nombre} · {fechaLegible(fecha)} · {hora}
+        {servicio.precio !== null && ` · ${formatearPesos(servicio.precio)}`}
       </p>
 
       <form onSubmit={manejarSubmit} noValidate className="flex flex-col gap-3">
@@ -372,10 +409,10 @@ function PasoDatos({
               limpiarError('telefono')
             }}
             placeholder="Ej: 351 459 3325"
-            className={claseInput(Boolean(errores.telefono))}
+            className={claseInput(Boolean(errorTelefono))}
           />
-          {errores.telefono ? (
-            <ErrorCampo>{errores.telefono}</ErrorCampo>
+          {errorTelefono ? (
+            <ErrorCampo>{errorTelefono}</ErrorCampo>
           ) : (
             <span className="text-tinta-tenue text-xs">
               Te mandamos la confirmación con el link de tu turno por WhatsApp a
@@ -458,6 +495,8 @@ function PasoConfirmacion({
       </h1>
       <p className="font-body text-tinta mb-2 text-lg">
         {turno.servicio.nombre}
+        {turno.servicio.precio !== null &&
+          ` · ${formatearPesos(turno.servicio.precio)}`}
       </p>
       <p className="font-body text-tinta mb-2 text-lg">
         {fechaLegible(turno.fecha)} · {turno.hora}

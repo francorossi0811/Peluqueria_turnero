@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma'
 import {
+  DIAS_PASADOS_ADMIN,
   obtenerHorariosDelDia,
   obtenerServicioActivo,
 } from './disponibilidad.service'
@@ -14,6 +15,7 @@ import {
   TurnoNoCobrableError,
   TurnoNoEncontradoError,
   TurnoNoModificableError,
+  TurnoSeSolapaConRealizadoError,
   TurnoYaTieneEmailError,
 } from './errores'
 import {
@@ -37,7 +39,7 @@ export interface DatosNuevoTurno {
   // lo garantiza el schema de validación de cada endpoint, no este tipo.
   clienteTelefono?: string
   clienteEmail?: string // HU-19: opcional, muchos clientes de Ariel no usan mail
-  origen?: OrigenTurno // HU-08: admin manda 'telefono'/'whatsapp'; público no manda nada -> 'online'
+  origen?: OrigenTurno // HU-08: admin manda 'presencial'/'llamada'/'whatsapp'; público no manda nada -> 'online'
 }
 
 export interface DatosReprogramacion {
@@ -65,6 +67,29 @@ function esViolacionDeSolapamiento(err: unknown): boolean {
   return meta?.driverAdapterError?.cause?.code === SQLSTATE_EXCLUSION_VIOLATION
 }
 
+/** HU-08 — ¿Ariel puede cargar un turno en esta fecha?
+ *
+ * Hacia adelante no hay límite (ya reserva a meses vista); hacia atrás, los días de
+ * `DIAS_PASADOS_ADMIN`, para que pueda registrar a los clientes de vidriera cuando tenga
+ * un rato libre.
+ *
+ * Pura y exportada por el mismo motivo que `esCobrable`: la usan el service y el
+ * controller, y la regla tiene que estar en un solo lugar.
+ *
+ * ⚠️ El "hoy" se calcula con getters **UTC** y no locales. Todo el backend lee fechas en
+ * UTC (`utils/fechaHora.ts`) y `ahoraArgentina()` ya viene corrido; mezclar getters
+ * locales acá haría que la ventana se corra un día en Render y no en la máquina de
+ * desarrollo, que es la peor combinación posible. */
+export function fechaCargableComoAdmin(fecha: Date, ahora: Date): boolean {
+  const hoy = Date.UTC(
+    ahora.getUTCFullYear(),
+    ahora.getUTCMonth(),
+    ahora.getUTCDate(),
+  )
+  const minimo = hoy - DIAS_PASADOS_ADMIN * 24 * 60 * 60_000
+  return fecha.getTime() >= minimo
+}
+
 /**
  * CU-01 — Reservar turno. Reusa `obtenerHorariosDelDia` (CU-04) para el paso "el
  * sistema valida que el horario siga libre" en vez de reimplementar las reglas.
@@ -74,13 +99,22 @@ export async function crearTurno(
 ): Promise<TurnoConCliente> {
   const servicio = await obtenerServicioActivo(input.servicioId)
 
-  // Sin origen = reserva pública (mantiene el margen); con origen = HU-08/admin (sin margen).
-  const horariosDelDia = await obtenerHorariosDelDia(
-    servicio,
-    input.fecha,
-    ahoraArgentina(),
-    { margenMinutos: input.origen ? 0 : undefined },
-  )
+  // Sin origen = reserva pública: margen de 30 minutos y nada de pasado.
+  // Con origen = HU-08, lo carga Ariel: sin margen (no tiene sentido protegerlo de sí
+  // mismo) y hasta DIAS_PASADOS_ADMIN días para atrás.
+  const esAdmin = Boolean(input.origen)
+  const ahora = ahoraArgentina()
+
+  // Red del controller, que ya rechaza esto con un 400 explicativo. Acá el error correcto
+  // es el mismo que para cualquier horario que no existe para quien pregunta.
+  if (esAdmin && !fechaCargableComoAdmin(input.fecha, ahora)) {
+    throw new HorarioNoDisponibleError()
+  }
+
+  const horariosDelDia = await obtenerHorariosDelDia(servicio, input.fecha, ahora, {
+    margenMinutos: esAdmin ? 0 : undefined,
+    permitirPasado: esAdmin,
+  })
   if (!horariosDelDia.includes(input.hora)) {
     throw new HorarioNoDisponibleError()
   }
@@ -161,8 +195,14 @@ export async function idsNuevosDespuesDe(
   return turnos.map((t) => t.id)
 }
 
-export async function obtenerTurno(id: string): Promise<Turno> {
-  const turno = await prisma.turno.findUnique({ where: { id } })
+// Trae las relaciones igual que las consultas de admin: el DTO público también necesita el
+// precio del servicio desde que el cliente lo ve (enmienda a HU-27), y tener una sola forma
+// de "un turno cargado" evita que un camino devuelva menos que otro sin que nada falle.
+export async function obtenerTurno(id: string): Promise<TurnoConCliente> {
+  const turno = await prisma.turno.findUnique({
+    where: { id },
+    include: INCLUDE_CLIENTE,
+  })
   if (!turno) throw new TurnoNoEncontradoError()
   return turno
 }
@@ -194,12 +234,13 @@ function validarModificable(turno: Turno, ahora: Date): void {
 }
 
 /** CU-02 — Cancelar turno vía link, con la ventana de 60 min (a diferencia de HU-10). */
-export async function cancelarTurno(id: string): Promise<Turno> {
+export async function cancelarTurno(id: string): Promise<TurnoConCliente> {
   const turno = await obtenerTurno(id)
   validarModificable(turno, ahoraArgentina())
 
   return prisma.turno.update({
     where: { id },
+    include: INCLUDE_CLIENTE,
     data: { estado: 'cancelado' },
   })
 }
@@ -213,7 +254,7 @@ export async function cancelarTurno(id: string): Promise<Turno> {
 export async function reprogramarTurno(
   id: string,
   input: DatosReprogramacion,
-): Promise<Turno> {
+): Promise<TurnoConCliente> {
   const original = await obtenerTurno(id)
   const ahora = ahoraArgentina()
   validarModificable(original, ahora)
@@ -239,6 +280,7 @@ export async function reprogramarTurno(
   try {
     return await prisma.$transaction(async (tx) => {
       const nuevo = await tx.turno.create({
+        include: INCLUDE_CLIENTE,
         data: {
           clienteNombre: original.clienteNombre,
           clienteTelefono: original.clienteTelefono,
@@ -423,18 +465,31 @@ export async function marcarTurno(
   // entra por esa ruta.
   if (cobro && !esCobrable(estado)) throw new TurnoNoCobrableError()
 
-  return prisma.turno.update({
-    where: { id },
-    include: INCLUDE_CLIENTE,
-    data: {
-      estado,
-      ...(cobro && {
-        medioPago: cobro.medioPago,
-        montoCobrado: cobro.montoCobrado,
-        cobradoEn: ahoraArgentina(),
-      }),
-    },
-  })
+  try {
+    return await prisma.turno.update({
+      where: { id },
+      include: INCLUDE_CLIENTE,
+      data: {
+        estado,
+        ...(cobro && {
+          medioPago: cobro.medioPago,
+          montoCobrado: cobro.montoCobrado,
+          cobradoEn: ahoraArgentina(),
+        }),
+      },
+    })
+  } catch (err) {
+    // Desde que `realizado` entró al EXCLUDE (HU-08), este UPDATE puede violarlo. El
+    // camino es real aunque suene raro: Ariel marca Ausente un turno (lo que libera el
+    // rato), mete a otro cliente en ese hueco, lo atiende, y después se acuerda de que al
+    // primero sí lo había atendido y lo marca Realizado. Ahí se pisarían dos realizados.
+    //
+    // Sin este catch, Ariel vería un error de Postgres crudo sobre una restricción cuyo
+    // nombre no le dice nada.
+    if (esViolacionDeSolapamiento(err))
+      throw new TurnoSeSolapaConRealizadoError()
+    throw err
+  }
 }
 
 /**

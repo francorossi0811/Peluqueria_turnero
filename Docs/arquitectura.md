@@ -1,4 +1,4 @@
-# Arquitectura — Turnero La Peluquería de Ariel Enrique | v1
+# Arquitectura — Turnero La Peluquería de Ariel Enrique
 
 ## Capas
 
@@ -6,7 +6,7 @@
 2. **Panel admin** (Ariel, autenticado con JWT) — gestión de agenda.
 3. **Frontend** — React + Vite, desplegado en Vercel. Consume la API vía Axios (HTTPS/JSON).
 4. **Backend** — API REST en Node + Express, desplegado en Render. Valida JWT en las rutas de admin. Contiene toda la lógica de negocio (cálculo de disponibilidad, reglas de cancelación/reprogramación, etc.).
-5. **Base de datos** — PostgreSQL en Neon o Supabase.
+5. **Base de datos** — PostgreSQL en **Neon**. (Hasta la v3 este documento decía "Neon o Supabase", como si estuviera sin decidir; está en Neon desde la v1.)
 6. **Servicios externos salientes** — las únicas llamadas que el backend hace hacia afuera:
    - **Web Push** (VAPID, librería `web-push`) para avisarle a Ariel al celular cuando entra un turno (HU-18). Opcional: sin claves configuradas, el resto funciona igual.
    - **Envío de mail** para la confirmación al cliente (HU-19), detrás de una interfaz `Mailer` con dos implementaciones: Brevo en producción y una que escribe por consola en desarrollo (o mientras no haya cuenta creada). Cambiar de proveedor es agregar un archivo.
@@ -28,8 +28,20 @@
 
 ## Fuera de alcance
 
-Integración con WhatsApp Business API — descartada, no diferida (ver arriba y §5 de
-`historias-de-usuario-casos-de-uso.md`).
+⚠️ Acá decía **"Integración con WhatsApp Business API — descartada, no diferida"**, y para
+la v3 eso ya era falso: el canal está construido y es el principal (ver arriba y HU-22). La
+línea quedó contradiciendo al propio documento tres párrafos más arriba. Lo que sigue
+pendiente de WhatsApp **no es código**, son los trámites con Meta.
+
+Lo que sí sigue fuera de alcance:
+
+- **Dentro de WhatsApp:** los webhooks de estado de Meta (entregado / leído / rebotado), el
+  recordatorio previo al turno y la respuesta automática al que escribe primero. ⚠️ Sin
+  webhooks, el respaldo por mail cubre el envío que **falla**, no el que **rebota**: Meta
+  responde cuando acepta el mensaje, no cuando lo entrega.
+- **Cobro online / seña** (Mercado Pago), pagos parciales, historial de precios y
+  facturación.
+- Sistema de deudas por ausencias y multi-peluquero.
 
 ## Decisiones de la v3
 
@@ -82,6 +94,30 @@ Integración con WhatsApp Business API — descartada, no diferida (ver arriba y
   un `groupBy` sería un segundo viaje a Neon para derivar algo que ya se trajo. De paso
   `resumirCobros` queda como función pura, que es lo único que se puede testear de verdad
   sin base.
+- **Los horarios candidatos se re-anclan a lo agendado (14/8/2026).** No son solo la grilla
+  fija de 20 minutos: también es candidato el momento en que termina cada turno o bloqueo
+  (`candidatosDeLaFranja`). Una grilla fija sirve mientras todos los servicios duran lo
+  mismo; con duraciones de 15, 20 y 30 minutos deja huecos que existen y no se ofrecen — una
+  Barba que termina 17:15 empujaba el siguiente turno a las 17:20. El encadenado sale gratis:
+  cada turno nuevo genera su propio candidato al terminar.
+- **El pasado se habilita con un flag, no con un margen negativo (HU-08).** `margenMinutos`
+  significa "cuánta antelación exijo"; meterle un valor negativo para decir "acepto 7 días
+  atrás" mezclaría dos conceptos en una variable y dejaría sin sentido el test que protege
+  la antelación del cliente. `permitirPasado` es un booleano aparte, con default `false`.
+- **La ruta expresa quién pregunta, también en disponibilidad.** `GET /api/admin/disponibilidad`
+  es una ruta nueva detrás de `requireAuth` y no un query param de la pública, por el mismo
+  criterio que `POST /api/turnos` vs `POST /api/admin/turnos`. Un flag en la ruta pública
+  despegaría la grilla que ve el cliente de lo que puede reservar. De paso arregló un defecto
+  que ya existía: los dos modales del panel pedían disponibilidad al endpoint del cliente, así
+  que el `margenMinutos: 0` que el backend ya aceptaba era inalcanzable desde la pantalla.
+- **Un turno realizado no se pisa, y la regla vive en los dos lados (14/8/2026).** En el
+  cálculo de disponibilidad y en el predicado del `EXCLUDE`. Mientras nadie pudiera cargar
+  turnos en el pasado la distinción no era alcanzable; con HU-08 ampliada sí. `ausente` queda
+  afuera a propósito: liberar el rato al marcarlo es un flujo real, no un descuido.
+- **La validación del teléfono vale lo mismo en las tres puertas (14/8/2026).** Tener una
+  regla que decide si un dato **entra** y otra distinta que decide si **sirve**, aplicadas en
+  momentos distintos, produjo un turno aceptado que no se podía completar después. Cuando dos
+  reglas hablan del mismo dato, o corren juntas o una de las dos sobra.
 - **El backfill de fichas es un script TypeScript, no SQL dentro de la migración.**
   Traducir un teléfono a E.164 exige saber dónde termina la característica argentina, que
   es lo que resuelve `libphonenumber-js`; reimplementarlo en SQL sería repetir el error que

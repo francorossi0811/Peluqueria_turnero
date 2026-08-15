@@ -48,22 +48,37 @@
 |---|---|---|
 | GET | `/api/servicios` | Lista los servicios **activos** (para elegir en el flujo de reserva, HU-01) |
 
-Devuelve `id`, `nombre`, `duracionMinutos` y `foto` (la imagen de la landing; `null` cae a
-una de stock).
+Devuelve `id`, `nombre`, `duracionMinutos`, `precio` y `foto` (la imagen de la landing;
+`null` cae a una de stock). No lleva `activo`: acá son todos activos.
 
-⚠️ **No lleva `precio`, y eso es una promesa y no un olvido** (HU-27). El precio es un dato
-interno de Ariel y viaja solo por `/api/admin/servicios`. El controller mapea campo por
-campo justamente para que agregarle una columna al modelo no la publique sola — y que
-`foto` haya quedado adentro y `precio` afuera, siendo las dos columnas nuevas del mismo
-modelo, es exactamente lo que esa lista explícita obliga a decidir en vez de dejarlo al
-descuido. Lo mismo con `GET /api/turnos/:id`, el link de gestión del cliente: no lleva ni
-el medio de pago ni el monto.
+⚠️ **`precio` sale desde el 14/8/2026, y eso enmienda a HU-27**, que hasta esa fecha decía
+que el precio era interno y el cliente no lo veía nunca. Franco lo cambió: quiere que sepa
+cuánto sale antes de reservar. `GET /api/turnos/:id` (el link de gestión) también lo lleva,
+dentro de `servicio`, y ahí es **el precio de hoy**, no el del día en que reservó — al revés
+que `nombre` y `duracionMinutos`, que son el snapshot.
+
+⚠️ Lo que **sigue sin salir** por la API pública es el **cobro**: `medioPago` y
+`montoCobrado` viven en el turno y viajan solo en el DTO de admin. Y el mapeo campo por
+campo del controller se mantiene igual de explícito, porque es lo que obliga a decidir dato
+por dato qué se publica: sin él, cualquier columna interna que se le agregue al modelo
+saldría sola y nada fallaría.
 
 ### Disponibilidad — CU-04
 
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/disponibilidad?servicioId=&desde=&hasta=` | Horarios disponibles para ese servicio entre `desde` y `hasta` (fechas), aplicando `horario_laboral`, `bloqueos_horario`, `feriados` y turnos ya reservados (CU-04) |
+| GET | `/api/admin/disponibilidad?servicioId=&desde=&hasta=&incluirPasado=` | 🔒 Lo mismo, con las reglas de Ariel: sin la antelación mínima de 30 min y, con `incluirPasado=true`, los últimos 7 días (HU-08) |
+
+⚠️ **Son dos rutas y no un parámetro de la primera**, por el mismo criterio que
+`POST /api/turnos` vs `POST /api/admin/turnos`: es la ruta la que expresa quién pregunta.
+Un flag en la ruta pública despegaría la grilla que ve el cliente de lo que realmente puede
+reservar, y dejaría un parámetro invitando a que alguien lo cablee a la creación.
+
+La ruta admin **recorta** `desde` en vez de rechazarlo cuando se pide más atrás del piso
+(hoy, o hoy − 7 con `incluirPasado`): un 400 por pedir un día de más dejaría la grilla vacía
+sin explicar nada. La ventana de 7 días la vuelve a validar `POST /api/admin/turnos`, que
+responde **400 `PARAMETROS_INVALIDOS`** si la fecha se pasa.
 
 Response:
 ```json
@@ -111,9 +126,26 @@ trata como "no dejó email"; uno con formato inválido responde `400 PARAMETROS_
 Si hay email, se envía la confirmación con el link y el `.ics` adjunto — también al
 reprogramar, porque reprogramar genera un turno nuevo y por lo tanto un link nuevo.
 
-`clienteTelefono` se valida contra la regla de `backend/src/utils/validaciones.ts`:
-dígitos, espacios, guiones, paréntesis y un `+` inicial, con entre 8 y 15 dígitos. Lo que
-no la cumple responde `400 PARAMETROS_INVALIDOS`.
+`clienteTelefono` se valida en **dos niveles**, los dos en `backend/src/utils/validaciones.ts`
+y los dos con respuesta `400 PARAMETROS_INVALIDOS`:
+
+1. `esTelefonoValido` — cómo está escrito: dígitos, espacios, guiones, paréntesis y un `+`
+   inicial, con entre 8 y 15 dígitos.
+2. `esTelefonoUtilizable` — si el número **puede existir**: que `aE164` lo pueda interpretar
+   contra la metadata `max` de `libphonenumber-js`, que conoce las características
+   realmente asignadas.
+
+⚠️ **Los dos corren en las tres puertas** (este endpoint, `POST /api/admin/turnos` y
+`PATCH /api/admin/turnos/:id/telefono`) desde el 14/8/2026. Antes el segundo vivía solo en
+el PATCH, y esa asimetría era un defecto real: un número bien escrito pero inexistente
+(`2954123456`) entraba en la reserva, el turno quedaba **sin ficha** porque no se lo podía
+normalizar, y cuando Ariel lo quería completar a mano el PATCH le decía "inválido" sobre un
+número que el sistema ya había aceptado. Una regla decidía si entraba y otra distinta si
+servía, en momentos distintos, y el que se comía el problema era el que ya no podía
+corregirlo.
+
+La copia del frontend tiene **solo la primera**: la segunda necesita metadata cara para el
+bundle público. El backend rechaza y las pantallas muestran su mensaje pegado al campo.
 
 **Obligatorio acá, opcional en `POST /api/admin/turnos`** (HU-08). El cliente que reserva
 por la web tiene que dejarlo, porque es el único dato con el que Ariel lo puede ubicar;
@@ -278,7 +310,7 @@ Sobre `PATCH /api/admin/password`:
 |---|---|---|
 | GET | `/api/admin/turnos?desde=&hasta=` | Agenda entre dos fechas (con `desde = hasta` cubre la vista diaria HU-06; un rango de 7 días cubre la semanal HU-07) |
 | GET | `/api/admin/turnos/buscar?nombre=&telefono=` | Buscar turnos de un cliente (para reenviar un link perdido, ver caso borde en `historias-de-usuario-casos-de-uso.md`) |
-| POST | `/api/admin/turnos` | Carga manual de un turno (HU-08); body igual al público más `"origen": "telefono" \| "whatsapp"` |
+| POST | `/api/admin/turnos` | Carga manual de un turno (HU-08); body igual al público más `"origen": "presencial" \| "llamada" \| "whatsapp"`. Acepta fechas de hasta **7 días atrás**; más viejo que eso responde `400 PARAMETROS_INVALIDOS` |
 | PATCH | `/api/admin/turnos/:id` | Mover un turno a otro horario (HU-09), sin límite de 60 min |
 | POST | `/api/admin/turnos/:id/cancelar` | Cancela sin límite de 60 min (HU-10) |
 | PATCH | `/api/admin/turnos/:id/estado` | `{ "estado": "realizado" \| "ausente" }`, más un `cobro` opcional (HU-12, HU-27) |
@@ -316,6 +348,12 @@ los totales dejarían de cerrar contra la caja.
 Sobre `PATCH …/cobro`: existe por el mismo motivo que `PATCH …/telefono`. Si el cobro solo
 se pudiera registrar en el momento de marcar Realizado, un turno marcado a las apuradas
 quedaría fuera de los totales para siempre. Registrar dos veces **corrige**, no duplica.
+
+⚠️ **`PATCH …/estado` con `"realizado"` puede responder `409 TURNO_SE_SOLAPA_CON_REALIZADO`**
+(14/8/2026). Desde que un turno realizado no se puede pisar, el `EXCLUDE` de la base cubre
+también ese estado, y el camino para llegar acá es real: Ariel marca Ausente un turno (lo
+que libera el rato), mete a otro cliente ahí, y después se acuerda de que al primero sí lo
+había atendido. Hay que decidir cuál de los dos se hizo de verdad y marcar Ausente al otro.
 
 Los turnos en la vista de admin incluyen además `vistoPorAdmin` (HU-17), `clienteEmail`
 (HU-19), `cliente` (HU-25) y el cobro (HU-27: `medioPago`, `montoCobrado`, `cobradoEn`,

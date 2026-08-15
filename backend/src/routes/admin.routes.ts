@@ -17,6 +17,7 @@ import {
   patchCliente,
 } from '../controllers/clientes.controller'
 import { getCobros } from '../controllers/cobros.controller'
+import { getDisponibilidadAdmin } from '../controllers/disponibilidad.controller'
 import {
   deleteEtiqueta,
   getEtiquetas,
@@ -105,6 +106,10 @@ adminRouter.delete(
   requireSuperAdmin,
   deleteAdministrador,
 )
+// HU-08 — La disponibilidad con las reglas de Ariel (sin la antelación de 30 min del
+// cliente, y con `incluirPasado=true` los últimos días). Es lo que alimenta los dos
+// modales de turnos del panel. Ruta propia y no un flag en la pública: ver el controller.
+adminRouter.get('/admin/disponibilidad', requireAuth, getDisponibilidadAdmin)
 adminRouter.get('/admin/turnos', requireAuth, getAgenda)
 adminRouter.get('/admin/turnos/buscar', requireAuth, getBuscarTurnos)
 adminRouter.post('/admin/turnos', requireAuth, postTurnoManual)

@@ -72,6 +72,12 @@ function rangoDeLaSemana(
 export function AgendaPage() {
   const queryClient = useQueryClient()
   const [vista, setVista] = useState<Vista>('dia')
+  // La fecha vive solo acá y **no** en la URL, a propósito. Sería el primer
+  // `useSearchParams` del proyecto y lo que compraría (compartir o marcar un link a una
+  // fecha) no lo necesita nadie: Ariel usa el panel en su teléfono, sobre su propia
+  // agenda. Lo que sí costaría es historial: cada fecha que toca pasaría a ser una entrada
+  // del botón "atrás" — y ese botón ya lo confundió una vez (creyó que lo deslogueaba).
+  // Migrarlo el día que haga falta es mecánico: ya es un solo string ISO.
   const [fecha, setFecha] = useState(hoyIso())
   const [modalCargar, setModalCargar] = useState(false)
   const [modalBloquear, setModalBloquear] = useState(false)
@@ -233,7 +239,9 @@ export function AgendaPage() {
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        {/* `flex-wrap` no es decorativo: a 375 px las flechas + la etiqueta (10rem) + el
+            selector + "Hoy" no entran en un renglón, y sin envolver se desbordan. */}
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => navegar(-1)}>
             ‹
           </Button>
@@ -245,6 +253,24 @@ export function AgendaPage() {
           <Button variant="outline" onClick={() => navegar(1)}>
             ›
           </Button>
+          {/* Para llegar a una fecha lejana sin pasar de a un día (o de a una semana) con
+              las flechas.
+              En vista Semana no hace falta ningún caso especial: `rangoDeLaSemana` ancla
+              en el domingo, así que elegir un jueves muestra la semana del jueves.
+              El `value` es `fecha` y no `desde` porque con `desde` el control saltaría solo
+              al martes y parecería que no tomó lo que se eligió. */}
+          <input
+            type="date"
+            aria-label="Ir a una fecha"
+            value={fecha}
+            // El control nativo dispara `change` con '' cuando se lo limpia, y
+            // `sumarDias('')` devuelve `NaN-NaN-NaN`, que se propaga a la query key y al
+            // request. Mismo guard que en Cobros.
+            onChange={(e) => {
+              if (e.target.value) setFecha(e.target.value)
+            }}
+            className="border-borde bg-superficie text-tinta focus:border-miel min-w-0 rounded-md border px-3 py-2 text-sm outline-none"
+          />
           <Button variant="ghost" onClick={() => setFecha(hoyIso())}>
             Hoy
           </Button>
@@ -505,7 +531,15 @@ export function AgendaPage() {
         />
       )}
       {modalBuscar && (
-        <ModalBuscarTurno onClose={() => setModalBuscar(false)} />
+        <ModalBuscarTurno
+          onClose={() => setModalBuscar(false)}
+          // La vista no se toca: si Ariel estaba en Semana, ve la semana que contiene al
+          // turno, que es más información y no menos.
+          onIrALaFecha={(f) => {
+            setFecha(f)
+            setModalBuscar(false)
+          }}
+        />
       )}
     </div>
   )

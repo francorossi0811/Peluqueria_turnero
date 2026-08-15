@@ -51,7 +51,6 @@ function servicioDto(servicio: Servicio) {
     nombre: servicio.nombre,
     duracionMinutos: servicio.duracionMinutos,
     activo: servicio.activo,
-    // HU-27 — El precio existe solo en este DTO. El público es otro y no lo lleva.
     precio: servicio.precio,
     foto: servicio.foto,
   }
@@ -63,21 +62,24 @@ function respondErrorParametrosInvalidos(res: Response, mensaje: string) {
 
 // HU-01 — público, sin auth: solo los activos, sin el campo `activo` (siempre true acá).
 //
-// ⚠️ HU-27 — El mapeo campo por campo de acá abajo **es** lo que cumple la promesa de que
-// el cliente no vea los precios; no es un descuido de estilo. Reemplazarlo por
-// `servicioDto` o por la fila entera publicaría `precio` sin que nada falle ni lo avise.
-// Si algún día se agrega otro dato interno al servicio, este es el lugar donde no ponerlo.
+// ⚠️ El mapeo campo por campo de acá abajo **no** es un descuido de estilo: es lo que
+// obliga a decidir, dato por dato, qué sale a la web. Reemplazarlo por `servicioDto` o por
+// la fila entera publicaría cualquier columna interna futura sin que nada falle ni lo
+// avise. Si algún día se agrega otro dato interno al servicio, este es el lugar donde no
+// ponerlo.
 //
-// `foto` sí va: es lo que se dibuja en la landing. Que dos columnas nuevas del mismo
-// modelo terminen una adentro y otra afuera es justamente lo que esta lista explícita
-// obliga a decidir, en vez de que lo decida el descuido.
+// `precio` **sí** sale desde el 14/8/2026, y eso enmienda a HU-27: hasta entonces la regla
+// era que el cliente no lo viera nunca. Franco lo cambió — quiere que sepa cuánto sale
+// antes de reservar. Lo que sigue siendo interno es lo del cobro (`medioPago`,
+// `montoCobrado`), que vive en el turno y solo viaja en el DTO de admin.
 export async function getServiciosPublico(_req: Request, res: Response) {
   const servicios = await listarServiciosActivos()
   res.json({
-    servicios: servicios.map(({ id, nombre, duracionMinutos, foto }) => ({
+    servicios: servicios.map(({ id, nombre, duracionMinutos, precio, foto }) => ({
       id,
       nombre,
       duracionMinutos,
+      precio,
       foto,
     })),
   })

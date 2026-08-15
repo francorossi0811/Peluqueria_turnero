@@ -1,6 +1,16 @@
 import { Chip } from './ui/Chip'
-import { etiquetaDiaCorta, fechaLegible } from '../utils/fecha'
+import { etiquetaDiaCorta, fechaLegible, yaPaso } from '../utils/fecha'
 import type { DisponibilidadDia } from '../types/api'
+
+/** HU-08 — El "ahora" contra el que se decide si un día o una hora ya pasaron.
+ *
+ * Es un objeto y no dos props sueltas para que no pueda existir el estado intermedio "sé
+ * qué día es hoy pero no qué hora": las dos se necesitan juntas para decidir si una hora
+ * de HOY ya pasó. */
+export interface MarcaDePasado {
+  hoy: string
+  minutosAhora: number
+}
 
 interface GrillaHorariosProps {
   dias: DisponibilidadDia[]
@@ -8,6 +18,12 @@ interface GrillaHorariosProps {
   hora: string | null
   onElegirFecha: (fecha: string) => void
   onElegirHora: (hora: string) => void
+  /** Solo lo pasa el panel de Ariel (HU-08): marca los días y las horas que ya pasaron, y
+   * cambia los textos de "no hay nada" por los que le sirven a él.
+   *
+   * Sin esta prop el componente se dibuja **exactamente** como antes, que es lo que
+   * permite seguir compartiéndolo con la reserva del cliente en vez de forkearlo. */
+  pasado?: MarcaDePasado
 }
 
 /** Qué se le dice al cliente cuando el día que eligió no tiene horarios.
@@ -15,8 +31,14 @@ interface GrillaHorariosProps {
  * Antes todos estos casos caían en el mismo "no hay turnos": el que se topaba con las
  * vacaciones de Ariel y el que llegó tarde a un día lleno leían lo mismo, y ninguno de
  * los dos sabía qué hacer después. */
-function mensajeDelDia(dia: DisponibilidadDia): string {
+function mensajeDelDia(dia: DisponibilidadDia, esAdmin = false): string {
   switch (dia.estado) {
+    case 'completo':
+      // Para Ariel el mismo estado significa otra cosa: no está "llegando tarde", está
+      // mirando su propio día lleno.
+      return esAdmin
+        ? 'Se ocupó todo este día.'
+        : 'Se ocuparon todos los turnos de este día.'
     case 'bloqueado':
       return dia.motivo
         ? `Este día no hay atención: ${dia.motivo}.`
@@ -27,8 +49,6 @@ function mensajeDelDia(dia: DisponibilidadDia): string {
         : 'Feriado, no atendemos.'
     case 'cerrado':
       return 'Este día la peluquería no abre.'
-    case 'completo':
-      return 'Se ocuparon todos los turnos de este día.'
     default:
       return 'No quedan horarios para este día.'
   }
@@ -42,14 +62,17 @@ export function GrillaHorarios({
   hora,
   onElegirFecha,
   onElegirHora,
+  pasado,
 }: GrillaHorariosProps) {
   const diasConHorarios = dias.filter((d) => d.horarios.length > 0)
 
   if (diasConHorarios.length === 0) {
+    // El texto del cliente le diría a Ariel que le escriba a Ariel por WhatsApp.
     return (
       <p className="text-tinta-suave">
-        No hay horarios disponibles en las próximas dos semanas. Escribile a
-        Ariel por WhatsApp y coordinan directamente.
+        {pasado
+          ? 'No hay horarios en este rango.'
+          : 'No hay horarios disponibles en las próximas dos semanas. Escribile a Ariel por WhatsApp y coordinan directamente.'}
       </p>
     )
   }
@@ -76,6 +99,10 @@ export function GrillaHorarios({
             <Chip
               key={d.fecha}
               selected={d.fecha === fecha}
+              tono={pasado && d.fecha < pasado.hoy ? 'pasado' : 'normal'}
+              title={
+                pasado && d.fecha < pasado.hoy ? 'Este día ya pasó' : undefined
+              }
               onClick={() => onElegirFecha(d.fecha)}
             >
               {etiquetaDiaCorta(d.fecha)}
@@ -85,7 +112,7 @@ export function GrillaHorarios({
               key={d.fecha}
               type="button"
               onClick={() => onElegirFecha(d.fecha)}
-              title={mensajeDelDia(d)}
+              title={mensajeDelDia(d, Boolean(pasado))}
               className={`rounded-full border px-3 py-1.5 text-sm transition ${
                 d.fecha === fecha
                   ? 'border-tinta-tenue bg-superficie-2 text-tinta-suave'
@@ -101,7 +128,7 @@ export function GrillaHorarios({
       {diaSeleccionado && horarios.length === 0 && (
         <div className="border-borde bg-superficie-2 mb-4 rounded-md border px-3 py-3 text-sm">
           <p className="text-tinta font-medium">
-            {mensajeDelDia(diaSeleccionado)}
+            {mensajeDelDia(diaSeleccionado, Boolean(pasado))}
           </p>
           {proximoLibre && (
             <p className="text-tinta-suave mt-1">
@@ -118,12 +145,22 @@ export function GrillaHorarios({
         </div>
       )}
 
+      {/* Solo cuando el día elegido ya pasó entero: si es hoy, los chips en ámbar ya
+          dicen cuáles pasaron y cuáles no, y el cartel sobraría. */}
+      {pasado && fecha && fecha < pasado.hoy && horarios.length > 0 && (
+        <p className="text-alerta mb-3 text-sm">
+          Este día ya pasó — el turno que cargues se registra como atendido.
+        </p>
+      )}
+
       {manana.length > 0 && (
         <FranjaHorarios
           etiqueta="Mañana"
           horarios={manana}
           hora={hora}
           onElegirHora={onElegirHora}
+          pasado={pasado}
+          fecha={fecha}
         />
       )}
       {tarde.length > 0 && (
@@ -132,22 +169,31 @@ export function GrillaHorarios({
           horarios={tarde}
           hora={hora}
           onElegirHora={onElegirHora}
+          pasado={pasado}
+          fecha={fecha}
         />
       )}
     </>
   )
 }
 
+// La partición Mañana/Tarde no se toca aunque haya horas pasadas: es la lectura que Ariel
+// tiene incorporada de la planilla, y un tercer grupo "Ya pasó" en un día entero pasado
+// se comería los otros dos.
 function FranjaHorarios({
   etiqueta,
   horarios,
   hora,
   onElegirHora,
+  pasado,
+  fecha,
 }: {
   etiqueta: string
   horarios: string[]
   hora: string | null
   onElegirHora: (hora: string) => void
+  pasado?: MarcaDePasado
+  fecha: string | null
 }) {
   return (
     <div className="mb-4">
@@ -155,11 +201,22 @@ function FranjaHorarios({
         {etiqueta}
       </p>
       <div className="flex flex-wrap gap-2">
-        {horarios.map((h) => (
-          <Chip key={h} selected={h === hora} onClick={() => onElegirHora(h)}>
-            {h}
-          </Chip>
-        ))}
+        {horarios.map((h) => {
+          const esPasado = Boolean(
+            pasado && fecha && yaPaso(fecha, h, pasado.hoy, pasado.minutosAhora),
+          )
+          return (
+            <Chip
+              key={h}
+              selected={h === hora}
+              tono={esPasado ? 'pasado' : 'normal'}
+              title={esPasado ? 'Este horario ya pasó' : undefined}
+              onClick={() => onElegirHora(h)}
+            >
+              {h}
+            </Chip>
+          )
+        })}
       </div>
     </div>
   )
