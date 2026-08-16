@@ -1,12 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { Button } from '../ui/Button'
 import { Insignia } from './Insignia'
 import { actualizarCliente, obtenerCliente } from '../../api/clientes'
 import { obtenerEtiquetas } from '../../api/etiquetas'
+import {
+  borrarFotoDeFicha,
+  obtenerFotosDeFicha,
+  subirFotoDeFicha,
+  urlDeFoto,
+} from '../../api/fotos'
 import { fechaLegible } from '../../utils/fecha'
+import { comprimirImagen, ImagenNoLegibleError } from '../../utils/imagen'
 import { ESTILO_ESTADO, ETIQUETA_ESTADO } from '../../utils/estadoTurno'
-import type { TurnoDeHistorial } from '../../types/api'
+import type { ErrorApi, TurnoDeHistorial } from '../../types/api'
 
 // HU-25 — La ficha editable de un cliente.
 //
@@ -172,7 +180,156 @@ export function FichaCliente({
         )}
       </div>
 
+      <Galeria clienteId={clienteId} />
+
       {conHistorial && <Historial turnos={ficha.turnos} />}
+    </div>
+  )
+}
+
+/**
+ * HU-29 — Las fotos de la ficha: cómo le quedó el corte las veces anteriores.
+ *
+ * Es lo que resuelve el "quiero el mismo de la otra vez", que en la planilla de papel no tenía
+ * dónde vivir. Las fotos se comprimen **en el navegador** antes de subirse (ver
+ * `utils/imagen.ts`): sin eso, cada foto del celular son 3 MB y el plan gratuito de Neon se
+ * llena con un puñado de fichas.
+ *
+ * Consulta propia y no parte de la ficha a propósito: al subir o borrar se invalida solo esto y
+ * no vuelve a traerse el historial de turnos entero.
+ */
+function Galeria({ clienteId }: { clienteId: string }) {
+  const queryClient = useQueryClient()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const galeriaQuery = useQuery({
+    queryKey: ['fotos-ficha', clienteId],
+    queryFn: () => obtenerFotosDeFicha(clienteId),
+  })
+
+  function refrescar() {
+    void queryClient.invalidateQueries({ queryKey: ['fotos-ficha', clienteId] })
+    // El uso de almacenamiento se muestra en "Mi cuenta" y acaba de cambiar.
+    void queryClient.invalidateQueries({ queryKey: ['almacenamiento'] })
+  }
+
+  const subirMutation = useMutation({
+    mutationFn: async (archivo: File) =>
+      subirFotoDeFicha(clienteId, await comprimirImagen(archivo)),
+    onSuccess: () => {
+      setError(null)
+      refrescar()
+    },
+    onError: (err) => {
+      // El mensaje del backend es más útil que uno genérico: sabe si el problema fue el tope,
+      // el formato o el peso, y cada uno manda a hacer algo distinto.
+      const mensaje = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error.mensaje
+        : null
+      setError(
+        mensaje ??
+          (err instanceof ImagenNoLegibleError
+            ? 'No pudimos leer esa foto. Probá con otra.'
+            : 'No pudimos subir la foto. Probá de nuevo.'),
+      )
+    },
+  })
+
+  const borrarMutation = useMutation({
+    mutationFn: (fotoId: string) => borrarFotoDeFicha(clienteId, fotoId),
+    onSuccess: () => {
+      setError(null)
+      refrescar()
+    },
+    onError: () => setError('No pudimos borrar la foto.'),
+  })
+
+  const galeria = galeriaQuery.data
+  const fotos = galeria?.fotos ?? []
+  const lleno = galeria ? fotos.length >= galeria.maximo : false
+
+  function elegir(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0]
+    // Se limpia el input siempre: si no, elegir la misma foto dos veces seguidas no dispara
+    // `change` la segunda vez y parece que el botón dejó de andar.
+    e.target.value = ''
+    if (archivo) subirMutation.mutate(archivo)
+  }
+
+  return (
+    <div className="border-borde border-t pt-4">
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="text-tinta-suave text-sm">
+          Fotos
+          {galeria && (
+            <span className="text-tinta-tenue">
+              {' '}
+              · {fotos.length} de {galeria.maximo}
+            </span>
+          )}
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          onChange={elegir}
+          className="hidden"
+        />
+        <button
+          type="button"
+          disabled={lleno || subirMutation.isPending}
+          onClick={() => inputRef.current?.click()}
+          className="text-miel text-sm font-semibold hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:no-underline"
+        >
+          {subirMutation.isPending ? 'Subiendo…' : '+ Agregar foto'}
+        </button>
+      </div>
+
+      {/* Cuando está lleno, decir por qué el botón no anda. Un botón gris sin explicación es
+          el momento en que alguien piensa que la app se rompió. */}
+      {lleno && (
+        <p className="text-tinta-tenue mb-2 text-xs">
+          Llegaste al máximo. Borrá alguna para poder sumar otra.
+        </p>
+      )}
+
+      {error && <p className="text-vino mb-2 text-sm">{error}</p>}
+
+      {fotos.length === 0 ? (
+        <p className="text-tinta-tenue text-sm">
+          Todavía no tiene fotos. Sacale una al corte terminado y la vas a tener acá la próxima
+          vez.
+        </p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {fotos.map((foto) => (
+            <li key={foto.id} className="relative">
+              <a href={urlDeFoto(foto.url)} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={urlDeFoto(foto.url)}
+                  alt="Foto del corte"
+                  loading="lazy"
+                  className="border-borde h-24 w-24 rounded-md border object-cover"
+                />
+              </a>
+              <button
+                type="button"
+                aria-label="Borrar foto"
+                disabled={borrarMutation.isPending}
+                onClick={() => {
+                  // Borrar una foto no se deshace, y el botón es chico y está pegado a la
+                  // imagen: sin la confirmación, un toque de más en el celular la pierde.
+                  if (confirm('¿Borrar esta foto?')) borrarMutation.mutate(foto.id)
+                }}
+                className="bg-superficie border-borde text-tinta absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full border text-sm leading-none shadow-sm"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

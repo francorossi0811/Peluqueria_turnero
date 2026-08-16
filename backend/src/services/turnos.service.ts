@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma'
 import {
+  DIAS_FUTURO_PUBLICO,
   DIAS_PASADOS_ADMIN,
   obtenerHorariosDelDia,
   obtenerServicioActivo,
@@ -10,8 +11,10 @@ import {
   type TurnoConCliente,
 } from './clientes.service'
 import {
+  FueraDeHorizonteError,
   FueraDeVentanaError,
   HorarioNoDisponibleError,
+  LimiteSemanalError,
   TurnoNoCobrableError,
   TurnoNoEncontradoError,
   TurnoNoModificableError,
@@ -51,6 +54,8 @@ export interface DatosReprogramacion {
 // CU-02: mismo límite de 60 min para cancelar y para reprogramar.
 const VENTANA_MINIMA_MINUTOS = 60
 
+const DIA_MS = 24 * 60 * 60_000
+
 // SQLSTATE de PostgreSQL para violación de un EXCLUDE constraint (nuestro anti
 // doble-reserva, ver Docs/modelo-datos.md). No es un código que Prisma conozca de
 // antemano — lo agregamos a mano en la migración — así que Prisma lo reporta envuelto
@@ -86,8 +91,119 @@ export function fechaCargableComoAdmin(fecha: Date, ahora: Date): boolean {
     ahora.getUTCMonth(),
     ahora.getUTCDate(),
   )
-  const minimo = hoy - DIAS_PASADOS_ADMIN * 24 * 60 * 60_000
+  const minimo = hoy - DIAS_PASADOS_ADMIN * DIA_MS
   return fecha.getTime() >= minimo
+}
+
+/** HU-28 — ¿Un cliente puede reservar en esta fecha, o está demasiado lejos?
+ *
+ * El espejo exacto de `fechaCargableComoAdmin`: aquella pone el piso de Ariel hacia atrás,
+ * esta el techo del cliente hacia adelante. Pura y exportada por el mismo motivo — la usan
+ * el service y el controller, y la regla tiene que estar en un solo lugar.
+ *
+ * ⚠️ Misma advertencia que su espejo: el "hoy" se calcula con getters **UTC** y no locales.
+ * Todo el backend lee fechas en UTC (`utils/fechaHora.ts`) y `ahoraArgentina()` ya viene
+ * corrido; mezclar getters locales acá haría que el tope se corra un día en Render y no en
+ * la máquina de desarrollo, que es la peor combinación posible. */
+export function fechaReservablePorCliente(fecha: Date, ahora: Date): boolean {
+  const hoy = Date.UTC(
+    ahora.getUTCFullYear(),
+    ahora.getUTCMonth(),
+    ahora.getUTCDate(),
+  )
+  const maximo = hoy + DIAS_FUTURO_PUBLICO * DIA_MS
+  return fecha.getTime() <= maximo
+}
+
+/** HU-28 — Cuántos turnos puede tener una misma persona en una semana, reservando por la
+ * web. Ariel no tiene tope: él carga los que hagan falta. */
+export const MAX_TURNOS_POR_SEMANA = 3
+
+/** "Semana" es una ventana **móvil** de 7 días, no lunes a domingo. La diferencia no es
+ * cosmética: con la semana del calendario se pueden tener 3 turnos viernes/sábado/domingo y
+ * 3 más lunes/martes, o sea 6 en cinco días, que es exactamente lo que la regla quiere
+ * evitar. */
+const DIAS_VENTANA = 7
+
+/**
+ * HU-28 — ¿Agregar un turno el día `nueva` deja algún tramo de 7 días corridos con más de
+ * `MAX_TURNOS_POR_SEMANA` turnos de esa persona?
+ *
+ * Pura y sin base a propósito: la regla es aritmética de días y así se puede fijar con
+ * tests, que es donde viven los casos que importan (los bordes de la ventana).
+ *
+ * Solo mira las ventanas que **contienen al día nuevo**, y eso es exacto, no una
+ * aproximación: el conjunto ya guardado cumple el invariante (se validó al insertar cada
+ * uno), así que la única forma de romperlo es por una ventana que incluya al que entra.
+ * Son 7 posiciones posibles, desde la que arranca 6 días antes hasta la que arranca ese
+ * mismo día.
+ */
+export function excedeLimiteSemanal(
+  fechasExistentes: Date[],
+  nueva: Date,
+): boolean {
+  const dia = nueva.getTime()
+
+  for (let i = 0; i < DIAS_VENTANA; i++) {
+    const inicio = dia - i * DIA_MS
+    const fin = inicio + (DIAS_VENTANA - 1) * DIA_MS
+
+    const enLaVentana = fechasExistentes.filter(
+      (f) => f.getTime() >= inicio && f.getTime() <= fin,
+    ).length
+
+    if (enLaVentana + 1 > MAX_TURNOS_POR_SEMANA) return true
+  }
+
+  return false
+}
+
+/** Las fechas de los turnos de esa persona que podrían compartir una ventana de 7 días con
+ * `fecha` — o sea, los que caen entre 6 días antes y 6 días después.
+ *
+ * Solo `reservado`: son los que ocupan la agenda. Un `cancelado` o un `ausente` liberaron
+ * el rato y un `realizado` ya pasó, así que ninguno de los tres tiene por qué gastarle un
+ * cupo a nadie. Es la misma familia de decisión que la lista de estados que tapan un rato en
+ * `obtenerDetalleDelDia`, tomada para esta regla: acá se cuenta lo que está agendado hacia
+ * adelante, no lo que ocupó un horario alguna vez. */
+async function fechasReservadasCerca(
+  clienteId: string,
+  fecha: Date,
+  excluirTurnoId?: string,
+): Promise<Date[]> {
+  const margen = (DIAS_VENTANA - 1) * DIA_MS
+
+  const turnos = await prisma.turno.findMany({
+    where: {
+      clienteId,
+      estado: 'reservado',
+      fecha: {
+        gte: new Date(fecha.getTime() - margen),
+        lte: new Date(fecha.getTime() + margen),
+      },
+      ...(excluirTurnoId ? { id: { not: excluirTurnoId } } : {}),
+    },
+    select: { fecha: true },
+  })
+
+  return turnos.map((t) => t.fecha)
+}
+
+/** HU-28 — Tira `LimiteSemanalError` si esta persona ya llegó a su tope de turnos en la
+ * semana de `fecha`. Junta la consulta con la regla pura, que es lo que hace que los dos
+ * llamadores (reservar y reprogramar) no puedan aplicarla distinto.
+ *
+ * ⚠️ Dos requests simultáneos pueden pasar el conteo a la vez y dejar uno de más. No se
+ * resuelve con una transacción a propósito: el daño real —dos personas sobre el mismo
+ * rato— ya lo impide el EXCLUDE de la base, y acá lo peor que pasa es un turno extra de
+ * alguien que además tuvo que hacer el esfuerzo de mandar los dos requests juntos. */
+async function validarLimiteSemanal(
+  clienteId: string,
+  fecha: Date,
+  excluirTurnoId?: string,
+): Promise<void> {
+  const cercanas = await fechasReservadasCerca(clienteId, fecha, excluirTurnoId)
+  if (excedeLimiteSemanal(cercanas, fecha)) throw new LimiteSemanalError()
 }
 
 /**
@@ -111,6 +227,13 @@ export async function crearTurno(
     throw new HorarioNoDisponibleError()
   }
 
+  // HU-28 — El techo del cliente, y va antes que todo lo demás a propósito: `vincularCliente`
+  // crea la ficha (y le pone la etiqueta "Nuevo"), así que rechazar después de ese punto
+  // dejaría una ficha fantasma por una reserva que nunca existió.
+  if (!esAdmin && !fechaReservablePorCliente(input.fecha, ahora)) {
+    throw new FueraDeHorizonteError()
+  }
+
   const horariosDelDia = await obtenerHorariosDelDia(servicio, input.fecha, ahora, {
     margenMinutos: esAdmin ? 0 : undefined,
     permitirPasado: esAdmin,
@@ -131,6 +254,17 @@ export async function crearTurno(
     input.clienteTelefono,
     input.clienteNombre,
   )
+
+  // HU-28 — El tope de turnos por semana, solo para quien reserva por la web. Necesita la
+  // ficha, así que va después de resolverla; para entonces ya existía igual, porque para
+  // pasarse del límite hacen falta turnos anteriores.
+  //
+  // El `clienteId` no puede ser null por este camino —el schema público exige un teléfono
+  // que `aE164` sepa normalizar (`esTelefonoUtilizable`)— pero se chequea igual: si esa
+  // regla se aflojara algún día, el límite se apagaría en silencio en vez de romperse.
+  if (!esAdmin && clienteId) {
+    await validarLimiteSemanal(clienteId, input.fecha)
+  }
 
   try {
     return await prisma.turno.create({
@@ -259,6 +393,14 @@ export async function reprogramarTurno(
   const ahora = ahoraArgentina()
   validarModificable(original, ahora)
 
+  // HU-28 — Los dos topes valen igual acá: este es el otro camino por el que un cliente
+  // elige una fecha. Sin el horizonte se reprograma a 2028, y sin el límite semanal queda
+  // un bypass real de la regla de densidad — reservar 3 turnos en una semana y 3 en la
+  // otra, y después mudar los segundos encima de los primeros.
+  if (!fechaReservablePorCliente(input.fecha, ahora)) {
+    throw new FueraDeHorizonteError()
+  }
+
   const servicio = await obtenerServicioActivo(
     input.servicioId ?? original.servicioId,
   )
@@ -270,6 +412,13 @@ export async function reprogramarTurno(
   )
   if (!horariosDelDia.includes(input.hora)) {
     throw new HorarioNoDisponibleError()
+  }
+
+  // El turno que se está moviendo no se cuenta contra sí mismo: sin excluirlo, mover uno
+  // **dentro** de su propia semana fallaría siempre que esa semana estuviera en el límite,
+  // que es justo el caso en el que reprogramar no cambia nada.
+  if (original.clienteId) {
+    await validarLimiteSemanal(original.clienteId, input.fecha, original.id)
   }
 
   const horaInicio = horaDesdeString(input.hora)

@@ -11,6 +11,7 @@ import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { crearTurno, enviarConfirmacion, urlCalendario } from '../api/turnos'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import { formatearPesos } from '../utils/dinero'
+import { WHATSAPP_URL } from '../utils/contacto'
 import {
   esEmailValido,
   esNombreValido,
@@ -53,6 +54,10 @@ export function ReservarPage() {
   const [errorTelefonoServidor, setErrorTelefonoServidor] = useState<
     string | null
   >(null)
+  // HU-28 — El turno no entra por una regla de la persona, no del horario: ya tiene sus
+  // turnos de la semana, o eligió una fecha demasiado lejana. No es un campo del formulario
+  // ni un horario ocupado, así que tiene su propio cartel.
+  const [errorReserva, setErrorReserva] = useState<string | null>(null)
 
   const desde = hoyIso()
   const hasta = sumarDias(desde, DIAS_A_MOSTRAR - 1)
@@ -88,7 +93,25 @@ export function ReservarPage() {
         ? err.response?.data.error
         : null
 
-      if (isAxiosError<ErrorApi>(err) && err.response?.status === 409) {
+      // HU-28 — Los dos topes de la reserva pública. Van **antes** del caso del horario
+      // ocupado, y la rama de abajo mira el `codigo` y ya no el status a secas: los tres
+      // son 409, así que un `status === 409` genérico se comía estos dos y le mostraba a la
+      // persona "ese horario se acaba de ocupar" —que es falso— en la pantalla equivocada y
+      // perdiéndole el horario que ya había elegido. Es el mismo defecto que se corrigió
+      // una vez con el teléfono, acá abajo.
+      //
+      // Se queda en el paso de datos: la salida no es elegir otro horario cualquiera (el
+      // límite es de la persona, no del rato), así que mandarla de vuelta a la grilla la
+      // haría chocar de nuevo contra lo mismo.
+      if (
+        datos?.codigo === 'LIMITE_SEMANAL_ALCANZADO' ||
+        datos?.codigo === 'FUERA_DE_HORIZONTE'
+      ) {
+        setErrorReserva(datos.mensaje)
+        return
+      }
+
+      if (datos?.codigo === 'HORARIO_NO_DISPONIBLE') {
         setErrorHorario('Ese horario se acaba de ocupar. Elegí otro.')
         setHora(null)
         setPaso('horario')
@@ -138,12 +161,14 @@ export function ReservarPage() {
     setClienteEmail('')
     setTurnoCreado(null)
     setErrorHorario(null)
+    setErrorReserva(null)
     window.scrollTo({ top: 0 })
   }
 
   function confirmar(e: React.FormEvent) {
     e.preventDefault()
     if (!servicio || !fecha || !hora) return
+    setErrorReserva(null)
     crearTurnoMutation.mutate({
       servicioId: servicio.id,
       fecha,
@@ -205,6 +230,7 @@ export function ReservarPage() {
             email={clienteEmail}
             enviando={crearTurnoMutation.isPending}
             errorTelefonoServidor={errorTelefonoServidor}
+            errorReserva={errorReserva}
             onNombreChange={setClienteNombre}
             onTelefonoChange={(v) => {
               // Tocar el número borra el rechazo del servidor: si no, el error queda
@@ -213,7 +239,12 @@ export function ReservarPage() {
               setClienteTelefono(v)
             }}
             onEmailChange={setClienteEmail}
-            onVolver={() => setPaso('horario')}
+            onVolver={() => {
+              // Volver a la grilla limpia el cartel: elegir otra fecha es una salida real
+              // para el tope semanal (un día fuera de esos 7) y para el horizonte.
+              setErrorReserva(null)
+              setPaso('horario')
+            }}
             onSubmit={confirmar}
           />
         )}
@@ -310,6 +341,7 @@ function PasoDatos({
   email,
   enviando,
   errorTelefonoServidor,
+  errorReserva,
   onNombreChange,
   onTelefonoChange,
   onEmailChange,
@@ -326,6 +358,10 @@ function PasoDatos({
   /** El rechazo que solo puede dar el backend: un número bien escrito cuya característica
    * no existe. Se dibuja en el mismo lugar que los errores locales. */
   errorTelefonoServidor: string | null
+  /** HU-28 — El tope semanal o el horizonte. No cuelga de ningún campo —es la persona la
+   * que no puede reservar, no el dato que escribió—, así que va en su propio cartel arriba
+   * de los botones y no debajo de un input. */
+  errorReserva: string | null
   onNombreChange: (v: string) => void
   onTelefonoChange: (v: string) => void
   onEmailChange: (v: string) => void
@@ -446,6 +482,22 @@ function PasoDatos({
             </span>
           )}
         </label>
+
+        {errorReserva && (
+          <div className="border-vino bg-vino-suave text-vino rounded-md border px-3 py-2 text-sm">
+            <p>{errorReserva}</p>
+            {/* La salida real: Ariel puede cargarle el turno a mano, y el límite es solo
+                para la reserva por la web. Sin esto el cartel es una puerta cerrada. */}
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-block font-semibold underline"
+            >
+              Escribinos por WhatsApp
+            </a>
+          </div>
+        )}
 
         <div className="mt-2 flex gap-3">
           <button type="button" className={BTN_GHOST} onClick={onVolver}>

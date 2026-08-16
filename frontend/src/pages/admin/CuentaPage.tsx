@@ -15,6 +15,8 @@ import {
   registrarSuscripcion,
   type ResultadoEnvio,
 } from '../../api/push'
+import { obtenerUsoDeAlmacenamiento } from '../../api/fotos'
+import { formatearPeso } from '../../utils/imagen'
 import { clearToken, setToken } from '../../lib/authStorage'
 import { cambiarTema, type Tema } from '../../lib/tema'
 import { useTema } from '../../lib/useTemaAdmin'
@@ -57,6 +59,12 @@ export function CuentaPage() {
       </div>
       <div>
         <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
+          Fotos guardadas
+        </h2>
+        <SeccionAlmacenamiento />
+      </div>
+      <div>
+        <h2 className="font-display text-tinta mb-4 text-xl font-semibold">
           Cambiar contraseña
         </h2>
         <SeccionPassword />
@@ -68,6 +76,45 @@ export function CuentaPage() {
         <SeccionSalir />
       </div>
     </div>
+  )
+}
+
+/**
+ * HU-29 — Cuánto están ocupando las fotos de las fichas y los servicios.
+ *
+ * Existe por un pedido concreto de Franco: que borrar viejas sea una decisión y no un reflejo.
+ * Sin un número, Ariel no tiene forma de saber si le conviene limpiar o si está lejísimos del
+ * problema, y "borrá si te parece" no es una instrucción accionable.
+ *
+ * Va en "Mi cuenta" porque es la pantalla donde ya vive lo que el sistema sabe de sí mismo (el
+ * diagnóstico de los avisos), y no hacía falta inventarle un lugar nuevo.
+ */
+function SeccionAlmacenamiento() {
+  const query = useQuery({
+    queryKey: ['almacenamiento'],
+    queryFn: obtenerUsoDeAlmacenamiento,
+  })
+
+  return (
+    <Card>
+      {query.isPending && <p className="text-tinta-suave text-sm">Cargando…</p>}
+      {query.isError && (
+        <p className="text-vino text-sm">No pudimos calcular cuánto ocupan.</p>
+      )}
+      {query.data && (
+        <div className="flex flex-col gap-2">
+          <p className="text-tinta text-sm">
+            <span className="font-semibold">{query.data.fotos}</span>{' '}
+            {query.data.fotos === 1 ? 'foto guardada' : 'fotos guardadas'} ·{' '}
+            <span className="font-semibold">{formatearPeso(query.data.bytes)}</span>
+          </p>
+          <p className="text-tinta-tenue text-sm">
+            Las fotos se achican solas antes de guardarse. Si alguna ficha ya no las
+            necesita, podés borrarlas desde la ficha, en la sección Clientes.
+          </p>
+        </div>
+      )}
+    </Card>
   )
 }
 

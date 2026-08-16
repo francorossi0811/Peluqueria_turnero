@@ -5,6 +5,7 @@ import { adminRouter } from './routes/admin.routes'
 import { authRouter } from './routes/auth.routes'
 import { disponibilidadRouter } from './routes/disponibilidad.routes'
 import { healthRouter } from './routes/health.routes'
+import { imagenesRouter } from './routes/imagenes.routes'
 import { pushRouter } from './routes/push.routes'
 import { serviciosRouter } from './routes/servicios.routes'
 import { turnosRouter } from './routes/turnos.routes'
@@ -16,6 +17,17 @@ export const app = express()
 // distintos. Sin esta línea la renovación deslizante andaría en localhost y sería un
 // no-op silencioso en producción.
 app.use(cors({ exposedHeaders: [HEADER_TOKEN_RENOVADO] }))
+
+// HU-29 — Las rutas de fotos van **antes** del `express.json()` global, y no es un capricho de
+// orden: el global tiene el límite por defecto de 100 KB y rechazaría una subida con un 413
+// antes de que llegue a su handler. Las de subida traen su propio parser con un límite más alto
+// (ver `imagenes.routes.ts`), y como `express.json` se saltea si el cuerpo ya fue parseado, el
+// global de abajo las deja pasar sin tocarlas.
+//
+// La alternativa —subir el límite global— haría que *toda* la API acepte cuerpos de megabytes
+// para que dos endpoints puedan. Reservar un turno no tiene por qué.
+app.use('/api', imagenesRouter)
+
 app.use(express.json())
 
 app.use('/api', healthRouter)

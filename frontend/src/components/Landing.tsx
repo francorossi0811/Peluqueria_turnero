@@ -1,6 +1,7 @@
 import { Kicker } from './ui/Kicker'
 import { BTN_OUTLINE, BTN_GHOST } from './ui/estilosBoton'
 import { DIRECCION, TELEFONO_LEGIBLE, WHATSAPP_URL } from '../utils/contacto'
+import { urlDeFoto } from '../api/fotos'
 import { formatearPesos } from '../utils/dinero'
 import type { Servicio } from '../types/api'
 import type { UseQueryResult } from '@tanstack/react-query'
@@ -30,8 +31,15 @@ function fotoStock(tags: string, w: number, h: number, lock: number): string {
 // Ariel desde el panel (HU-13), así que renombrar "Corte clásico" le borraba la foto en
 // silencio — la pantalla no fallaba, simplemente pasaba a mostrar una de stock y nada lo
 // avisaba. Ahora el vínculo es la fila del servicio y el nombre puede cambiar libremente.
+//
+// ⚠️ Desde HU-29 `servicio.foto` viene en **dos formas**: la ruta estática de siempre
+// (`/imagenes/servicio-corte.jpg`, que sirve Vercel por CDN) o la de una foto que subió
+// Ariel (`/api/imagenes/<id>`, que sirve la API, en otro dominio). `urlDeFoto` es lo que
+// las distingue — sin eso la foto subida se pide contra Vercel y da 404 en producción.
 function fotoParaServicio(servicio: Servicio, lockPorDefecto: number): string {
-  return servicio.foto ?? fotoStock('barber,haircut', 500, 650, lockPorDefecto)
+  return servicio.foto
+    ? urlDeFoto(servicio.foto)
+    : fotoStock('barber,haircut', 500, 650, lockPorDefecto)
 }
 
 // La sección "Productos" (constante, sección y `ProductoCard`) se **borró** el 13/8/2026:

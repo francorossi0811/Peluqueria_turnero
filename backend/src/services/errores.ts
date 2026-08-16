@@ -27,3 +27,14 @@ export class TurnoNoCobrableError extends Error {}
 // lo impide). Se puede llegar acá marcando Realizado un turno cuyo rato ya se le dio a
 // otro que también se hizo: pasó por Ausente en el medio, que libera el horario.
 export class TurnoSeSolapaConRealizadoError extends Error {}
+// HU-28 — Los dos topes de la reserva pública. Existen porque reservar es gratis: sin seña
+// y sin verificar el teléfono, nada impedía que una sola persona se llevara la agenda
+// entera. Las dos son errores del **cliente**: las acciones de Ariel no pasan por acá.
+export class LimiteSemanalError extends Error {}
+export class FueraDeHorizonteError extends Error {}
+// HU-29 — Fotos. Son tres y no uno solo porque mandan a hacer cosas distintas: cambiar el
+// archivo, achicarlo, o borrar alguna de las que ya están.
+export class ImagenInvalidaError extends Error {}
+export class ImagenDemasiadoGrandeError extends Error {}
+export class ImagenNoEncontradaError extends Error {}
+export class LimiteDeFotosError extends Error {}

@@ -88,6 +88,15 @@ model Servicio {
 
   turnos Turno[]
 
+  /// HU-29 — La foto que sube Ariel desde el panel, si la subió. **Gana sobre `foto`**, que
+  /// quedó para las rutas estáticas de los 4 servicios originales: esas las sirve el CDN de
+  /// Vercel, que es mejor que servirlas desde Render, así que no se migran.
+  ///
+  /// Es una relación y no una copia de la URL en `foto` a propósito: escribir la URL ahí
+  /// serían dos escrituras que pueden divergir, y una fila borrada dejaría el string
+  /// apuntando a una imagen que ya no existe.
+  imagen Imagen?
+
   @@map("servicios")
 }
 
@@ -164,8 +173,52 @@ model Cliente {
 
   turnos    Turno[]
   etiquetas ClienteEtiqueta[]
+  fotos     Imagen[]
 
   @@map("clientes")
+}
+
+/// HU-29 — Las fotos que sube Ariel: la galería de una ficha ("así le gusta el degradé") y
+/// la foto de un servicio para la landing.
+///
+/// ⚠️ **El archivo vive en Postgres y no en un bucket**, y conviene saber por qué. No había
+/// *ningún* lugar donde un archivo subido sobreviviera: `frontend/public` se hornea en el
+/// build de Vercel y el disco de Render es efímero. Un bucket significaba una cuenta nueva y
+/// un trámite externo — lo mismo que tiene a WhatsApp frenado. Como el frontend solo ve la
+/// URL `/api/imagenes/<id>`, mudarse a un bucket después no le toca una línea.
+///
+/// El techo es real: Neon free tier son 0,5 GB. Lo que hace viable la decisión son las dos
+/// cosas de las que no hay que aflojar — la compresión en el navegador (~150 KB por foto) y
+/// el tope de fotos por ficha.
+model Imagen {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// El archivo, ya comprimido por el navegador antes de subirse.
+  datos Bytes
+
+  mimeType String @map("mime_type")
+
+  /// El peso en bytes. Redundante con `length(datos)` a propósito: es lo que permite sumar
+  /// cuánto se está ocupando sin traerse un solo blob a memoria.
+  bytes Int
+
+  /// Los dos dueños son excluyentes, y la base lo hace cumplir con un CHECK escrito a mano
+  /// en la migración (`imagenes_un_solo_dueno`). Sin él la tabla admite una fila sin dueño
+  /// —que nadie puede alcanzar ni borrar— y otra con dos, que no se sabe qué significa.
+  clienteId String?  @db.Uuid @map("cliente_id")
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  /// Unique: "una foto por servicio" es una regla, y vive acá y no solo en el service.
+  servicioId String?   @unique @db.Uuid @map("servicio_id")
+  servicio   Servicio? @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+
+  /// Orden dentro de la galería de una ficha. Sin uso para la foto de un servicio.
+  orden Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([clienteId, orden])
+  @@map("imagenes")
 }
 
 // HU-25 — Las insignias que Ariel se arma solo. Un círculo de color con el texto que él

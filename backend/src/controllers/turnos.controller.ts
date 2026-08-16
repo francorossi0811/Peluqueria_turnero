@@ -15,14 +15,17 @@ import {
   listarTurnosEnRango,
   marcarTurno,
   marcarTurnosComoVistos,
+  MAX_TURNOS_POR_SEMANA,
   obtenerTurno,
   registrarCobro,
   reprogramarTurno,
 } from '../services/turnos.service'
 import { clienteDto, type TurnoConCliente } from '../services/clientes.service'
 import {
+  FueraDeHorizonteError,
   FueraDeVentanaError,
   HorarioNoDisponibleError,
+  LimiteSemanalError,
   ServicioNoDisponibleError,
   TurnoNoCobrableError,
   TurnoNoEncontradoError,
@@ -30,7 +33,10 @@ import {
   TurnoSeSolapaConRealizadoError,
   TurnoYaTieneEmailError,
 } from '../services/errores'
-import { DIAS_PASADOS_ADMIN } from '../services/disponibilidad.service'
+import {
+  DIAS_FUTURO_PUBLICO,
+  DIAS_PASADOS_ADMIN,
+} from '../services/disponibilidad.service'
 import {
   enviarAvisoDeCancelacion,
   enviarConfirmacionDeTurno,
@@ -261,6 +267,28 @@ function manejarErroresComunes(err: unknown, res: Response): boolean {
         codigo: 'FUERA_DE_VENTANA_CANCELACION',
         mensaje:
           'Ya no podés cancelar ni reprogramar online. Contactá directamente a Ariel.',
+      },
+    })
+    return true
+  }
+  // HU-28 — Los dos topes de la reserva pública. Son 409 y no 400 por lo mismo que
+  // `FUERA_DE_VENTANA_CANCELACION`: el request está bien armado, lo que no da es el estado
+  // de las cosas. Los mensajes se arman con las constantes para que el número del texto no
+  // se despegue del que aplica el backend.
+  if (err instanceof LimiteSemanalError) {
+    res.status(409).json({
+      error: {
+        codigo: 'LIMITE_SEMANAL_ALCANZADO',
+        mensaje: `Ya tenés ${MAX_TURNOS_POR_SEMANA} turnos reservados para esos días. Cancelá alguno desde tu link o escribinos por WhatsApp.`,
+      },
+    })
+    return true
+  }
+  if (err instanceof FueraDeHorizonteError) {
+    res.status(409).json({
+      error: {
+        codigo: 'FUERA_DE_HORIZONTE',
+        mensaje: `Por ahora se puede reservar hasta ${DIAS_FUTURO_PUBLICO} días adelante.`,
       },
     })
     return true

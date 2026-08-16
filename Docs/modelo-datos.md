@@ -404,6 +404,49 @@ que las claves VAPID del servidor no son las que firmaron esa suscripción, típ
 después de rotarlas; esa fila se conserva y hay que volver a activar los avisos en el
 dispositivo.
 
+### `imagenes` — HU-29
+
+Las fotos que sube Ariel: la galería de una ficha y la foto de un servicio. **El archivo vive
+en la base de datos**, en una columna `bytea`, y esa es la única decisión de fondo de la tabla.
+
+No fue por preferencia: no había **ningún** lugar donde un archivo subido sobreviviera.
+`frontend/public` se hornea en el build de Vercel —no se puede escribir en runtime— y el disco
+de Render es efímero, además de reiniciarse muchas veces por día. La alternativa era un bucket
+externo, que traía cuenta nueva, API key y trámite: exactamente lo que tiene frenado a WhatsApp
+desde hace semanas. Como la aplicación solo maneja la URL `/api/imagenes/<id>`, mudarse a un
+bucket más adelante no toca ninguna pantalla.
+
+⚠️ **La decisión tiene un techo conocido y depende de dos números.** Neon free tier son 0,5 GB.
+Con la compresión del navegador (~150 KB por foto) y el tope de 5 por ficha, una ficha ocupa
+~750 KB y entran unas 300 cómodas. Con 12 fotos de 300 KB el límite se pasa antes de las 150.
+Aflojar cualquiera de los dos números sin mover los archivos de lugar rompe la premisa.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | uuid, PK | Es también el token de lectura: `GET /api/imagenes/<id>` es público. Ver la nota de HU-29 sobre por qué |
+| `datos` | bytea, not null | El archivo, ya comprimido por el navegador antes de subir |
+| `mime_type` | varchar, not null | Solo `image/jpeg`, `image/png` o `image/webp`. ⚠️ La lista es cerrada por seguridad y no por prolijidad: un SVG es un documento que puede traer `<script>`, y se sirve desde nuestro propio dominio |
+| `bytes` | integer, not null | El peso. Redundante con `length(datos)` **a propósito**: es lo que permite sumar cuánto se está ocupando sin traer un solo blob a memoria |
+| `cliente_id` | uuid, null, FK → `clientes`, `ON DELETE CASCADE` | La galería de una ficha: varias filas por cliente |
+| `servicio_id` | uuid, null, **unique**, FK → `servicios`, `ON DELETE CASCADE` | La foto de un servicio. El unique es la regla "una sola por servicio", escrita donde no se puede saltear |
+| `orden` | integer, default 0 | Posición dentro de la galería. Sin uso para la foto de un servicio. Al borrar quedan huecos (0, 1, 3) y está bien: el orden solo tiene que ser creciente |
+| `created_at` | timestamptz | |
+
+**Los dos dueños son excluyentes, y lo impone la base**: el CHECK `imagenes_un_solo_dueno`
+(`(cliente_id IS NULL) <> (servicio_id IS NULL)`), escrito a mano en la migración porque Prisma
+no sabe emitir CHECKs — el mismo caso que el `EXCLUDE` de `turnos`. Sin él la tabla admite dos
+estados que nadie puede interpretar: una fila **sin** dueño, que no se alcanza desde ninguna
+pantalla y ocupa lugar para siempre, y una con **los dos**, de la que no se sabe si es la foto
+de una ficha o la de un servicio.
+
+⚠️ **`servicios.foto` sigue existiendo y no se migró.** Son dos orígenes distintos a propósito:
+esa columna guarda la ruta estática de los 4 servicios originales (`/imagenes/servicio-corte.jpg`),
+archivos del repo que sirve el CDN de Vercel — estrictamente mejor que servirlos desde Render.
+La foto subida **gana** sobre ella, y esa prioridad se **calcula** al armar la respuesta en vez
+de escribir la URL dentro de `servicios.foto`: guardarla ahí serían dos escrituras que pueden
+divergir, y una fila de `imagenes` borrada dejaría el string apuntando a una foto que ya no
+existe.
+
 ---
 
 ## 3. Reglas de integridad clave
@@ -411,6 +454,8 @@ dispositivo.
 | Regla | Cómo se implementa |
 |---|---|
 | Dos clientes no pueden reservar el mismo horario (caso borde) | `EXCLUDE` constraint de PostgreSQL sobre `tsrange(fecha + hora_inicio, fecha + hora_fin)`, activo `WHERE estado IN ('reservado','realizado')`. Lo impone la base de datos, no solo la aplicación |
+| Una imagen pertenece a una ficha **o** a un servicio, nunca a los dos ni a ninguno (HU-29) | `CHECK imagenes_un_solo_dueno`: `(cliente_id IS NULL) <> (servicio_id IS NULL)`. Escrito a mano en la migración, como el `EXCLUDE` |
+| Un servicio tiene como mucho una foto propia (HU-29) | `UNIQUE` sobre `imagenes.servicio_id`. Reemplazar la foto borra la anterior y crea la nueva **en la misma transacción**: partirlo dejaría al servicio sin foto y al blob viejo ocupando lugar sin que nadie lo alcance |
 | Un turno **realizado** no se puede pisar (14/8/2026) | Mismo `EXCLUDE` de arriba: `realizado` entró al predicado. Antes solo miraba `reservado`, y eso era inofensivo mientras nadie pudiera cargar un turno en el pasado; con HU-08 ampliada pasó a ser un agujero alcanzable. La misma lista vive en el cálculo de disponibilidad (`obtenerDetalleDelDia`), así que la aplicación no ofrece esos ratos y la base los rechaza igual. ⚠️ Consecuencia: marcar Realizado puede fallar con `409 TURNO_SE_SOLAPA_CON_REALIZADO` |
 | Un turno **ausente o cancelado** libera el rato | Los dos quedan **afuera** del predicado del `EXCLUDE`, a propósito. Marcar Ausente para meter a otro cliente es el flujo que Ariel usa todos los días: endurecerlo a los tres estados que la agenda dibuja rompería justo eso |
 | Servicio largo que no entra antes del cierre/descanso (caso borde) | Se valida en el cálculo de disponibilidad del backend (CU-04); no es una constraint de tabla, depende de `horario_laboral` y `bloqueos_horario` vigentes en el momento de la consulta |
