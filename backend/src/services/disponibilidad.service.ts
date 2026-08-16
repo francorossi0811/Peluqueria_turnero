@@ -28,6 +28,17 @@ const MARGEN_MINIMO_MINUTOS = 30
  * registro de lo que pasó. */
 export const DIAS_PASADOS_ADMIN = 7
 
+/** HU-28 — Hasta cuántos días adelante puede reservar un cliente por la web.
+ *
+ * La cuarta regla de la misma familia que las tres de arriba, y por eso vive al lado:
+ * qué momentos existen para reservar.
+ *
+ * Existe porque no había ningún tope y la API aceptaba un turno para 2027. Sin seña ni
+ * teléfono verificado, la agenda entera de los próximos años estaba a un request de
+ * distancia. Ariel **no** tiene este límite: él ya toma turnos a meses vista y el tope es
+ * para el que reserva por la web, no para el dueño. */
+export const DIAS_FUTURO_PUBLICO = 90
+
 const MINUTO_MS = 60_000
 
 export interface Franja {

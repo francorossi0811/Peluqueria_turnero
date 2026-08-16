@@ -12,7 +12,7 @@ Es un proyecto de portfolio de un estudiante de Ingeniería en Sistemas (4to añ
 
 La v1 está deployada y Ariel la está probando de verdad, contra la base de **producción**. Eso manda sobre todo lo demás:
 
-- **Trabajar siempre en la rama `v3-ajustes-de-ariel`**, nunca commitear en `main`. Mergear a `main` le cambiaría la app que está probando.
+- **Trabajar siempre en la rama `v3-ajustes-de-ariel`**, nunca commitear en `main`. Mergear a `main` le cambia la app que está usando, así que **solo se mergea cuando Franco lo pide**. ⚠️ El 16/8/2026 lo pidió y **la v3 entera está mergeada y desplegada**: lo que Ariel tiene enfrente ya no es la v1.
 - **No pushear ni mergear sin que Franco lo pida explícitamente.**
 - Render sirve **producción** y Vercel le apunta ahí. `frontend/.env` tiene que decir `http://localhost:3000/api`.
 - ⚠️ **Las suscripciones push viven en la base a la que apuntaba el backend cuando se tocó "Activar".** Cambiar `DATABASE_URL` en Render deja huérfanos todos los dispositivos registrados hasta ese momento: el envío sale, pero a una lista vacía o vieja. Ya pasó — ver la nota del final de la Etapa 1.
@@ -69,7 +69,13 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
 - **Ariel puede cargar turnos hasta 7 días para atrás** (HU-08, 14/8/2026): atiende clientes de vidriera y los registra cuando tiene un rato libre. Lo habilita el flag `permitirPasado` de `disponibilidad.service.ts` —**no** un `margenMinutos` negativo, que mezclaría dos conceptos en la misma variable— y solo lo enciende la ruta nueva `GET /api/admin/disponibilidad`, que además va siempre con margen 0. El cliente no cambió: sigue con sus 30 minutos de antelación y nunca ve una hora pasada. ⚠️ El flag **no toca el cierre**; hay un test que fija los dos bordes con el flag encendido. En la UI el pasado se marca en ámbar, con cartel antes de confirmar y el botón cambiado a "Registrar turno pasado".
 - ⚠️ **Un turno `realizado` no se puede pisar; uno `ausente` o `cancelado` sí** (14/8/2026). Antes `ocupados` solo miraba `reservado` y, con el pasado habilitado, eso pasó a ser un agujero real. La regla vive en los dos lados: `obtenerDetalleDelDia` y el predicado del `EXCLUDE`, que ahora es `estado IN ('reservado','realizado')`. **`ausente` sigue afuera a propósito** — liberar el rato al marcarlo es el flujo que Ariel usa todos los días. Consecuencia: marcar Realizado puede fallar con 409 `TURNO_SE_SOLAPA_CON_REALIZADO` si ese rato ya se le dio a otro turno que se hizo.
 - **`origen` es `online | presencial | llamada | whatsapp`** (14/8/2026). `presencial` es el cliente de vidriera; `llamada` se llamaba `telefono` y se renombró porque se confundía con `clienteTelefono`, que es un dato de contacto y no un canal. El `RENAME VALUE` de la migración conservó las filas que ya existían.
-- La disponibilidad SIEMPRE se recalcula y valida en el backend, nunca solo en el frontend.
+- ⚠️ **Una persona no puede acaparar la agenda** (HU-28, 15/8/2026): máximo **3 turnos `reservado` en cualquier ventana móvil de 7 días** por ficha de cliente, y **90 días** de horizonte hacia adelante (`DIAS_FUTURO_PUBLICO`). Antes no había **nada**: ni tope de cantidad ni tope hacia el futuro, así que la API aceptaba un turno para 2028. Los dos valen en las **dos** puertas públicas —`crearTurno` y `reprogramarTurno`— y **ninguno alcanza a Ariel**: se apagan con el mismo `esAdmin = Boolean(input.origen)` que ya distinguía los dos llamadores. La ventana es móvil y no lunes-a-domingo a propósito: con la semana del calendario entran 3 turnos de viernes a domingo y 3 más de lunes a martes, seis en cinco días. Solo cuenta `reservado` —cancelado y ausente liberaron el rato, realizado ya pasó—, así que cancelar libera el cupo enseguida. Al reprogramar, el turno no se cuenta contra sí mismo: si no, moverlo dentro de su propia semana fallaría justo cuando no cambia nada. ⚠️ **El límite es por teléfono normalizado, así que no frena a quien inventa un número distinto en cada reserva.** Es una decisión consciente y está escrita en HU-28, no un olvido: la alternativa era rate limit por IP (castiga a la familia que reserva desde la misma casa) u OTP (un paso más en *todas* las reservas para frenar algo que todavía no pasó).
+- ⚠️ **Las fotos que sube Ariel viven en Postgres** (`imagenes.datos`, HU-29, 16/8/2026), comprimidas **en el navegador** a ~150 KB antes de subir. No fue preferencia: no había ningún lugar donde un archivo subido sobreviviera —`frontend/public` se hornea en el build de Vercel y el disco de Render es efímero— y un bucket traía cuenta nueva y trámite externo, lo mismo que tiene frenado a WhatsApp. **El techo es real**: Neon free son 0,5 GB, y lo que hace viable la decisión son los dos números de los que no hay que aflojar — la compresión y el tope de **5 fotos por ficha**. Mudarse a un bucket después no toca ninguna pantalla, porque el frontend solo ve `/api/imagenes/<id>`.
+- ⚠️ **`servicios.foto` (string) y la fila de `imagenes` conviven, y la subida gana.** Las 4 fotos originales son rutas estáticas que sirve el CDN de Vercel y **no se migran** — es mejor que servirlas desde Render. La prioridad se **calcula** en `fotoDeServicio`, nunca se escribe la URL dentro de `servicios.foto`: serían dos escrituras que pueden divergir. Consecuencia para el frontend: `servicio.foto` es una **URL opaca** y hay dos servidores detrás, así que pasa por `urlDeFoto` — un `src` relativo a `/api/imagenes/...` pega contra Vercel y da 404 en producción.
+- ⚠️ **Las rutas de fotos se montan ANTES del `express.json()` global** en `app.ts`, con su propio parser de límite más alto. El global tiene el default de 100 KB y tiraría un 413 crudo antes del handler; subirlo haría que toda la API acepte megabytes para que dos endpoints puedan. `express.json` se saltea si el cuerpo ya fue parseado, y de ahí sale el orden.
+- ⚠️ **El `mime` de una imagen se acepta de una lista cerrada, y SVG está afuera a propósito**: es un documento que puede traer `<script>` y se serviría desde nuestro propio dominio. `image/*` a secas sería XSS, no una foto fea.
+- ⚠️ **Los tres errores de `POST /api/turnos` son 409** (`HORARIO_NO_DISPONIBLE`, `LIMITE_SEMANAL_ALCANZADO`, `FUERA_DE_HORIZONTE`), así que **hay que ramificar por `codigo`, nunca por status**. `ReservarPage` hacía lo segundo y le mostraba "ese horario se acaba de ocupar" —falso— a quien había llegado a su tope, encima rebotándolo al paso del horario y perdiéndole la hora que ya había elegido. Mismo defecto que ya había pasado con el teléfono.
+- La disponibilidad SIEMPRE se recalcula y valida en el backend, nunca solo en el frontend. ⚠️ Y las dos puntas se recortan en vez de rechazarse: `GET /api/disponibilidad` clampea `desde` a hoy y `hasta` al horizonte, así la grilla nunca ofrece un día que la creación va a rechazar.
 - Doble reserva del mismo horario: se previene con una restricción de unicidad a nivel de base de datos, no solo con lógica de aplicación.
 - El turno guarda una copia (nombre + duración) del servicio al momento de reservar — si Ariel cambia la duración de un servicio después, los turnos ya reservados no cambian.
 - Nunca se borra un turno físicamente: la aplicación no hace `DELETE` sobre `turnos`, todo cambio es un `UPDATE` de `estado` (+ `updated_at`). Al reprogramar, el turno viejo queda en estado `reprogramado` y el nuevo apunta a él con `turno_origen_id`. **No hay tabla de historial/auditoría** — el rastro es ese, no un log de cambios.
@@ -99,7 +105,7 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
   - Etapa 1 — sesión deslizante que no vence mientras Ariel use el panel, y cambio de contraseña desde "Mi cuenta" (HU-15, HU-16).
   - Etapa 2 — agenda que se actualiza sola con los turnos nuevos marcados, y aviso al celular por Web Push (HU-17, HU-18).
   - Etapa 3 — mail de confirmación al cliente con su link, y "agregar al calendario" (.ics) (HU-02, HU-19).
-- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapa 2 (WhatsApp) ✅ código terminado; **falta hacer los trámites con Meta para probarlo con mensajes reales**. Etapa 3 ✅ terminada entera: feriados + grilla semanal (primera mitad) y fichas de clientes (segunda mitad). Etapa 4 (cobros) ✅ código terminado. Limpieza de la landing (13/8/2026) ✅. Ver abajo.
+- ✅ **v3 mergeada a `main` y desplegada el 16/8/2026.** Etapa 1 (arreglos y cambios chicos). Etapa 2 (WhatsApp): código terminado, pero **falta hacer los trámites con Meta**, así que en producción los avisos siguen saliendo por mail — el adaptador de consola no cuenta como enviado justamente para que esto no apagara el mail en silencio. Etapa 3 entera: feriados + grilla semanal y fichas de clientes. Etapa 4 (cobros). Limpieza de la landing (13/8/2026). Más HU-28 (límite de reservas) y HU-29 (fotos). Ver abajo.
 - ✅ **Brevo ya está configurado** en `backend/.env` (`BREVO_API_KEY` cargada, `MAIL_FROM` apuntando al mail de Franco). Este documento decía lo contrario hasta el 7/8/2026. En Render hay que cargarla aparte: es otra variable de entorno.
 
 ## v3 — lo que pidió Ariel
@@ -108,7 +114,7 @@ Se decidió arrancar por los arreglos chicos (todo local, sin depender de trámi
 
 El plan original está en `~/.claude/plans/tingly-meandering-mitten.md`, pero **quedó viejo**: describe como pendiente todo lo que ya está hecho. Para saber en qué estado están las cosas, vale esta sección, no ese archivo.
 
-### Etapa 1 — arreglos y cambios chicos ✅ terminada (rama `v3-ajustes-de-ariel`, sin mergear)
+### Etapa 1 — arreglos y cambios chicos ✅ terminada y desplegada
 
 Todo hecho y verificado en el navegador:
 
@@ -281,7 +287,7 @@ Era la única etapa **sin historia de usuario escrita** —"Precios" figuraba te
 - **`ModalTurno` lleva las cuatro acciones** (Realizado · Ausente · Reprogramar · Cancelar), con la misma jerarquía que `FilaTurno`. Tenía solo las dos últimas y era un agujero: desde la grilla semanal no se podía cerrar un turno sin cambiar a la vista Día. "Realizado" abre el cobro (que marca y cobra de una); "Ausente" no abre nada.
 - ⚠️ **La foto del servicio vive en `servicios.foto`, no en un mapa por nombre en el frontend.** Estaba indexada por el **nombre exacto** en `Landing.tsx`, y era un defecto real: el nombre lo edita Ariel desde el panel (HU-13), así que renombrar "Corte clásico" le borraba la foto en silencio. Mismo error que el proyecto ya había evitado en HU-25 al no usar el nombre del cliente como identidad. La migración `foto_de_servicio` traspasó el mapeo a la base una única vez; de ahí en más el nombre es libre. **Verificado renombrando un servicio y viendo que la foto sobrevive.**
 - `foto` **sí** sale por la API pública (es lo que se dibuja en la landing) y `precio` **no**. Que dos columnas nuevas del mismo modelo terminen una adentro y otra afuera es justamente lo que el mapeo campo por campo de `getServiciosPublico` obliga a decidir.
-- **Ariel no elige la foto desde el panel** (decisión de Franco: se arregló el bug, no se agregó la funcionalidad). Se asigna en la base o en una migración, que es también donde hay que ponérsela a un servicio nuevo. `foto` no está en los schemas de crear/editar.
+- ~~**Ariel no elige la foto desde el panel.** Se asigna en la base o en una migración~~ — **ya no vale desde el 16/8/2026 (HU-29)**: Ariel sube la foto desde el panel, incluida la de un servicio que acaba de crear. Sigue sin estar en los schemas de crear/editar, pero por otro motivo: va por `PUT /admin/servicios/:id/foto`, porque un archivo y un formulario de texto no comparten ni el tamaño de cuerpo ni los errores.
 - El `onError` del `<img>` cae a la foto de stock cuando el archivo no existe: una genérica es un default, una imagen rota parece un sitio abandonado. Cubría a "Corte de Pelo mujer" mientras le faltaba el archivo; desde el 11/8/2026 `servicio-corte-mujer.jpg` **ya está subido** y los cuatro servicios tienen su foto propia. El respaldo queda igual, para el servicio nuevo al que todavía no se le puso ninguna.
 - ⚠️ **En los cobros la base filtra pero la suma se hace en la aplicación**, al revés del reflejo habitual. El motivo: la pantalla ya devuelve la lista de turnos del período, así que un `groupBy` sería un segundo viaje a Neon para derivar algo que ya está en memoria. De paso `resumirCobros` queda pura y con 7 tests.
 
@@ -340,6 +346,79 @@ Siete cosas que salieron del uso real. Código terminado, migraciones aplicadas.
 Además: **selector de fecha en la agenda** (`<input type="date">` entre las flechas y "Hoy") y **"Ver ese día"** en el buscador de turnos, que hasta ahora te decía dónde estaba el turno y no te llevaba. ⚠️ **La fecha NO va a la URL**, y el motivo está comentado en `AgendaPage`: sería el primer `useSearchParams` del proyecto y sembraría entradas de historial en el panel — y el botón "atrás" ya confundió a Ariel una vez.
 
 🚧 **Lo que quedó sin verificar en pantalla:** todo el panel de admin (el pasado, el origen `presencial`, el selector de fecha, "Ver ese día"). No se pudo entrar: tipear la contraseña de Ariel no es algo que Claude deba hacer. Lo tiene que probar Franco.
+
+### Límite de reservas por cliente (15/8/2026) — HU-28 ✅ código terminado
+
+Franco pidió impedir que una persona le llene la agenda a Ariel, ahora que el sistema no cobra
+seña. **No había ninguna defensa**: ni rate limit, ni tope por teléfono, ni horizonte máximo.
+Quedaron las dos reglas de la viñeta de "Reglas de negocio clave": 3 turnos por ventana móvil de
+7 días y 90 días de horizonte, las dos solo para el cliente.
+
+- **Cero migraciones**: una regla es un conteo y la otra una constante. No hubo que tocar el
+  esquema ni correr el ritual contra producción.
+- No se agregó índice sobre `turnos.cliente_id`: con 12 filas en la tabla y ~230 clientes por
+  mes, la consulta no duele, y un índice pedía una migración sobre `turnos` — justo la tabla
+  donde vive el `EXCLUDE` escrito a mano.
+- ⚠️ **La carrera está aceptada**: dos requests simultáneos pueden pasar el conteo a la vez y
+  dejar un turno de más. No se puso transacción a propósito — el daño real (dos personas sobre el
+  mismo rato) ya lo impide el `EXCLUDE`, y acá lo peor que pasa es un cuarto turno.
+- El defecto que apareció **mirando el código del frontend y no compilando**: `ReservarPage`
+  ramificaba por status y no por `codigo`. Ver la viñeta en "Reglas de negocio clave".
+
+**Verificado de verdad, sobre una branch descartable de Neon.** Como el backend local pega a
+producción y ese día había turnos creados por Ariel, se creó una branch temporal
+(`prueba-hu28-limite-reservas`), se apuntó `backend/.env` ahí, se probó a fondo y se borró. La
+agenda real quedó intacta: 12 turnos y 7 clientes antes y después, cero turnos de prueba.
+**Es el reemplazo de la base de desarrollo que ya no existe, y sirve para cualquier prueba que
+escriba.** Lo que se comprobó por API: el 4º turno de la semana da 409, el de 7 días después
+entra, cancelar libera el cupo enseguida, el límite es por persona (otro teléfono reserva igual
+en la semana llena), reprogramar dentro de la propia semana funciona y pasado el horizonte da
+409. En pantalla: el cartel sale **en el paso de datos sin perder el horario elegido**, con el
+link de WhatsApp, sin errores de consola y sin scroll horizontal a 375 px.
+
+⚠️ **Lo único que quedó sin probar por API es el espejo de Ariel** (que la carga manual no tenga
+ninguno de los dos topes): `POST /api/admin/turnos` pide un JWT, y tipear la contraseña de una
+cuenta no es algo que Claude deba hacer. Lo cubren el gate `!esAdmin` —una línea— y un test que
+fija que los dos predicados se contradicen a propósito en la misma fecha.
+
+⚠️ **Corrección al documento:** más arriba dice que la MCP de Neon tiene bloqueado
+`get_connection_string`. El 15/8/2026 **funcionó sin problema**; era una limitación del momento,
+no permanente.
+
+### Fotos en fichas y servicios (16/8/2026) — HU-29 ✅ código terminado y verificado
+
+Dos pedidos de Franco: fotos en la ficha del cliente además de las notas, y poder ponerle foto a
+un servicio nuevo para que no quede el placeholder. Se sumó un tercero sobre la marcha: **poder
+borrar las viejas**, para que el almacenamiento no se llene al pedo.
+
+- ⚠️ **"Crear un servicio nuevo" ya existía** (`+ Nuevo servicio`, `POST /admin/servicios`). Lo
+  único que faltaba de esa mitad era la foto. Vale releer antes de construir de más.
+- Tabla `imagenes` nueva, con `CHECK` de dueño único y `UNIQUE` sobre `servicio_id`. **La
+  migración salió limpia** (solo `CREATE TABLE` + FKs) y no tocó `turnos_no_solapamiento`;
+  verificado contra `pg_constraint`, junto con que el `EXCLUDE` sigue en pie.
+- **Compresión medida, no supuesta**: una foto de 3000×4000 y 1441 KB quedó en 675×900 y
+  **153 KB** — 9× menos. El lado mayor se capa en 900 px conservando la proporción.
+- **Se pudo entrar al panel sin usar la contraseña de nadie**, firmando un JWT de prueba con la
+  clave local contra la branch descartable. Eso destraba lo que el 14/8 había quedado como "lo
+  tiene que probar Franco": de acá en más el panel se puede verificar en el navegador.
+- Verificado además: los rechazos (SVG, PDF, basura, base64 roto, sobrepeso), el tope de 5 con su
+  borde, que borrar libera el cupo, que borrar con el id de otra ficha da 404 (el `where` va
+  scopeado), que la foto subida gana sobre la estática y que al quitarla vuelve la estática, los
+  headers de cache, los dos temas y 375 px sin desbordes. En la landing los 5 servicios cargan y
+  **ninguno cae al stock**; la tarjeta del servicio nuevo mide exactamente igual que las otras.
+- ⚠️ **Un defecto de copy que se corrigió de paso**: el modal de servicio decía *"Es tuyo: el
+  cliente no lo ve en ningún momento"* sobre el precio, y eso era falso desde el 14/8/2026. Le
+  estaba diciendo a Ariel que podía escribir cualquier cosa en un campo que ve todo el mundo.
+
+✅ **La migración ya está en producción** (16/8/2026, pedida por Franco). Se construyó y se probó
+sobre la branch descartable `dev-hu29-fotos`, que se borró al terminar, y recién después se aplicó
+a producción con el ritual completo: leer el SQL, `migrate deploy`, y confirmar contra
+`pg_constraint` que `turnos_no_solapamiento` sigue en pie. Los datos quedaron iguales antes y
+después (12 turnos, 7 clientes, 4 servicios).
+
+⚠️ Sin verificar: **HEIC de iPhone**. En teoría Safari lo decodifica y el canvas lo saca como
+JPEG —por eso la compresión siempre exporta JPEG, sea lo que sea que entró—, pero no hay ningún
+iPhone en el circuito de prueba. Si fallara, el síntoma es "no pudimos leer esa foto" al elegirla.
 
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 

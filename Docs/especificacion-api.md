@@ -80,6 +80,13 @@ La ruta admin **recorta** `desde` en vez de rechazarlo cuando se pide más atrá
 sin explicar nada. La ventana de 7 días la vuelve a validar `POST /api/admin/turnos`, que
 responde **400 `PARAMETROS_INVALIDOS`** si la fecha se pasa.
 
+La ruta **pública** recorta de los dos lados por el mismo motivo: `desde` nunca antes de hoy, y
+desde HU-28 `hasta` nunca más allá de **hoy + 90 días**. Si el recorte deja el rango dado vuelta
+(se pidió solo días fuera del horizonte), devuelve `{ "disponibilidad": [] }` en vez de un error.
+Ese techo es lo que mantiene la promesa del párrafo de arriba en la otra dirección: la grilla no
+puede ofrecer un día que `POST /api/turnos` va a rechazar con `FUERA_DE_HORIZONTE`. La ruta admin
+**no** tiene techo — Ariel ya toma turnos a meses vista.
+
 Response:
 ```json
 {
@@ -167,6 +174,23 @@ antes — lo rechaza en última instancia el `EXCLUDE` constraint de la base):
 ```json
 { "error": { "codigo": "HORARIO_NO_DISPONIBLE", "mensaje": "Ese horario se acaba de ocupar." } }
 ```
+Response `409` — HU-28, los dos topes de la reserva pública. **Los devuelven solo esta ruta y
+`POST /api/turnos/:id/reprogramar`**; `POST /api/admin/turnos` no tiene ninguno de los dos:
+```json
+{ "error": { "codigo": "LIMITE_SEMANAL_ALCANZADO", "mensaje": "Ya tenés 3 turnos reservados para esos días. Cancelá alguno desde tu link o escribinos por WhatsApp." } }
+```
+```json
+{ "error": { "codigo": "FUERA_DE_HORIZONTE", "mensaje": "Por ahora se puede reservar hasta 90 días adelante." } }
+```
+Son **409 y no 400** por el mismo criterio que `FUERA_DE_VENTANA_CANCELACION`: el request está
+bien armado, lo que no da es el estado de las cosas. El límite se cuenta por ficha de cliente
+(teléfono normalizado, HU-25), sobre los turnos en estado `reservado` que caen en cualquier
+ventana de 7 días corridos alrededor de la fecha pedida.
+
+⚠️ **Los tres códigos de esta ruta son 409**, así que un cliente de API que ramifique por
+*status* y no por `codigo` los confunde entre sí. No es hipotético: `ReservarPage` hacía
+exactamente eso y hubo que arreglarlo al agregar estos dos, porque le mostraba "ese horario se
+acaba de ocupar" a alguien que había llegado a su tope semanal.
 
 **POST `/api/turnos/:id/cancelar`** — sin body. Response `409` si faltan menos de 60
 minutos:
@@ -510,9 +534,62 @@ no puedan contradecirse, porque van uno al lado del otro en pantalla.
 precio", que no es lo mismo que `0`. Mandar `"precio": null` explícitamente es cómo se le
 saca el precio a un servicio que ya tenía uno.
 
-`foto` se devuelve pero **no se puede editar por la API**: se asigna en la base o en una
-migración. Es deliberado — Ariel no elige la foto desde el panel, así que un campo editable
-sería superficie sin uso. Si algún día la elige, se agrega a los dos schemas.
+⚠️ **Enmienda del 16/8/2026 (HU-29): la foto ya se edita desde el panel.** Hasta esa fecha acá
+decía que `foto` se devolvía pero no se podía editar, y que se asignaba en la base o en una
+migración. Cambió porque un servicio **nuevo** quedaba con una imagen genérica y Ariel no tenía
+forma de arreglarlo.
+
+Sigue **sin** ser un campo de `POST`/`PATCH /admin/servicios`: se sube por su propio endpoint
+(ver abajo), porque un archivo y un formulario de texto no comparten ni el tamaño de cuerpo ni
+los errores. En el modal del panel eso no se nota — al crear, el servicio se guarda primero y la
+foto se sube después con el id que devolvió.
+
+⚠️ El `foto` que sale en las respuestas es **calculado**: si hay una foto subida devuelve
+`/api/imagenes/<id>`, y si no, la ruta estática que tenga la columna (`/imagenes/servicio-corte.jpg`).
+Los consumidores tienen que tratarlo como una URL opaca, **no** asumir que empieza con
+`/imagenes/`: las dos formas las sirven servidores distintos.
+
+### Fotos — HU-29
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/imagenes/:id` | El binario. **Público** — ver la nota de abajo |
+| GET | `/api/admin/clientes/:id/fotos` | 🔒 La galería de una ficha: `{ "fotos": [...], "maximo": 5 }` |
+| POST | `/api/admin/clientes/:id/fotos` | 🔒 Suma una foto |
+| DELETE | `/api/admin/clientes/:id/fotos/:fotoId` | 🔒 Borra una. `204` |
+| PUT | `/api/admin/servicios/:id/foto` | 🔒 Pone o reemplaza la del servicio |
+| DELETE | `/api/admin/servicios/:id/foto` | 🔒 La saca; el servicio vuelve a su ruta estática o al stock |
+| GET | `/api/admin/almacenamiento` | 🔒 `{ "fotos": 12, "bytes": 1843200 }` — cuánto se está ocupando |
+
+La subida viaja como **data URL dentro de un JSON**, no como multipart:
+```json
+{ "datos": "data:image/jpeg;base64,/9j/4AAQSkZJRg..." }
+```
+Es para no sumar `multer`: el proyecto ya eligió no agregar dependencias cuando la plataforma
+alcanza (el adaptador de WhatsApp usa el `fetch` nativo por lo mismo). El costo es el ~33% que
+infla base64, despreciable sobre una foto de 150 KB. La respuesta es
+`{ "id", "url", "bytes" }`.
+
+Errores: **400 `IMAGEN_INVALIDA`** (no es una data URL, o el formato no está permitido — solo
+`image/jpeg`, `image/png` y `image/webp`; ⚠️ **SVG se rechaza a propósito**, es un documento que
+puede traer `<script>` y se serviría desde nuestro dominio), **400 `IMAGEN_DEMASIADO_GRANDE`**
+(más de 600 KB ya decodificados) y **409 `LIMITE_DE_FOTOS`** (la ficha llegó a 5).
+
+⚠️ **`GET /api/imagenes/:id` no pide autenticación, ni siquiera para las fotos de las fichas**, y
+la autorización es conocer el uuid — el mismo criterio que `GET /api/turnos/:id`, donde el id *es*
+el token. El motivo es mecánico: una etiqueta `<img>` **no puede mandar el header
+`Authorization`**, así que exigirlo rompería a la vez la galería del panel y la landing. Se
+aceptó porque son fotos de cortes sin caras (HU-29). Si eso cambia, la salida es traerlas por
+axios como blob y dibujarlas con `URL.createObjectURL`.
+
+La respuesta lleva `Cache-Control: public, max-age=31536000, immutable`. Es correcto porque el id
+es inmutable: reemplazar una foto **crea otra fila con otro id**, nunca cambia el contenido de
+una existente.
+
+⚠️ **Estas rutas se montan antes del `express.json()` global** y traen su propio parser con un
+límite más alto. El global tiene el default de 100 KB y rechazaría una subida con un 413 crudo
+antes de llegar al handler. Subir el límite global haría que *toda* la API acepte cuerpos de
+megabytes para que dos endpoints puedan; reservar un turno no tiene por qué.
 
 ### Horario laboral — HU-14
 

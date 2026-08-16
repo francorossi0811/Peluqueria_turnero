@@ -89,9 +89,22 @@ export function GestionTurnoPage({ id }: { id: string }) {
       navigate(`/turno/${nuevoTurno.id}`)
     },
     onError: (err) => {
-      const codigo = isAxiosError<ErrorApi>(err)
-        ? err.response?.data.error.codigo
+      const datos = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error
         : null
+      const codigo = datos?.codigo ?? null
+
+      // HU-28 — Los dos topes de la reserva pública valen también acá, que es el otro
+      // camino por el que un cliente elige una fecha. Se muestra el mensaje del backend tal
+      // cual en vez del genérico de abajo: "no pudimos reprogramar, probá de nuevo" invita
+      // a reintentar algo que va a fallar siempre igual, y no dice qué hacer.
+      if (
+        codigo === 'LIMITE_SEMANAL_ALCANZADO' ||
+        codigo === 'FUERA_DE_HORIZONTE'
+      ) {
+        setErrorAccion(datos!.mensaje)
+        return
+      }
 
       if (codigo === 'HORARIO_NO_DISPONIBLE') {
         setErrorAccion('Ese horario se acaba de ocupar. Elegí otro.')

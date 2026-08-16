@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { z } from 'zod'
 import {
   calcularDisponibilidad,
+  DIAS_FUTURO_PUBLICO,
   DIAS_PASADOS_ADMIN,
   type OpcionesDisponibilidad,
 } from '../services/disponibilidad.service'
@@ -29,6 +30,7 @@ async function responderDisponibilidad(
   res: Response,
   opciones: OpcionesDisponibilidad,
   desdeMinimo: string,
+  hastaMaximo?: string,
 ) {
   const parsed = querySchema.safeParse(req.query)
   if (!parsed.success) {
@@ -47,13 +49,19 @@ async function responderDisponibilidad(
   // dejaría la grilla vacía sin explicar nada. Si el recorte deja el rango dado vuelta
   // (pidió solo días demasiado viejos), la comparación de abajo lo atrapa.
   const desdeEfectivo = desde < desdeMinimo ? desdeMinimo : desde
-  if (hasta < desdeEfectivo) {
+  // HU-28 — El techo, exactamente la operación simétrica del piso de arriba y por el mismo
+  // motivo: recortar en vez de rechazar. Solo lo pasa el endpoint público; Ariel no tiene
+  // tope hacia adelante. Sin esto la grilla del cliente ofrecería días que `crearTurno` va
+  // a rechazar, que es justo el despegue que este archivo ya evita del otro lado.
+  const hastaEfectivo =
+    hastaMaximo && hasta > hastaMaximo ? hastaMaximo : hasta
+  if (hastaEfectivo < desdeEfectivo) {
     res.json({ disponibilidad: [] })
     return
   }
 
   const desdeFecha = fechaDesdeIso(desdeEfectivo)
-  const hastaFecha = fechaDesdeIso(hasta)
+  const hastaFecha = fechaDesdeIso(hastaEfectivo)
 
   const dias =
     Math.round((hastaFecha.getTime() - desdeFecha.getTime()) / 86_400_000) + 1
@@ -89,15 +97,20 @@ async function responderDisponibilidad(
   }
 }
 
-/** CU-04 — La disponibilidad que ve el cliente: con la antelación mínima de 30 minutos y
- * sin nada del pasado. No recibe opciones y no puede recibirlas: la ruta es la que dice
- * quién pregunta. */
+/** CU-04 — La disponibilidad que ve el cliente: con la antelación mínima de 30 minutos,
+ * sin nada del pasado y sin nada más allá del horizonte de HU-28. No recibe opciones y no
+ * puede recibirlas: la ruta es la que dice quién pregunta. */
 export async function getDisponibilidad(req: Request, res: Response) {
+  const hoy = ahoraArgentina()
+  const hastaMaximo = new Date(hoy.getTime())
+  hastaMaximo.setUTCDate(hastaMaximo.getUTCDate() + DIAS_FUTURO_PUBLICO)
+
   await responderDisponibilidad(
     req,
     res,
     {},
-    formatearFecha(ahoraArgentina()), // nunca antes de hoy
+    formatearFecha(hoy), // nunca antes de hoy
+    formatearFecha(hastaMaximo), // ni más allá del horizonte
   )
 }
 

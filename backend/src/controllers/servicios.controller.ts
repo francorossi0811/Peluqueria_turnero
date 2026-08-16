@@ -5,9 +5,10 @@ import {
   crearServicio,
   listarServiciosActivos,
   listarTodosLosServicios,
+  type ServicioConImagen,
 } from '../services/servicios.service'
 import { ServicioNoEncontradoError } from '../services/errores'
-import type { Servicio } from '../../generated/prisma/client.ts'
+import { urlDeImagen } from '../services/imagenes.service'
 
 const idSchema = z.object({ id: z.uuid() })
 
@@ -45,14 +46,35 @@ const actualizarSchema = z
     message: 'No mandaste ningún campo para editar.',
   })
 
-function servicioDto(servicio: Servicio) {
+/**
+ * HU-29 — Qué foto se muestra de un servicio. Hay tres orígenes posibles y esta función es el
+ * único lugar donde se decide entre ellos:
+ *
+ * 1. La que **subió Ariel** desde el panel, si la subió. Gana siempre.
+ * 2. La **ruta estática** de `servicios.foto` (`/imagenes/servicio-corte.jpg`), que es lo que
+ *    tienen los 4 servicios originales. No se migran: esos archivos los sirve el CDN de Vercel,
+ *    que es estrictamente mejor que servirlos desde Render.
+ * 3. `null` — y ahí el frontend cae a su foto de stock.
+ *
+ * ⚠️ Se **calcula** en vez de escribir la URL dentro de `servicios.foto` al subir. Guardarla ahí
+ * serían dos escrituras que pueden divergir: si la fila de la imagen se borra y el string queda,
+ * el servicio apunta a una foto que ya no existe. Con esto hay un solo lugar donde está la
+ * verdad, y el `onError` del `<img>` en la landing pasa a ser una red y no un parche necesario.
+ */
+export function fotoDeServicio(
+  servicio: Pick<ServicioConImagen, 'foto' | 'imagen'>,
+): string | null {
+  return servicio.imagen ? urlDeImagen(servicio.imagen.id) : servicio.foto
+}
+
+function servicioDto(servicio: ServicioConImagen) {
   return {
     id: servicio.id,
     nombre: servicio.nombre,
     duracionMinutos: servicio.duracionMinutos,
     activo: servicio.activo,
     precio: servicio.precio,
-    foto: servicio.foto,
+    foto: fotoDeServicio(servicio),
   }
 }
 
@@ -75,12 +97,14 @@ function respondErrorParametrosInvalidos(res: Response, mensaje: string) {
 export async function getServiciosPublico(_req: Request, res: Response) {
   const servicios = await listarServiciosActivos()
   res.json({
-    servicios: servicios.map(({ id, nombre, duracionMinutos, precio, foto }) => ({
-      id,
-      nombre,
-      duracionMinutos,
-      precio,
-      foto,
+    servicios: servicios.map((servicio) => ({
+      id: servicio.id,
+      nombre: servicio.nombre,
+      duracionMinutos: servicio.duracionMinutos,
+      precio: servicio.precio,
+      // La única línea que no es una copia directa: la foto se resuelve entre la subida y la
+      // estática (HU-29). Sigue siendo un mapeo campo por campo, que es el punto de arriba.
+      foto: fotoDeServicio(servicio),
     })),
   })
 }

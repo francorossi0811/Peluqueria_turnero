@@ -111,6 +111,7 @@ Como Ariel, quiero marcar si el cliente vino o no, para llevar un registro (sin 
 
 **HU-13 — Configurar servicios**
 Como Ariel, quiero poder agregar, editar o desactivar servicios y sus duraciones, sin depender de que alguien le toque el código.
+- También le pongo la **foto** que ve el cliente en la web, incluso a uno que acabo de crear (HU-29). ⚠️ **Ampliación del 16/8/2026:** hasta esa fecha la foto solo se podía asignar tocando la base o escribiendo una migración, así que un servicio nuevo se quedaba con una imagen genérica y yo no tenía forma de cambiarla.
 - También les pongo el **precio** (HU-27). Me sirve para que el cobro venga con el monto puesto y para los totales.
   - ⚠️ **Enmienda del 14/8/2026: el cliente SÍ ve el precio.** Hasta esa fecha esta línea
     decía "el cliente no lo ve en ningún momento" y era una decisión explícita de HU-27.
@@ -256,6 +257,9 @@ observaciones, para dejar de llevar eso en la planilla y tenerlo al lado del tur
 - Le pongo **etiquetas**, que son insignias que armo yo: un círculo del color que elijo
   más el texto que quiero ("Suele cancelar", "VIP", "Vive lejos"). Las administro desde el
   panel, no vienen de una lista fija.
+- Le guardo **fotos** de cómo le quedó el corte, hasta 5 por ficha, y las borro cuando ya no
+  me sirven (HU-29). ⚠️ **Ampliación del 16/8/2026:** hasta esa fecha la ficha solo tenía
+  texto, y "el mismo de la otra vez" dependía de que me acordara.
 - **Cuando reserva alguien que no tenía ficha, el sistema le pone solo la etiqueta
   "Nuevo".** Así, mirando la agenda, sé que a esa persona no la tengo fichada todavía y
   que vale la pena ponerle el apodo o una observación cuando la atienda.
@@ -382,6 +386,36 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
 - El evento avisa solo 2 horas antes, sin depender de cómo tenga configurado el calendario cada uno. Dos horas dejan margen para reacomodarse y siguen estando fuera de la ventana de 60 minutos, así que todavía puedo cancelar o reprogramar online.
 - Si reservé **sin** dejar email, la pantalla de confirmación me lo ofrece ahí mismo y me manda el link con el turno adjunto. Se puede una sola vez por turno: el id del turno es el token de acceso, así que sin ese límite cualquiera con el link podría hacer que el sistema mande mails a direcciones arbitrarias. El email queda guardado, así que una reprogramación posterior también me llega.
 
+### Administrador (Ariel)
+
+**HU-28 — Que una sola persona no me llene la agenda**
+Como Ariel, quiero que nadie pueda acaparar mis horarios reservando de a montones, para que la agenda siga sirviendo aunque reservar sea gratis y no cobre seña.
+- Una misma persona puede tener **hasta 3 turnos reservados en cualquier tramo de 7 días corridos**. El cuarto de esa semana se rechaza con un mensaje que explica qué pasa y le ofrece escribirnos por WhatsApp.
+- La "semana" es una **ventana móvil, no lunes a domingo**. Con la semana del calendario alguien podría sacar 3 turnos de viernes a domingo y 3 más de lunes a martes: seis en cinco días, todos legales. La ventana móvil no tiene esa costura.
+- Se puede reservar **hasta 90 días adelante**. Antes no había ningún tope hacia el futuro y la API aceptaba un turno para dentro de dos años.
+- **Cuentan solo los turnos reservados.** Un cancelado o un ausente liberaron el rato y un realizado ya pasó: ninguno de los tres le gasta un cupo a nadie. Si el cliente cancela uno, el lugar se le libera enseguida.
+- Los dos límites valen igual al **reprogramar**, que es el otro momento en que un cliente elige una fecha. Al mover un turno no se lo cuenta contra sí mismo, así que acomodarlo dentro de su propia semana siempre funciona; lo que no se puede es amontonarlo en una semana ajena que ya esté llena.
+- **Nada de esto me alcanza a mí.** Los turnos que cargo desde el panel no tienen tope ni de cantidad ni de fecha: yo sé a quién estoy atendiendo. Es la misma asimetría que ya existe en HU-08 y HU-10.
+
+*Por qué el límite es por ficha de cliente y no por dispositivo ni con una seña:* la identidad que el sistema ya tiene es el teléfono normalizado (HU-25), y es la única que se sostiene sola sin pedirle un dato nuevo a nadie. Una seña resolvería el problema de raíz, pero es una pasarela de pago entera y sigue fuera de alcance (ver la sección 5).
+
+
+*Lo que esto no cubre, y conviene tenerlo escrito:* quien escriba **un número distinto en cada reserva** se saltea el límite, porque para el sistema es otra persona. Taparlo pide o un límite por IP —que castiga a la familia que reserva desde la misma casa— o verificar el teléfono con un código, que le agrega un paso a **todas** las reservas para frenar un caso que todavía no ocurrió. Se decidió cubrir lo realista —la misma persona acaparando horarios, y la reserva a años vista— y dejar anotado el resto. Si alguna vez pasa de verdad, la respuesta ya existe y no es código: Ariel cancela esos turnos desde el panel, y el aviso al cliente sale solo (HU-22).
+
+**HU-29 — Fotos en las fichas y en los servicios**
+Como Ariel, quiero guardar fotos de cómo quedó el corte en la ficha de cada cliente, y ponerle una foto propia a cada servicio, para no depender de mi memoria ni dejar la web con una imagen genérica.
+- En la ficha sumo **hasta 5 fotos** por persona. Es lo que resuelve el "quiero el mismo de la otra vez", que en la planilla de papel no tenía dónde vivir.
+- **Puedo borrar las viejas**, y las borro yo: si no, el tope se convierte en una pared y el espacio se llena de fotos que ya no le sirven a nadie. En "Mi cuenta" veo cuántas hay y cuánto pesan, así decido con un número y no a ojo.
+- A cada servicio le pongo **una** foto, y se la puedo poner también a uno que acabo de crear. Antes un servicio nuevo quedaba con una imagen de stock y no había forma de cambiarla desde el panel.
+- Las fotos **se achican solas** antes de guardarse: una de 1,4 MB del celular queda en ~150 KB, con el lado más largo en 900 px. No tengo que hacer nada.
+- Si a un servicio le saco la foto, vuelve a mostrarse la que tenía antes, o una genérica si nunca tuvo.
+
+*Por qué hay un tope de 5 y por qué las fotos se achican:* las dos cosas son la misma decisión. Los archivos se guardan en la base de datos, y el plan gratuito que usa el proyecto son 0,5 GB. Con 5 fotos de ~150 KB una ficha ocupa ~750 KB, o sea que entran unas 300 fichas cómodas. Con 12 fotos de 300 KB el límite se pasa antes de las 150. **Los números no son decoración: son lo que hace que la decisión de dónde guardarlas se sostenga.**
+
+*Por qué en la base y no en un servicio de imágenes:* no había **ningún** lugar donde un archivo subido sobreviviera — la carpeta pública del frontend se arma al compilar y el disco del servidor se borra en cada reinicio. Un servicio tipo Cloudinary pedía cuenta nueva y trámite externo, que es exactamente lo que tiene frenado a WhatsApp (HU-22). Como la aplicación solo maneja la URL `/api/imagenes/<id>`, mudarse a un bucket más adelante no cambia una sola pantalla.
+
+*Sobre quién puede ver una foto:* la lectura es **pública para el que conoce el identificador**, que es el mismo criterio del link del turno (HU-01). No es un descuido: una etiqueta `<img>` no puede mandar credenciales, así que pedirlas rompería la galería del panel y la web a la vez. Es aceptable porque acordamos que son **fotos del corte, sin caras**. ⚠️ **Si algún día se le sacan fotos a la cara de alguien, esto hay que revisarlo**: la salida es traer la imagen con la sesión y dibujarla desde memoria, y ahí sí se puede exigir estar logueado para las de ficha.
+
 ---
 
 ## 3. Casos de uso detallados
@@ -466,7 +500,8 @@ cada turno o bloqueo de ese día**.
 | Ariel cambia la duración de un servicio después de que ya hay turnos reservados con la duración vieja | El turno guarda una "foto" del servicio (nombre + duración) al momento de reservar, no una referencia que cambie después |
 | Ariel cambia el horario laboral general | Los turnos ya reservados fuera del nuevo horario se mantienen válidos; solo los horarios *nuevos* respetan la config actualizada |
 | Cliente pierde su link único | Si dejó email, el link le llegó por mail y además quedó dentro del evento del calendario (HU-02, HU-19). Si no dejó email, no hay recuperación automática: le escribe a Ariel, que busca el turno en su panel y le reenvía el link |
-| Cliente reprograma repetidamente para "trabar" horarios | Fuera de alcance v1 — lo anotamos como posible mejora futura (límite de reprogramaciones) |
+| Cliente reprograma repetidamente para "trabar" horarios | ⚠️ **Enmienda del 15/8/2026:** hasta esta fecha decía "fuera de alcance v1 — posible mejora futura (límite de reprogramaciones)". HU-28 lo cubre **en parte**: reprogramar no puede amontonar más de 3 turnos en una semana ni llevarlos más allá de los 90 días, así que ya no sirve para trabar horarios lejanos ni para concentrarlos. Lo que sigue sin límite es la **cantidad de veces** que se mueve un mismo turno, que no le quita el lugar a nadie |
+| Una persona reserva muchos turnos y llena la agenda | Máximo 3 turnos reservados por ficha de cliente en cualquier ventana de 7 días, más un horizonte de 90 días (HU-28). Se cuenta por teléfono normalizado, así que **no** frena a quien invente un número distinto en cada reserva — decisión consciente, ver la nota de HU-28 |
 
 ---
 
