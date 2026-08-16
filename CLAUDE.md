@@ -12,7 +12,7 @@ Es un proyecto de portfolio de un estudiante de Ingeniería en Sistemas (4to añ
 
 La v1 está deployada y Ariel la está probando de verdad, contra la base de **producción**. Eso manda sobre todo lo demás:
 
-- **Trabajar siempre en la rama `v3-ajustes-de-ariel`**, nunca commitear en `main`. Mergear a `main` le cambiaría la app que está probando.
+- **Trabajar siempre en la rama `v3-ajustes-de-ariel`**, nunca commitear en `main`. Mergear a `main` le cambia la app que está usando, así que **solo se mergea cuando Franco lo pide**. ⚠️ El 16/8/2026 lo pidió y **la v3 entera está mergeada y desplegada**: lo que Ariel tiene enfrente ya no es la v1.
 - **No pushear ni mergear sin que Franco lo pida explícitamente.**
 - Render sirve **producción** y Vercel le apunta ahí. `frontend/.env` tiene que decir `http://localhost:3000/api`.
 - ⚠️ **Las suscripciones push viven en la base a la que apuntaba el backend cuando se tocó "Activar".** Cambiar `DATABASE_URL` en Render deja huérfanos todos los dispositivos registrados hasta ese momento: el envío sale, pero a una lista vacía o vieja. Ya pasó — ver la nota del final de la Etapa 1.
@@ -105,7 +105,7 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
   - Etapa 1 — sesión deslizante que no vence mientras Ariel use el panel, y cambio de contraseña desde "Mi cuenta" (HU-15, HU-16).
   - Etapa 2 — agenda que se actualiza sola con los turnos nuevos marcados, y aviso al celular por Web Push (HU-17, HU-18).
   - Etapa 3 — mail de confirmación al cliente con su link, y "agregar al calendario" (.ics) (HU-02, HU-19).
-- 🚧 **v3 en curso** — Etapa 1 (arreglos y cambios chicos) ✅ terminada, sin mergear. Etapa 2 (WhatsApp) ✅ código terminado; **falta hacer los trámites con Meta para probarlo con mensajes reales**. Etapa 3 ✅ terminada entera: feriados + grilla semanal (primera mitad) y fichas de clientes (segunda mitad). Etapa 4 (cobros) ✅ código terminado. Limpieza de la landing (13/8/2026) ✅. Ver abajo.
+- ✅ **v3 mergeada a `main` y desplegada el 16/8/2026.** Etapa 1 (arreglos y cambios chicos). Etapa 2 (WhatsApp): código terminado, pero **falta hacer los trámites con Meta**, así que en producción los avisos siguen saliendo por mail — el adaptador de consola no cuenta como enviado justamente para que esto no apagara el mail en silencio. Etapa 3 entera: feriados + grilla semanal y fichas de clientes. Etapa 4 (cobros). Limpieza de la landing (13/8/2026). Más HU-28 (límite de reservas) y HU-29 (fotos). Ver abajo.
 - ✅ **Brevo ya está configurado** en `backend/.env` (`BREVO_API_KEY` cargada, `MAIL_FROM` apuntando al mail de Franco). Este documento decía lo contrario hasta el 7/8/2026. En Render hay que cargarla aparte: es otra variable de entorno.
 
 ## v3 — lo que pidió Ariel
@@ -114,7 +114,7 @@ Se decidió arrancar por los arreglos chicos (todo local, sin depender de trámi
 
 El plan original está en `~/.claude/plans/tingly-meandering-mitten.md`, pero **quedó viejo**: describe como pendiente todo lo que ya está hecho. Para saber en qué estado están las cosas, vale esta sección, no ese archivo.
 
-### Etapa 1 — arreglos y cambios chicos ✅ terminada (rama `v3-ajustes-de-ariel`, sin mergear)
+### Etapa 1 — arreglos y cambios chicos ✅ terminada y desplegada
 
 Todo hecho y verificado en el navegador:
 
@@ -410,9 +410,11 @@ borrar las viejas**, para que el almacenamiento no se llene al pedo.
   cliente no lo ve en ningún momento"* sobre el precio, y eso era falso desde el 14/8/2026. Le
   estaba diciendo a Ariel que podía escribir cualquier cosa en un campo que ve todo el mundo.
 
-🚧 **Lo que queda pendiente y no es código:** aplicar la migración a **producción**. Se aplicó y
-se probó solo sobre la branch descartable `dev-hu29-fotos`, que se borró al terminar; producción
-quedó intacta. Necesita el visto bueno de Franco, porque Ariel está usando la app.
+✅ **La migración ya está en producción** (16/8/2026, pedida por Franco). Se construyó y se probó
+sobre la branch descartable `dev-hu29-fotos`, que se borró al terminar, y recién después se aplicó
+a producción con el ritual completo: leer el SQL, `migrate deploy`, y confirmar contra
+`pg_constraint` que `turnos_no_solapamiento` sigue en pie. Los datos quedaron iguales antes y
+después (12 turnos, 7 clientes, 4 servicios).
 
 ⚠️ Sin verificar: **HEIC de iPhone**. En teoría Safari lo decodifica y el canvas lo saca como
 JPEG —por eso la compresión siempre exporta JPEG, sea lo que sea que entró—, pero no hay ningún
