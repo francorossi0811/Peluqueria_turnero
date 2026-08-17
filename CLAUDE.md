@@ -91,6 +91,7 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
 - Los avisos al cliente salen **por WhatsApp** (HU-22), con el mail como **respaldo**: se manda el mail solo si no hay teléfono, si el número no se puede pasar a E.164, o si el envío falla. El teléfono se **guarda como lo escribió la persona** y se normaliza recién al momento de enviar (`utils/telefono.ts`), nunca al entrar. Son **tres** avisos —confirmado, reprogramado y cancelado—, cada uno con su plantilla aprobada por Meta. El de cancelación sale por los **tres** caminos de baja: el link del cliente, el panel de Ariel, y la cancelación en masa al bloquear o editar un rango (CU-03). ⚠️ Ese tercero se enganchó recién el 14/8/2026 — era el único que cancelaba sin avisar, y es donde más importa porque son varios clientes de una. Va secuencial y después de responder, para no comerse un rate limit de Meta.
 - El cliente que ya no llega a cancelar online tiene **botón de WhatsApp y de llamar** en su pantalla de gestión (HU-03). El número vive en `frontend/src/utils/contacto.ts`: ⚠️ el `9` de celular va **solo** en el link de `wa.me`, nunca en el `tel:` — marcar `+54 9 …` no llama a ningún lado.
 - **El cobro se registra al marcar Realizado** (HU-27), nunca se cobra por el sistema. ⚠️ **`servicios.precio` dejó de ser interno el 14/8/2026** y eso **enmienda a HU-27**, que decía que el cliente no lo veía nunca: ahora sale por `GET /api/servicios` y por `GET /api/turnos/:id`, y se dibuja en la tarjeta del servicio, en los pasos horario/datos/confirmación y en el link de gestión. Lo que sigue sin salir de la API pública es el **cobro** (`medioPago`, `montoCobrado`); el mapeo campo por campo de `getServiciosPublico` se conserva igual de explícito, porque es lo que obliga a decidir dato por dato qué se publica. ⚠️ El precio que ve el cliente es **el de hoy**, no el del día que reservó — al revés que `nombre` y `duracionMinutos`, que son el snapshot. El monto del turno **no es un snapshot de la reserva** —al revés que la duración—: se copia del precio del servicio al momento de cobrar y Ariel lo puede pisar. Se puede marcar Realizado sin cobro y cargarlo después (`PATCH /admin/turnos/:id/cobro`); esos turnos se cuentan aparte en la sección Cobros y **no se suman al total**.
+- ⚠️ **La agenda se exporta a Excel, y ese filtro NO es el de la agenda** (HU-30, 16/8/2026). `GET /api/admin/agenda/exportar` se lleva **todos los turnos del período menos los `reprogramado`** —los cancelados **entran**—, mientras que `listarTurnosEnRango`, la consulta de la pantalla, filtra `('reservado','realizado','ausente')` y los deja afuera. Son dos reglas distintas a propósito: la agenda dibuja lo que está en pie, la planilla registra lo que pasó. Por eso la exportación tiene su propia consulta en vez de parametrizar la de la agenda. ⚠️ Y ojo con las semanas: se **agrupan** de domingo a sábado (la convención de `domingoDeLaSemana`, la misma de la vista Semana) pero se **titulan** por su martes y su sábado. Si el corte empezara el martes, un turno de lunes no tendría hoja y desaparecería del archivo sin que nada lo delatara. Los totales salen de `resumirCobros`, la misma función que la sección Cobros, así que el archivo no puede contradecir a la pantalla — verificado cruzando los dos contra producción.
 - **Fuera de alcance:** sistema de deudas por ausencias, multi-peluquero, y dentro de los cobros el cobro online / seña. Los avisos a Ariel (push), el mail y el WhatsApp al cliente son reales. **WhatsApp y los precios dejaron de estar fuera de alcance en la v3** — ver abajo.
 
 ## Estado actual del proyecto
@@ -106,6 +107,7 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
   - Etapa 2 — agenda que se actualiza sola con los turnos nuevos marcados, y aviso al celular por Web Push (HU-17, HU-18).
   - Etapa 3 — mail de confirmación al cliente con su link, y "agregar al calendario" (.ics) (HU-02, HU-19).
 - ✅ **v3 mergeada a `main` y desplegada el 16/8/2026.** Etapa 1 (arreglos y cambios chicos). Etapa 2 (WhatsApp): código terminado, pero **falta hacer los trámites con Meta**, así que en producción los avisos siguen saliendo por mail — el adaptador de consola no cuenta como enviado justamente para que esto no apagara el mail en silencio. Etapa 3 entera: feriados + grilla semanal y fichas de clientes. Etapa 4 (cobros). Limpieza de la landing (13/8/2026). Más HU-28 (límite de reservas) y HU-29 (fotos). Ver abajo.
+- ✅ **HU-30 (exportar la agenda a Excel) mergeada a `main` y desplegada el 17/8/2026.** Ariel ya tiene el menú "Más opciones" y el botón de exportar.
 - ✅ **Brevo ya está configurado** en `backend/.env` (`BREVO_API_KEY` cargada, `MAIL_FROM` apuntando al mail de Franco). Este documento decía lo contrario hasta el 7/8/2026. En Render hay que cargarla aparte: es otra variable de entorno.
 
 ## v3 — lo que pidió Ariel
@@ -419,6 +421,83 @@ después (12 turnos, 7 clientes, 4 servicios).
 ⚠️ Sin verificar: **HEIC de iPhone**. En teoría Safari lo decodifica y el canvas lo saca como
 JPEG —por eso la compresión siempre exporta JPEG, sea lo que sea que entró—, pero no hay ningún
 iPhone en el circuito de prueba. Si fallara, el síntoma es "no pudimos leer esa foto" al elegirla.
+
+### Exportar la agenda a Excel (16-17/8/2026) — HU-30 ✅ mergeada y desplegada
+
+Pedido de Franco: reordenar la barra de la agenda —"Cargar turno" afuera, el resto adentro de un
+menú **"Más opciones"**— y sumar ahí una **exportación a Excel** con una hoja por semana y un
+resumen final. La regla de negocio está en la viñeta de "Reglas de negocio clave"; acá va lo que
+conviene saber antes de tocarlo.
+
+- ⚠️ **Se usó `write-excel-file`, NO `exceljs`.** Se empezó por exceljs, que es la opción obvia, y
+  se dio marcha atrás con el `npm audit` en la mano: arrastra **90 paquetes** y un aviso abierto
+  en su `uuid` transitivo, y **este repo es público**. `write-excel-file` tiene **una sola**
+  dependencia (`fflate`) y no agregó ningún aviso nuevo — el único que queda es el `nanoid` que ya
+  estaba. Si alguna vez hace falta algo que no dé (imágenes, fórmulas), conviene revisar antes de
+  volver a exceljs por reflejo.
+- ⚠️ **`utils/excel.ts` importa la librería con `await import()` y no con un `import` arriba.** El
+  paquete es ESM y este backend compila como CommonJS: con el import estático `tsc` corta con
+  TS1479. La contracara es el `with { 'resolution-mode': 'import' }` del import de tipos. De paso,
+  la librería recién se carga la primera vez que alguien exporta y no en cada arranque de Render.
+- El servicio **no sabe nada de Excel**: `exportacion.service.ts` decide qué entra y cómo se
+  agrupa, `utils/excel.ts` escribe el archivo. Es lo que permite testear "en qué hoja cae cada
+  turno" sin generar un `.xlsx`.
+- **Los montos van como número con formato de moneda de Excel**, nunca como texto ya armado: en
+  una planilla una celda tiene que poder sumarse. Un turno realizado sin cobro deja la celda
+  **vacía**, no en `0` — misma distinción que sostiene `formatearPesosOpcional` en el panel.
+- ⚠️ **La hoja va agrupada por día y el color dice el estado** (pedido de Franco, 17/8/2026). La
+  fecha dejó de ser una columna y pasó a ser la **banda** que abre cada bloque, con el subtotal
+  del día alineado en la columna Monto; hay un test que fija que la suma de los días da el total
+  de la semana. El color se pinta **solo en la celda Estado** —teñir el renglón entero taparía
+  los montos— con los mismos tokens de HU-23: `#14682c` realizado, `#c62828` ausente, `#f5d020`
+  pendiente, gris apagado el cancelado (que en la grilla ni se dibuja, así que no tenía color).
+  ⚠️ **No se pinta por medio de pago**: es justo el defecto de la planilla de Drive que el
+  proyecto ya decidió no heredar —un eje describía al cliente y otro un pago, en la misma celda.
+- ⚠️ **La paleta de `utils/excel.ts` son los valores del tema CLARO, copiados a mano.** El
+  backend no lee el CSS del frontend, y un Excel se abre siempre sobre fondo blanco: los valores
+  del tema oscuro darían un archivo ilegible. Si se retocan los tokens de estado, hay que
+  acordarse de este archivo.
+- ⚠️ **Agrupar tiene un costo aceptado**: una planilla con bandas adentro no se puede ordenar ni
+  filtrar sin romper la agrupación. Se eligió leerla, no pivotearla. La salida, si alguna vez
+  hace falta, es volver a poner la columna "Día" en cada fila.
+- ⚠️ **El nombre de cada hoja lleva el número de semana adelante** (`Sem 3 (11-15 ago)`). No es
+  estético: Excel exige nombres de hoja únicos y con el tope de 425 días entran dos agostos de
+  años distintos. Hay un test que lo fija.
+
+**Verificado de verdad, y sin permiso especial: la exportación solo lee.** No escribe nada, así
+que se pudo probar contra producción directamente, sin branch descartable.
+
+- El archivo se **leyó de vuelta con un parser real** (`read-excel-file`, instalado con
+  `--no-save` solo para eso y sin quedar en `package.json`), no solo inspeccionando el zip: 3
+  hojas en orden, el `Resumen` último, los montos como números y no como texto, el apodo ganándole
+  al nombre, el cancelado presente con su estado y el turno de lunes cayendo en su semana.
+- **Y se miró de verdad**, que con colores no alcanzaba con leer el XML: `qlmanage -t` genera un
+  PNG del archivo con Quick Look sin abrir Excel. Es la forma de ver la planilla como la va a ver
+  Ariel — así se confirmaron las bandas, los badges de estado y los subtotales por día.
+- **El cruce que importa:** exportar 2026 entero y pedir `GET /api/admin/cobros` del mismo rango
+  dan lo mismo — total 56000, `sinRegistrar` 1 y el mismo desglose por medio. Es la prueba de que
+  reusar `resumirCobros` sirvió para algo.
+- Bordes por API: 425 días entra, 426 da 400; rango invertido, fecha basura y falta de parámetro
+  dan 400; sin token, 401. Un período **vacío** devuelve un archivo válido con solo la hoja
+  `Resumen` en cero, en vez de romper.
+- En el navegador (con un JWT de prueba firmado localmente, el camino que estrenó HU-29): el menú
+  abre, cierra al elegir, cierra con `Escape` y cierra al tocar afuera; los tres ítems abren lo
+  que corresponde; el error real del backend llega hasta el cartel del modal; los dos temas y
+  375 px sin scroll horizontal.
+
+⚠️ **Un defecto encontrado midiendo el DOM, no mirando la pantalla:** el panel del menú es más
+ancho que su botón, así que anclado a `right-0` crece hacia la izquierda. A 375 px la fila
+envuelve y el botón queda pegado al margen izquierdo — el panel terminaba en **x = -4 px**, con la
+primera letra de "Bloquear horario" cortada. Se ancla a la izquierda en celular y a la derecha de
+`sm:` para arriba, que es donde el que se sale es el otro extremo.
+
+⚠️ **`MenuDesplegable` es el primer listener a nivel `document` del proyecto** (`pointerdown` +
+`Escape`). Hasta ahora lo único que cerraba "al tocar afuera" era el burbujeo de `onClick` de
+`Modal.tsx`, que sirve para un overlay a pantalla completa y no para un panel flotante. La
+limpieza del `useEffect` no es opcional: sin ella queda un listener vivo por cada apertura.
+
+Ojo con una expectativa que **no** se cumplió: la barra a 375 px pasó de **tres renglones a dos**,
+no a uno. Los dos botones miden 167 y 174 px y no entran juntos en los 327 px útiles.
 
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 

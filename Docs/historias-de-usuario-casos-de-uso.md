@@ -282,10 +282,16 @@ observaciones, para dejar de llevar eso en la planilla y tenerlo al lado del tur
 desde el celular o desde la computadora del local, y eso una aplicación web ya lo da. Una
 integración por OAuth sería un trámite entero para resolver algo que ya está resuelto.
 
-*Sobre exportar a una planilla:* se construyó y se sacó. Ariel no la pidió, y el motivo por
-el que estaba —"llevarse los datos"— resultó ser un problema que él no tiene: las fichas
-las consulta en el panel, que es donde están al lado del turno. Es funcionalidad que
-existía porque era fácil de hacer, no porque hiciera falta.
+*Sobre exportar **las fichas** a una planilla:* se construyó y se sacó. Ariel no la pidió, y
+el motivo por el que estaba —"llevarse los datos"— resultó ser un problema que él no tiene:
+las fichas las consulta en el panel, que es donde están al lado del turno. Es funcionalidad
+que existía porque era fácil de hacer, no porque hiciera falta.
+
+⚠️ *Esto **no** contradice a HU-30, que exporta la agenda.* La diferencia es justo la que
+hace que una sobre y la otra no: exportar las fichas duplicaba una pantalla que ya existe,
+mientras que la agenda exportada es el **registro histórico** que reemplaza a la planilla de
+Drive, algo que el panel no muestra en ningún lado porque el panel enseña el presente. Y esa
+la pidió Franco.
 
 *Por qué las etiquetas son configurables y no un casillero de "cliente problemático":* la
 planilla usa un color para marcar clientes porque es lo único que Sheets sabe hacer.
@@ -415,6 +421,66 @@ Como Ariel, quiero guardar fotos de cómo quedó el corte en la ficha de cada cl
 *Por qué en la base y no en un servicio de imágenes:* no había **ningún** lugar donde un archivo subido sobreviviera — la carpeta pública del frontend se arma al compilar y el disco del servidor se borra en cada reinicio. Un servicio tipo Cloudinary pedía cuenta nueva y trámite externo, que es exactamente lo que tiene frenado a WhatsApp (HU-22). Como la aplicación solo maneja la URL `/api/imagenes/<id>`, mudarse a un bucket más adelante no cambia una sola pantalla.
 
 *Sobre quién puede ver una foto:* la lectura es **pública para el que conoce el identificador**, que es el mismo criterio del link del turno (HU-01). No es un descuido: una etiqueta `<img>` no puede mandar credenciales, así que pedirlas rompería la galería del panel y la web a la vez. Es aceptable porque acordamos que son **fotos del corte, sin caras**. ⚠️ **Si algún día se le sacan fotos a la cara de alguien, esto hay que revisarlo**: la salida es traer la imagen con la sesión y dibujarla desde memoria, y ahí sí se puede exigir estar logueado para las de ficha.
+
+**HU-30 — Llevarme la agenda a una planilla**
+Como Ariel, quiero bajarme la agenda de un período en un Excel, con una hoja por semana y las
+cuentas hechas, para tener el registro de lo que pasó fuera del sistema — igual que la
+planilla de Drive que usaba antes, pero sin cargarla a mano.
+- Elijo el período con un **atajo de "último mes"** o poniendo las fechas a mano. El último
+  mes es lo que voy a querer casi siempre.
+- Cada **semana es una hoja** aparte, como las pestañas "Semana 1…5" que tenía en Drive.
+- Dentro de la hoja los turnos van **agrupados por día**: cada día abre con una banda que
+  dice qué día es, cuántos turnos tuvo y **cuánto entró ese día**, y abajo van sus turnos.
+- En cada fila veo **hora, cliente, servicio, estado, origen, medio de pago y monto**, y al
+  pie de la hoja **cuánto facturé esa semana** con el desglose por medio de pago.
+- El **estado va con color** —verde realizado, rojo ausente, mostaza pendiente, gris
+  cancelado—, los mismos que uso en la agenda del panel. Lo veo de un vistazo sin leer.
+- La **última hoja es el resumen**: el total del período, el mismo desglose, y una línea por
+  semana para ver cómo vengo.
+- Entran **todos los turnos**, no solo los que cobré: los cancelados y los ausentes también,
+  con su estado en una columna. Quiero ver lo que se me cayó, no solo lo que entró.
+- El botón está en la agenda, adentro de **"Más opciones"**, junto a bloquear un horario y
+  buscar un turno. "Cargar turno" queda afuera del menú porque es lo único que uso todos los
+  días.
+
+*Por qué las semanas se agrupan de domingo a sábado aunque las hojas se lean de martes a
+sábado:* la hoja se **titula** por su martes y su sábado, que son los días que Ariel abre y
+es como quiere leerla. Pero el **corte** es de domingo a sábado, la misma convención que usa
+la vista Semana del panel (HU-23). Si la semana empezara el martes, un turno cargado un lunes
+—Ariel abre por excepción, o registra a alguien de vidriera (HU-08)— no tendría hoja donde
+caer y **desaparecería del archivo sin que nada lo delatara**. Así se lee compacto y no se
+pierde nada: la hoja solo dibuja los días que tienen algo.
+
+*Por qué los cancelados entran y los reprogramados no:* un cancelado ocurrió como decisión —
+alguien pidió ese rato y lo soltó— y es información que Ariel quiere. Un **reprogramado**, en
+cambio, es la copia vieja del turno que se movió (§4): el bueno ya aparece por su cuenta en la
+fecha nueva, así que listarlo sería mostrar dos veces la misma visita, una de ellas en un
+horario que no ocurrió.
+
+*Por qué el color dice el estado y no el medio de pago:* es la regla de HU-23, la que
+gobierna la grilla del panel, y acá se sostiene igual. Pintar por medio de pago era la otra
+opción obvia y es **exactamente el defecto de la planilla de Drive** que este proyecto ya
+decidió no heredar (ver HU-25): allá un color describía al cliente y otro describía un pago,
+mezclados en la misma celda, y no había forma de saber cuál de los dos ejes se estaba
+mirando. El medio de pago tiene su propia columna, con el nombre escrito.
+
+*Sobre agrupar por día:* la fecha deja de ser una columna repetida en cada fila y pasa a ser
+la **banda que abre el bloque**. ⚠️ El costo, que conviene saber: una planilla con bandas
+adentro **no se puede ordenar ni filtrar** con las herramientas de Excel sin romper la
+agrupación. Se aceptó porque este archivo se lee —es el reemplazo de la planilla de Drive,
+que también se leía— y no se pivotea. Si algún día hiciera falta filtrarlo, la salida es
+volver a poner la columna "Día" en cada fila.
+
+*Sobre los cuatro medios de pago:* la tabla de facturación lista **siempre los cuatro**
+(efectivo, transferencia, Mercado Pago y tarjeta), incluso los que quedaron en cero. Es lo que
+permite comparar una semana con otra de un vistazo, o pegar una debajo de la otra: si cada
+hoja mostrara solo los medios con movimiento, ninguna tendría la misma forma.
+
+*Lo que esto no es:* no es un tablero ni un informe con gráficos. Es la agenda con las cuentas
+hechas, en un formato que Ariel puede abrir, filtrar y guardar donde quiera. Los **realizados
+sin cobrar** se cuentan aparte y **no** se suman al total, igual que en la sección Cobros
+(HU-27), por el mismo motivo: un total al que le faltan turnos sin avisarlo no cierra contra
+la caja.
 
 ---
 

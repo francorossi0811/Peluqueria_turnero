@@ -475,8 +475,10 @@ pinta nada.
 
 *Hubo un `GET /api/admin/clientes/export.csv` que devolvía las fichas como CSV. Se sacó a
 pedido de Ariel: las consulta en el panel, al lado del turno, y llevárselas a una planilla
-no resolvía ningún problema que tuviera. El `.ics` de HU-19 vuelve a ser la única
-excepción al "todo es JSON".*
+no resolvía ningún problema que tuviera.* ⚠️ *Esta línea terminaba diciendo que el `.ics` de
+HU-19 volvía a ser "la única excepción al todo es JSON", y dejó de ser cierto el 16/8/2026:
+ahora son **dos**, con el `.xlsx` de HU-30. Exportar la agenda no es lo mismo que exportar
+las fichas — ver la nota de HU-30 en las historias de usuario.*
 
 **Ninguna ruta crea fichas.** Se crean solas al guardar un turno con teléfono, dentro de
 `crearTurno`, que es el único lugar por el que pasan tanto la reserva de la web como la
@@ -521,6 +523,40 @@ contra la caja y no hay forma de saber por qué. `porMedio` viene ordenado de ma
 
 `total` es siempre la suma de `porMedio`: se calculan en el mismo lugar justamente para que
 no puedan contradecirse, porque van uno al lado del otro en pantalla.
+
+### Exportar la agenda — HU-30
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/agenda/exportar?desde=&hasta=` | La agenda del período como `.xlsx`: una hoja por semana y un resumen al final |
+
+Cada hoja va **agrupada por día** —una banda por día con su subtotal, y los turnos debajo—
+y el estado de cada turno se pinta con los colores de HU-23. Eso es presentación y vive en
+`utils/excel.ts`; el reparto en semanas y días, en `exportacion.service.ts`.
+
+**No devuelve JSON.** Responde el archivo con
+`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` y
+`Content-Disposition: attachment; filename="agenda-<desde>-a-<hasta>.xlsx"`, con el mismo
+molde que `GET /api/turnos/:id/calendario.ics` (HU-19). Son las dos únicas rutas de esta API
+que no contestan JSON.
+
+`desde` y `hasta` son inclusivos y el tope es de **425 días**, el mismo de Cobros y no el de
+31 de la agenda: acá el caso de uso *es* pedir varios meses de una. Fuera de rango, rango
+invertido o fecha mal formada responden `400 PARAMETROS_INVALIDOS` — y esos sí en JSON.
+
+**Entran todos los turnos del período menos los `reprogramado`**, cancelados incluidos. Es
+un filtro distinto del de `GET /api/admin/turnos`, que deja afuera a los cancelados: la
+agenda dibuja lo que está en pie y la planilla registra lo que pasó.
+
+Los totales de cada hoja y del resumen salen de la **misma función** que alimenta
+`GET /api/admin/cobros`, así que el archivo y la pantalla no pueden contradecirse. Valen las
+mismas reglas: solo suman los `realizado` con cobro cargado, y los que no lo tienen se
+cuentan aparte sin entrar al total.
+
+⚠️ **La descarga necesita el JWT**, así que no se puede abrir con un `<a href>` pelado: el
+panel la pide con `responseType: 'blob'` y arma el archivo en el navegador. Como el
+`Content-Disposition` no es legible entre dominios sin exponerlo en el CORS, el frontend
+arma el nombre por su cuenta con el mismo rango que pidió.
 
 ### Servicios — HU-13
 

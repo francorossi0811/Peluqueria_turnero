@@ -17,6 +17,7 @@ import {
   patchCliente,
 } from '../controllers/clientes.controller'
 import { getCobros } from '../controllers/cobros.controller'
+import { getExportacionAgenda } from '../controllers/exportacion.controller'
 import { getDisponibilidadAdmin } from '../controllers/disponibilidad.controller'
 import {
   deleteEtiqueta,
@@ -128,6 +129,10 @@ adminRouter.post('/admin/turnos/marcar-vistos', requireAuth, postMarcarVistos)
 
 // HU-27 — Lo cobrado en un período.
 adminRouter.get('/admin/cobros', requireAuth, getCobros)
+
+// HU-30 — La agenda del período como planilla. Devuelve un `.xlsx` y no JSON: es la
+// segunda excepción de esta API, después del `.ics` de HU-19.
+adminRouter.get('/admin/agenda/exportar', requireAuth, getExportacionAgenda)
 
 // HU-25 — Fichas de clientes.
 adminRouter.get('/admin/clientes', requireAuth, getClientes)

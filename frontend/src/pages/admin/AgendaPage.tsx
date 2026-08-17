@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/ui/Button'
 import { Kicker } from '../../components/ui/Kicker'
+import {
+  ItemDeMenu,
+  MenuDesplegable,
+} from '../../components/ui/MenuDesplegable'
 import { FilaTurno } from '../../components/admin/FilaTurno'
 import { FilaBloqueo } from '../../components/admin/FilaBloqueo'
 import { ModalEditarTurno } from '../../components/admin/ModalEditarTurno'
@@ -10,6 +14,7 @@ import { ModalCobro } from '../../components/admin/ModalCobro'
 import { ModalCargarTurno } from '../../components/admin/ModalCargarTurno'
 import { ModalBloquear } from '../../components/admin/ModalBloquear'
 import { ModalBuscarTurno } from '../../components/admin/ModalBuscarTurno'
+import { ModalExportar } from '../../components/admin/ModalExportar'
 import { GrillaSemana } from '../../components/admin/GrillaSemana'
 import {
   cancelarTurnoAdmin,
@@ -86,6 +91,8 @@ export function AgendaPage() {
   // uno nuevo sobre el día que se está mirando, y abrir uno que ya existe.
   const [bloqueoEditar, setBloqueoEditar] = useState<Bloqueo | null>(null)
   const [modalBuscar, setModalBuscar] = useState(false)
+  // HU-30 — La agenda del período como planilla.
+  const [modalExportar, setModalExportar] = useState(false)
   const [turnoEditar, setTurnoEditar] = useState<TurnoAdmin | null>(null)
   // HU-25 — El turno abierto desde la grilla. Es un estado aparte del de reprogramar
   // porque son dos pasos encadenados: primero se ve quién es, y recién si hace falta se
@@ -225,13 +232,40 @@ export function AgendaPage() {
             Agenda
           </h1>
         </div>
+        {/* HU-30 — Antes eran tres botones sueltos con el mismo peso, y con la exportación
+            iban a ser cuatro. Queda a la vista la única que Ariel usa todos los días; el
+            resto se guarda en el menú, que además es lo que hace entrar la fila a 375 px. */}
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setModalBuscar(true)}>
-            Buscar turno
-          </Button>
-          <Button variant="outline" onClick={() => setModalBloquear(true)}>
-            Bloquear horario
-          </Button>
+          <MenuDesplegable etiqueta="Más opciones">
+            {(cerrar) => (
+              <>
+                <ItemDeMenu
+                  onSelect={() => {
+                    cerrar()
+                    setModalBloquear(true)
+                  }}
+                >
+                  Bloquear horario
+                </ItemDeMenu>
+                <ItemDeMenu
+                  onSelect={() => {
+                    cerrar()
+                    setModalBuscar(true)
+                  }}
+                >
+                  Buscar turno
+                </ItemDeMenu>
+                <ItemDeMenu
+                  onSelect={() => {
+                    cerrar()
+                    setModalExportar(true)
+                  }}
+                >
+                  Exportar a Excel
+                </ItemDeMenu>
+              </>
+            )}
+          </MenuDesplegable>
           <Button variant="primaryVino" onClick={() => setModalCargar(true)}>
             + Cargar turno
           </Button>
@@ -540,6 +574,9 @@ export function AgendaPage() {
             setModalBuscar(false)
           }}
         />
+      )}
+      {modalExportar && (
+        <ModalExportar onClose={() => setModalExportar(false)} />
       )}
     </div>
   )

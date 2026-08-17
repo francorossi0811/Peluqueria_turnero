@@ -79,6 +79,14 @@ en la pantalla 5.
 | 13 | Administradores (solo el administrador general) | HU-26 |
 | 14 | Cobros (total del período + desglose por medio + lista de turnos) | HU-27 |
 | 15 | Cobrar un turno (modal, desde "Realizado" o desde el turno) | HU-27 |
+| 16 | Exportar la agenda (modal, desde "Más opciones") | HU-30 |
+
+**La barra de la agenda quedó en un botón y un menú (HU-30).** A la vista está
+"+ Cargar turno"; *Bloquear horario*, *Buscar turno* y *Exportar a Excel* viven adentro de
+**"Más opciones"**. Antes eran tres botones sueltos con el mismo peso visual, aunque Ariel
+use uno todos los días y los otros casi nunca — y con el cuarto la fila habría envuelto de a
+un botón por renglón en el celular. Lo que decide qué queda afuera es la **frecuencia de
+uso**, no la importancia. (Medido a 375 px: de tres renglones a dos.)
 
 **Editar turno (HU-09)** y **marcar Realizado/Ausente (HU-12)** no tienen pantalla propia:
 son acciones inline sobre una fila de la agenda diaria/semanal (pantalla 2), no un flujo
