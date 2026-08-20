@@ -521,7 +521,7 @@ export async function postCancelarTurno(req: Request, res: Response) {
     // Dos destinatarios distintos: al cliente el comprobante de que la baja entró, y a
     // Ariel el aviso de que se le liberó ese horario. Sin lo segundo, una cancelación
     // hecha desde el link solo se ve mirando la agenda.
-    void enviarAvisoDeCancelacion(turno)
+    void enviarAvisoDeCancelacion(turno, 'cliente')
     void notificarTurnoCancelado(turno)
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
@@ -657,7 +657,11 @@ export async function postCancelarTurnoAdmin(req: Request, res: Response) {
     // Acá no hay push (Ariel no se avisa a sí mismo), pero el aviso al cliente es todavía
     // más necesario que en la baja del cliente: es la única forma de que se entere de que
     // no lo esperan.
-    void enviarAvisoDeCancelacion(turno)
+    //
+    // Siempre `'negocio'`, incluso cuando el cliente le avisó por teléfono y Ariel lo está
+    // dando de baja por él: el agradecimiento ya se lo dio en esa llamada, y lo que falta
+    // es el comprobante escrito de que el turno no está más.
+    void enviarAvisoDeCancelacion(turno, 'negocio')
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
     throw err

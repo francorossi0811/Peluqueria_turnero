@@ -106,7 +106,7 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
   - Etapa 1 — sesión deslizante que no vence mientras Ariel use el panel, y cambio de contraseña desde "Mi cuenta" (HU-15, HU-16).
   - Etapa 2 — agenda que se actualiza sola con los turnos nuevos marcados, y aviso al celular por Web Push (HU-17, HU-18).
   - Etapa 3 — mail de confirmación al cliente con su link, y "agregar al calendario" (.ics) (HU-02, HU-19).
-- ✅ **v3 mergeada a `main` y desplegada el 16/8/2026.** Etapa 1 (arreglos y cambios chicos). Etapa 2 (WhatsApp): código terminado, pero **falta hacer los trámites con Meta**, así que en producción los avisos siguen saliendo por mail — el adaptador de consola no cuenta como enviado justamente para que esto no apagara el mail en silencio. Etapa 3 entera: feriados + grilla semanal y fichas de clientes. Etapa 4 (cobros). Limpieza de la landing (13/8/2026). Más HU-28 (límite de reservas) y HU-29 (fotos). Ver abajo.
+- ✅ **v3 mergeada a `main` y desplegada el 16/8/2026.** Etapa 1 (arreglos y cambios chicos). Etapa 2 (WhatsApp): código terminado y **probado de punta a punta contra el número de prueba de Meta el 20/8/2026**, con las cuatro plantillas aprobadas. ⚠️ **En producción los avisos siguen saliendo por mail**: falta Coexistence sobre el número de Ariel, así que Render sigue sin credenciales — y el adaptador de consola no cuenta como enviado justamente para que esto no apagara el mail en silencio. El cambio de la cancelación en dos plantillas (20/8) **no está commiteado ni desplegado**. Etapa 3 entera: feriados + grilla semanal y fichas de clientes. Etapa 4 (cobros). Limpieza de la landing (13/8/2026). Más HU-28 (límite de reservas) y HU-29 (fotos). Ver abajo.
 - ✅ **HU-30 (exportar la agenda a Excel) mergeada a `main` y desplegada el 17/8/2026.** Ariel ya tiene el menú "Más opciones" y el botón de exportar.
 - ✅ **Brevo ya está configurado** en `backend/.env` (`BREVO_API_KEY` cargada, `MAIL_FROM` apuntando al mail de Franco). Este documento decía lo contrario hasta el 7/8/2026. En Render hay que cargarla aparte: es otra variable de entorno.
 
@@ -175,7 +175,43 @@ Los avisos del turno, con el link de gestión adentro, salen por WhatsApp; el ma
 - **No hace falta verificar el negocio con Meta**: sin verificar el tope son 250 conversaciones **por día**, y Ariel atiende ~230 clientes **por mes**. La **plantilla** es otro trámite distinto y ese sí hace falta — es el formato aprobado para poder escribirle primero a alguien.
 - El link entra como **botón de URL dinámica** con una variable al final: `https://…/turno/{{1}}`. Solo viaja el id del turno; la base es parte de la plantilla.
 
-**Pendiente, y no es código:** cuenta de Meta Business con WABA en la Cloud API, Coexistence activado sobre el número de Ariel, las plantillas `turno_confirmado`, `turno_reprogramado` y `turno_cancelado` aprobadas (categoría *utility*, textos en `Docs/plantillas-whatsapp.md`), y `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` en Render.
+### Conexión con Meta (20/8/2026) — probado con el número de prueba
+
+**Las plantillas son CUATRO y están aprobadas**: `turno_confirmado_v2`, `turno_reprogramado`,
+`turno_cancelado_cliente` y `turno_cancelado_negocio`. El detalle completo —los textos, por qué
+la cancelación se partió en dos, y las trampas que aparecieron conectando— vive en
+`Docs/plantillas-whatsapp.md`, que es la fuente de verdad.
+
+- ⚠️ **`turno_confirmado_v2` no es un typo.** Para cambiarle una palabra se borró y se recreó, y
+  Meta bloquea reusar el nombre de una plantilla borrada. **Una plantilla se EDITA con un `POST`
+  sobre su id, no se borra.** El default de `plantillaConfirmado` en `env.ts` ya dice `_v2`.
+- ⚠️ **La cancelación son dos plantillas y `TipoAviso` tiene cuatro casos**: al que canceló con
+  tiempo se le agradece, al que se quedó sin turno porque Ariel no puede atender se le pide
+  disculpas. `enviarAvisoDeCancelacion` **exige** `'cliente' | 'negocio'` sin default: un default
+  silencioso haría que un llamador nuevo mandara el mensaje equivocado sin que nada lo delate.
+  El panel manda **siempre** `'negocio'`, incluso cuando el cliente avisó por teléfono — el
+  agradecimiento ya se lo dio Ariel en esa llamada.
+- ⚠️ **El tono es en singular**: Ariel es uno solo ("escribime", "tuve que cancelar").
+- ⚠️ **Se vio un mensaje aceptado por Meta que no se entregó.** El backend no tenía nada para
+  loguear. Es la advertencia de "200 ≠ entregado" pasando de verdad, y **el respaldo por mail no
+  la cubre** porque para el código el envío fue exitoso.
+- ⚠️ **La lista de destinatarios del número de prueba no acepta la forma con `9`**, así que el
+  flujo se probó con `aE164` parcheado en local (revertido). Y apareció evidencia de que **Meta
+  normaliza el `9` sola** —manda a `54…` y responde `wa_id: 549…`, y los mensajes llegaron—, lo
+  que contradice la nota de la Etapa 2. **Volver a medirlo con el número real antes de darlo por
+  sabido.**
+
+**Pendiente, y no es código:**
+
+1. Asignar la WABA `La Peluqueria` al **usuario del sistema** (Business Settings → Usuarios del
+   sistema → Agregar activos). Hoy el token permanente ni la ve.
+2. **Coexistence** sobre el número de Ariel: figura como `ON_PREMISE` y desde ahí la Cloud API no
+   envía ni deja crear plantillas.
+3. **Recrear las cuatro plantillas en esa WABA** — son por WABA, las de la de prueba no le sirven.
+4. **Información de pago** en Meta: sin eso no salen los mensajes iniciados por el negocio.
+5. `WHATSAPP_TOKEN` + `WHATSAPP_PHONE_NUMBER_ID` en Render (van juntas).
+6. Verificar que los **mensajes automáticos de la app de WhatsApp Business** (el de bienvenida con
+   el link al turnero) sigan funcionando con Coexistence activado. Debería, pero no está probado.
 
 **Fuera de alcance dentro de WhatsApp:** los webhooks de estado de Meta (entregado/leído/rebotado), el recordatorio previo al turno, y la respuesta automática al cliente que escribe primero. ⚠️ Sin webhooks, **el respaldo por mail cubre el envío que falla, no el que rebota**: Meta responde cuando acepta el mensaje, no cuando lo entrega.
 
