@@ -3,6 +3,7 @@ import {
   construirMailConfirmacion,
   construirMensajeWhatsapp,
 } from './notificaciones.service'
+import type { TipoAviso } from './notificaciones.service'
 import type { Turno } from '../../generated/prisma/client.ts'
 
 // Turno el martes 4 de agosto de 2026 a las 15:00, mismo molde que turnos.service.test.ts.
@@ -18,7 +19,8 @@ const TURNO = {
 const CONFIG = {
   plantillaConfirmado: 'turno_confirmado',
   plantillaReprogramado: 'turno_reprogramado',
-  plantillaCancelado: 'turno_cancelado',
+  plantillaCanceladoCliente: 'turno_cancelado_cliente',
+  plantillaCanceladoNegocio: 'turno_cancelado_negocio',
   idioma: 'es_AR',
 }
 
@@ -55,28 +57,54 @@ describe('construirMensajeWhatsapp', () => {
   })
 
   it('elige la plantilla según el tipo de aviso', () => {
-    const plantillaDe = (tipo: 'confirmado' | 'reprogramado' | 'cancelado') =>
+    const plantillaDe = (tipo: TipoAviso) =>
       construirMensajeWhatsapp(TURNO, tipo, '5493514593325', CONFIG).plantilla
 
     expect(plantillaDe('confirmado')).toBe('turno_confirmado')
     expect(plantillaDe('reprogramado')).toBe('turno_reprogramado')
-    expect(plantillaDe('cancelado')).toBe('turno_cancelado')
+    expect(plantillaDe('cancelado_cliente')).toBe('turno_cancelado_cliente')
+    expect(plantillaDe('cancelado_negocio')).toBe('turno_cancelado_negocio')
+  })
+
+  // ⚠️ Las dos cancelaciones son plantillas **distintas** aprobadas por separado. Si las
+  // dos apuntaran a la misma, el cliente al que Ariel le canceló recibiría "gracias por
+  // avisar" — el defecto exacto que motivó partir el tipo en cuatro.
+  it('no manda la misma plantilla en las dos cancelaciones', () => {
+    const cliente = construirMensajeWhatsapp(
+      TURNO,
+      'cancelado_cliente',
+      '5493514593325',
+      CONFIG,
+    )
+    const negocio = construirMensajeWhatsapp(
+      TURNO,
+      'cancelado_negocio',
+      '5493514593325',
+      CONFIG,
+    )
+
+    expect(cliente.plantilla).not.toBe(negocio.plantilla)
+    // Lo que sí comparten: las tres variables, para que el armador no ramifique.
+    expect(cliente.variablesCuerpo).toEqual(negocio.variablesCuerpo)
   })
 
   // El botón de la plantilla de cancelación es una URL estática ("Reservar otro turno"):
   // no declara variable, y mandarle una es un 400 de Meta. Las tres plantillas comparten
   // las variables del cuerpo justamente para que esta sea la única diferencia.
-  it('no manda variable de botón en la cancelación', () => {
-    const mensaje = construirMensajeWhatsapp(
-      TURNO,
-      'cancelado',
-      '5493514593325',
-      CONFIG,
-    )
+  it.each(['cancelado_cliente', 'cancelado_negocio'] as const)(
+    'no manda variable de botón en la cancelación (%s)',
+    (tipo) => {
+      const mensaje = construirMensajeWhatsapp(
+        TURNO,
+        tipo,
+        '5493514593325',
+        CONFIG,
+      )
 
-    expect(mensaje.variableBotonUrl).toBeUndefined()
-    expect(mensaje.variablesCuerpo).toHaveLength(3)
-  })
+      expect(mensaje.variableBotonUrl).toBeUndefined()
+      expect(mensaje.variablesCuerpo).toHaveLength(3)
+    },
+  )
 })
 
 describe('construirMailConfirmacion', () => {
@@ -89,14 +117,25 @@ describe('construirMailConfirmacion', () => {
 
   // Ese link abre una pantalla de un turno cancelado: ofrecer "gestionar mi turno" sobre
   // algo que ya no se gestiona es prometer una acción que no existe.
-  it('no ofrece el link de gestión en la cancelación', () => {
-    const { asunto, html, texto } = construirMailConfirmacion(
-      TURNO,
-      'cancelado',
-    )
+  it.each(['cancelado_cliente', 'cancelado_negocio'] as const)(
+    'no ofrece el link de gestión en la cancelación (%s)',
+    (tipo) => {
+      const { html, texto } = construirMailConfirmacion(TURNO, tipo)
 
-    expect(html).not.toContain(`/turno/${TURNO.id}`)
-    expect(texto).not.toContain(`/turno/${TURNO.id}`)
-    expect(asunto).toContain('Cancelamos tu turno')
+      expect(html).not.toContain(`/turno/${TURNO.id}`)
+      expect(texto).not.toContain(`/turno/${TURNO.id}`)
+    },
+  )
+
+  // El mail de respaldo tiene que decir lo mismo que la plantilla que le toca: si el
+  // canal cambia el mensaje, el cliente recibe dos versiones del mismo hecho.
+  it('agradece o pide disculpas según quién canceló', () => {
+    const cliente = construirMailConfirmacion(TURNO, 'cancelado_cliente')
+    const negocio = construirMailConfirmacion(TURNO, 'cancelado_negocio')
+
+    expect(cliente.texto).toContain('Gracias por avisar')
+    expect(cliente.texto).not.toContain('Perdón')
+    expect(negocio.texto).toContain('Perdón')
+    expect(negocio.texto).not.toContain('Gracias por avisar')
   })
 })

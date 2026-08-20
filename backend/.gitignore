@@ -1,5 +1,9 @@
 node_modules
 # Keep environment variables out of version control
 .env
+# ⚠️ Y cualquier copia de seguridad del .env: el repo es público y un `.env.bak` guarda
+# los mismos secretos que el original. Pasó de verdad al conectar WhatsApp (20/8/2026).
+.env.*
+!.env.example
 
 /generated/prisma

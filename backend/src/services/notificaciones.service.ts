@@ -24,7 +24,24 @@ import {
 /** Qué le pasó al turno. Decide la plantilla de WhatsApp, el texto del mail y si va el
  * adjunto de calendario. Es un tipo y no un booleano porque ya son tres casos: el
  * `esReprogramacion` de la v3 se quedó corto apenas apareció la cancelación. */
-export type TipoAviso = 'confirmado' | 'reprogramado' | 'cancelado'
+/** ⚠️ La cancelación son **dos** casos y no uno, porque el mismo hecho —el turno ya no
+ * está— se cuenta distinto según quién lo dio de baja. Al que canceló con tiempo se le
+ * agradece; al que se quedó sin turno porque Ariel no puede atender se le pide disculpas.
+ * Mandarle "gracias por avisar" al segundo es absurdo, y ese es justamente el caso donde
+ * el mensaje más importa: es la única forma de que se entere de que no lo esperan.
+ *
+ * Es el mismo movimiento que ya se hizo cuando el `esReprogramacion: boolean` se quedó
+ * corto al aparecer el tercer caso: el tipo crece, no se agrega un flag al costado. */
+export type TipoAviso =
+  | 'confirmado'
+  | 'reprogramado'
+  | 'cancelado_cliente'
+  | 'cancelado_negocio'
+
+/** Los dos casos que comparten forma: sin link de gestión y con la plantilla de baja. */
+function esCancelacion(tipo: TipoAviso): boolean {
+  return tipo === 'cancelado_cliente' || tipo === 'cancelado_negocio'
+}
 
 /** Quién · qué · cuándo, la línea con la que Ariel reconoce un turno de un vistazo. */
 function resumenDelTurno(turno: Turno): string {
@@ -130,7 +147,8 @@ export function icsDeTurno(turno: Turno): string {
 const TITULO_MAIL: Record<TipoAviso, string> = {
   confirmado: 'Tu turno quedó confirmado',
   reprogramado: 'Tu turno quedó reprogramado',
-  cancelado: 'Cancelamos tu turno',
+  cancelado_cliente: 'Tu turno quedó cancelado',
+  cancelado_negocio: 'Tuve que cancelar tu turno',
 }
 
 /** Función pura — el contenido del mail de confirmación, sin tocar red.
@@ -142,14 +160,21 @@ export function construirMailConfirmacion(
   turno: Turno,
   tipo: TipoAviso,
 ): { asunto: string; html: string; texto: string } {
-  const cancelado = tipo === 'cancelado'
+  const cancelado = esCancelacion(tipo)
   const link = cancelado ? frontendUrl() : linkDeGestion(turno.id)
   const textoDelBoton = cancelado ? 'Reservar otro turno' : 'Gestionar mi turno'
   const cuando = `${formatearFechaLegible(turno.fecha)} a las ${formatearHora(turno.horaInicio)}`
   const titulo = TITULO_MAIL[tipo]
 
+  // El respaldo por mail dice lo mismo que la plantilla de WhatsApp que le corresponde:
+  // si dijera otra cosa, el cliente recibiría dos versiones del mismo hecho según qué
+  // canal le haya tocado.
   const cierre = cancelado
-    ? ['Liberamos el horario. Cuando quieras sacás otro desde el sitio.']
+    ? [
+        tipo === 'cancelado_cliente'
+          ? 'Gracias por avisar con tiempo: eso me permite darle el lugar a otra persona.'
+          : 'Perdón por el inconveniente. Cuando quieras sacás otro horario desde el sitio.',
+      ]
     : [
         'Para cancelar o reprogramar, entrá acá:',
         link,
@@ -242,14 +267,16 @@ export function construirMensajeWhatsapp(
     ConfigWhatsapp,
     | 'plantillaConfirmado'
     | 'plantillaReprogramado'
-    | 'plantillaCancelado'
+    | 'plantillaCanceladoCliente'
+    | 'plantillaCanceladoNegocio'
     | 'idioma'
   >,
 ): MensajePlantilla {
   const plantilla: Record<TipoAviso, string> = {
     confirmado: config.plantillaConfirmado,
     reprogramado: config.plantillaReprogramado,
-    cancelado: config.plantillaCancelado,
+    cancelado_cliente: config.plantillaCanceladoCliente,
+    cancelado_negocio: config.plantillaCanceladoNegocio,
   }
 
   return {
@@ -262,7 +289,9 @@ export function construirMensajeWhatsapp(
       `${formatearFechaLegible(turno.fecha)} a las ${formatearHora(turno.horaInicio)}`,
     ],
     // Solo el id: la base del link (`https://…/turno/`) es parte de la plantilla aprobada.
-    variableBotonUrl: tipo === 'cancelado' ? undefined : turno.id,
+    // Las dos plantillas de baja llevan botón de URL **estática** (el inicio del sitio),
+    // así que no declaran variable: mandarle una a Meta es un 400.
+    variableBotonUrl: esCancelacion(tipo) ? undefined : turno.id,
   }
 }
 
@@ -334,12 +363,23 @@ export async function enviarConfirmacionDeTurno(
 
 /** Le avisa al cliente que su turno quedó cancelado.
  *
- * Va por los dos caminos de baja, y por motivos distintos: cuando cancela él es el
- * comprobante de que la cancelación entró de verdad, y cuando cancela Ariel desde el
- * panel es la **única** forma de que se entere de que no lo esperan. Ese segundo caso es
- * el que hace que no alcance con la pantalla de confirmación del sitio. */
-export async function enviarAvisoDeCancelacion(turno: Turno): Promise<void> {
-  await enviarAvisoDeTurno(turno, 'cancelado')
+ * ⚠️ **Quién canceló es un parámetro obligatorio, no un default.** Va por los tres caminos
+ * de baja y el mensaje no es el mismo: cuando cancela el cliente es el comprobante de que
+ * la baja entró y se le agradece haber avisado; cuando cancela Ariel es la **única** forma
+ * de que se entere de que no lo esperan, y ahí se le pide disculpas. Un default silencioso
+ * haría que un llamador nuevo mandara el mensaje equivocado sin que nada lo delate.
+ *
+ * Que Ariel dé de baja a alguien que le avisó por teléfono cuenta como `'negocio'`: el
+ * agradecimiento ya se lo dio él en esa llamada, y lo que el mensaje tiene que dejar por
+ * escrito es que el turno no está más. */
+export async function enviarAvisoDeCancelacion(
+  turno: Turno,
+  quienCancelo: 'cliente' | 'negocio',
+): Promise<void> {
+  await enviarAvisoDeTurno(
+    turno,
+    quienCancelo === 'cliente' ? 'cancelado_cliente' : 'cancelado_negocio',
+  )
 }
 
 /** CU-03 — Los avisos de una cancelación en masa: Ariel bloquea un rango y se lleva puestos
@@ -358,15 +398,17 @@ export async function enviarAvisoDeCancelacion(turno: Turno): Promise<void> {
  * Cada envío se traga sus propios errores (`intentarAvisoPorWhatsapp` y `enviarAvisoPorMail`
  * loguean y siguen), así que un turno sin teléfono ni mail no corta la lista para el resto.
  *
- * ⚠️ El mensaje **no dice por qué** se canceló: la plantilla `turno_cancelado` está aprobada
- * con tres variables (nombre, servicio, cuándo) y no tiene lugar para el motivo. Agregárselo
+ * Siempre es `'negocio'`: nadie de esta lista pidió que lo dieran de baja.
+ *
+ * ⚠️ El mensaje **no dice por qué** se canceló: la plantilla está aprobada con tres
+ * variables (nombre, servicio, cuándo) y no tiene lugar para el motivo. Agregárselo
  * es volver a pasar por la aprobación de Meta, así que queda para cuando haya otro cambio de
  * plantilla que lo justifique. */
 export async function enviarAvisosDeCancelacionEnMasa(
   turnos: Turno[],
 ): Promise<void> {
   for (const turno of turnos) {
-    await enviarAvisoDeCancelacion(turno)
+    await enviarAvisoDeCancelacion(turno, 'negocio')
   }
 }
 
@@ -400,7 +442,7 @@ async function enviarAvisoPorMail(
       html,
       texto,
       adjuntos:
-        tipo === 'cancelado'
+        esCancelacion(tipo)
           ? []
           : [
               {

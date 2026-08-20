@@ -104,7 +104,9 @@ export interface ConfigWhatsapp {
   phoneNumberId: string | null
   plantillaConfirmado: string
   plantillaReprogramado: string
-  plantillaCancelado: string
+  /** Son **dos** plantillas y no una: ver `TipoAviso` en notificaciones.service. */
+  plantillaCanceladoCliente: string
+  plantillaCanceladoNegocio: string
   idioma: string
   version: string
 }
@@ -136,12 +138,19 @@ export function configWhatsapp(): ConfigWhatsapp {
   return {
     token,
     phoneNumberId,
+    // ⚠️ `_v2` no es un typo: el nombre `turno_confirmado` quedó bloqueado del lado de
+    // Meta al borrar la plantilla anterior para editarle una palabra. Ver
+    // Docs/plantillas-whatsapp.md — una plantilla se edita, no se borra y se recrea.
     plantillaConfirmado:
-      process.env.WHATSAPP_PLANTILLA_CONFIRMADO || 'turno_confirmado',
+      process.env.WHATSAPP_PLANTILLA_CONFIRMADO || 'turno_confirmado_v2',
     plantillaReprogramado:
       process.env.WHATSAPP_PLANTILLA_REPROGRAMADO || 'turno_reprogramado',
-    plantillaCancelado:
-      process.env.WHATSAPP_PLANTILLA_CANCELADO || 'turno_cancelado',
+    plantillaCanceladoCliente:
+      process.env.WHATSAPP_PLANTILLA_CANCELADO_CLIENTE ||
+      'turno_cancelado_cliente',
+    plantillaCanceladoNegocio:
+      process.env.WHATSAPP_PLANTILLA_CANCELADO_NEGOCIO ||
+      'turno_cancelado_negocio',
     idioma: process.env.WHATSAPP_IDIOMA || 'es_AR',
     version: process.env.WHATSAPP_API_VERSION || 'v23.0',
   }
