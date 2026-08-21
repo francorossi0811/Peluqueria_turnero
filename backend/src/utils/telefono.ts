@@ -22,10 +22,25 @@ import {
 
 /** Pasa un teléfono escrito por una persona a E.164 sin el `+`, que es como lo quiere la
  * Cloud API (`5493514593325`). Devuelve `null` si no se puede interpretar como un número
- * válido — el llamador tiene que tratar eso como "no hay a dónde mandar". */
-export function aE164(valor: string): string | null {
+ * válido — el llamador tiene que tratar eso como "no hay a dónde mandar".
+ *
+ * ⚠️ `conNueve: false` es **solo para enviar** por el número de prueba de Meta, cuya lista
+ * de destinatarios autorizados guarda los números sin el `9` y compara literal: un envío a
+ * `549…` rebota con `131030` aunque Meta después resuelva ese mismo destino. Lo enciende
+ * `WHATSAPP_NUMERO_DE_PRUEBA` y no tiene ningún sentido con el número real.
+ *
+ * ⚠️⚠️ **Nunca pasar `conNueve: false` desde `clientes.service`.** Ahí el resultado es la
+ * identidad del cliente (`clientes.telefono_e164`), no un destino: cambiarlo haría que la
+ * misma persona se convierta en dos fichas distintas según cuándo se la haya guardado. El
+ * default es `true` justamente para que el que no sabe de esto no se lo lleve puesto. */
+export function aE164(
+  valor: string,
+  opciones: { conNueve?: boolean } = {},
+): string | null {
   const numero = parsePhoneNumberFromString(valor, 'AR')
   if (!numero || !numero.isValid()) return null
+
+  if (opciones.conNueve === false) return sinNueveDeCelular(numero)
 
   // `.number` viene como `+549...`; WhatsApp quiere los dígitos pelados.
   return (conNueveDeCelular(numero) ?? numero).number.slice(1)
@@ -52,6 +67,20 @@ export function aE164(valor: string): string | null {
  * lo que queda es el número sin el `9`, o sea el formato al que WhatsApp con seguridad no
  * llega. Un chequeo que en el mejor caso no cambia nada y en el peor nos deja peor no vale
  * la pena. */
+/** El inverso de `conNueveDeCelular`: saca el `9` si está.
+ *
+ * No alcanza con "no agregarlo". Cuando la persona escribe el `15` (`0351 15 616 7991`),
+ * `libphonenumber-js` ya devuelve `+549…` por su cuenta, así que omitir nuestro paso no
+ * cambia nada. La lista de autorizados del número de prueba guarda el número **sin** el
+ * `9` sea como sea que se lo haya tipeado, así que hay que quitarlo activamente. */
+function sinNueveDeCelular(numero: PhoneNumber): string {
+  const nacional = numero.nationalNumber
+  if (numero.country !== 'AR' || !nacional.startsWith('9')) {
+    return numero.number.slice(1)
+  }
+  return `54${nacional.slice(1)}`
+}
+
 function conNueveDeCelular(numero: PhoneNumber): PhoneNumber | null {
   if (numero.country !== 'AR') return null
   if (numero.nationalNumber.startsWith('9')) return null

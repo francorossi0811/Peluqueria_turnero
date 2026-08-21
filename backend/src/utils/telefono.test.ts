@@ -64,3 +64,20 @@ describe('aE164', () => {
     expect(aE164('00000000')).toBeNull()
   })
 })
+
+describe('aE164 con conNueve: false (número de prueba de Meta)', () => {
+  // ⚠️ Este modo existe solo porque la lista de autorizados del número de prueba guarda
+  // los números sin el 9 y compara literal. No sirve para nada con el número real.
+  it('no agrega el 9 de celular cuando se lo piden', () => {
+    expect(aE164('351 616 7991', { conNueve: false })).toBe('543516167991')
+    expect(aE164('0351 15 616 7991', { conNueve: false })).toBe('543516167991')
+  })
+
+  // ⚠️⚠️ El que decide es el default. `clientes.service` calcula la identidad del cliente
+  // con esta misma función y NO pasa opciones: si el default fuera "sin 9", la misma
+  // persona quedaría como dos fichas distintas según cuándo se la guardó.
+  it('por defecto sigue agregando el 9', () => {
+    expect(aE164('351 616 7991')).toBe('5493516167991')
+    expect(aE164('351 616 7991', {})).toBe('5493516167991')
+  })
+})
