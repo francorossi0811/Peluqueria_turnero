@@ -190,6 +190,14 @@ function turnoADto(turno: TurnoConCliente) {
   return {
     id: turno.id,
     estado: turno.estado,
+    // El nombre con el que reservó. No es abrir un dato nuevo: el que tiene este link ya
+    // ve el turno entero, y el nombre es el suyo — al revés que el teléfono o el mail,
+    // que son datos de contacto y siguen siendo solo de admin (`turnoAdminDto`).
+    //
+    // Está acá porque los mensajes de WhatsApp que arma el cliente empiezan con "soy
+    // ___", y la pantalla de gestión es el único lugar donde ese nombre no se tipeó en
+    // esta sesión. Sin esto la cancelación y la reprogramación salían sin firmar.
+    clienteNombre: turno.clienteNombre,
     fecha: formatearFecha(turno.fecha),
     hora: formatearHora(turno.horaInicio),
     servicio: {
@@ -218,7 +226,7 @@ function turnoAdminDto(turno: TurnoConCliente) {
   return {
     ...turnoADto(turno),
     horaFin: formatearHora(turno.horaFin),
-    clienteNombre: turno.clienteNombre,
+    // `clienteNombre` ya viene de `turnoADto` desde el 21/8/2026; acá se repetía.
     clienteTelefono: turno.clienteTelefono,
     clienteEmail: turno.clienteEmail,
     origen: turno.origen,

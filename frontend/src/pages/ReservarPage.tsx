@@ -8,10 +8,13 @@ import { GrillaHorarios } from '../components/GrillaHorarios'
 import { Landing } from '../components/Landing'
 import { obtenerServicios } from '../api/servicios'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
-import { crearTurno, enviarConfirmacion, urlCalendario } from '../api/turnos'
+import { crearTurno } from '../api/turnos'
+// Los usa `PasoConfirmacion`, que está comentado más abajo — ver la nota de ahí.
+// import { enviarConfirmacion, urlCalendario } from '../api/turnos'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import { formatearPesos } from '../utils/dinero'
 import { WHATSAPP_URL } from '../utils/contacto'
+import { whatsappDeTurno } from '../utils/mensajesWhatsapp'
 import {
   esEmailValido,
   esNombreValido,
@@ -20,13 +23,15 @@ import {
   MENSAJE_NOMBRE_INVALIDO,
   MENSAJE_TELEFONO_INVALIDO,
 } from '../utils/validaciones'
-import type { DisponibilidadDia, ErrorApi, Servicio, Turno } from '../types/api'
+import type { DisponibilidadDia, ErrorApi, Servicio } from '../types/api'
+// import type { Turno } from '../types/api' // lo usa `PasoConfirmacion`, comentado abajo
 
 type Paso = 'servicio' | 'horario' | 'datos' | 'confirmacion'
 
 const DIAS_A_MOSTRAR = 14
 
-const INPUT_BASE = 'rounded-md border px-3 py-2 outline-none bg-superficie text-tinta'
+const INPUT_BASE =
+  'rounded-md border px-3 py-2 outline-none bg-superficie text-tinta'
 
 function claseInput(conError: boolean): string {
   return conError
@@ -48,7 +53,11 @@ export function ReservarPage() {
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteEmail, setClienteEmail] = useState('')
-  const [turnoCreado, setTurnoCreado] = useState<Turno | null>(null)
+  // const [turnoCreado, setTurnoCreado] = useState<Turno | null>(null)
+  // Entre que la mutación resuelve y el navegador se va a WhatsApp pasa un rato en el
+  // que `isPending` ya es `false`: sin esto el botón vuelve a decir "Confirmar por
+  // WhatsApp" y queda invitando a un segundo click que crearía un segundo turno.
+  const [redirigiendo, setRedirigiendo] = useState(false)
   const [errorHorario, setErrorHorario] = useState<string | null>(null)
   // El rechazo del teléfono que solo sabe el backend. Ver el `onError` de la mutación.
   const [errorTelefonoServidor, setErrorTelefonoServidor] = useState<
@@ -84,11 +93,30 @@ export function ReservarPage() {
 
   const crearTurnoMutation = useMutation({
     mutationFn: crearTurno,
+    // El turno YA quedó reservado acá: tiene su fila, su horario tomado y su link. Lo
+    // que sigue no es confirmarlo —eso lo hizo el backend— sino avisarle a Ariel por el
+    // canal que él usa. Mientras la Cloud API de Meta no esté conectada, el aviso lo
+    // manda el cliente desde su propio WhatsApp con el texto ya escrito.
+    //
+    // ⚠️ Se va con `location.href` y no con `window.open`: esto corre dentro del callback
+    // de una promesa, o sea fuera del gesto del usuario, y ahí Safari y compañía bloquean
+    // la pestaña nueva. En el celular —que es donde está casi todo el mundo— esto abre la
+    // app de WhatsApp y el navegador se queda atrás con la página intacta.
+    //
+    // Y si la redirección igual no pasara, el turno no se pierde: existe en la agenda de
+    // Ariel y su link viaja adentro del mensaje.
     onSuccess: (turno) => {
-      setTurnoCreado(turno)
-      setPaso('confirmacion')
+      setRedirigiendo(true)
+      window.location.href = whatsappDeTurno('confirmado', {
+        nombre: clienteNombre,
+        servicio: turno.servicio.nombre,
+        fecha: turno.fecha,
+        hora: turno.hora,
+        link: `${window.location.origin}/turno/${turno.id}`,
+      })
     },
     onError: (err) => {
+      setRedirigiendo(false)
       const datos = isAxiosError<ErrorApi>(err)
         ? err.response?.data.error
         : null
@@ -159,7 +187,8 @@ export function ReservarPage() {
     setClienteNombre('')
     setClienteTelefono('')
     setClienteEmail('')
-    setTurnoCreado(null)
+    // setTurnoCreado(null)
+    setRedirigiendo(false)
     setErrorHorario(null)
     setErrorReserva(null)
     window.scrollTo({ top: 0 })
@@ -228,7 +257,7 @@ export function ReservarPage() {
             nombre={clienteNombre}
             telefono={clienteTelefono}
             email={clienteEmail}
-            enviando={crearTurnoMutation.isPending}
+            enviando={crearTurnoMutation.isPending || redirigiendo}
             errorTelefonoServidor={errorTelefonoServidor}
             errorReserva={errorReserva}
             onNombreChange={setClienteNombre}
@@ -249,6 +278,18 @@ export function ReservarPage() {
           />
         )}
 
+        {/* ⚠️ La pantalla "¡Listo, {nombre}!" está COMENTADA, no borrada — igual que la
+            sección Beneficios de la landing, y por el mismo motivo: es la pantalla que
+            corresponde el día que los avisos salgan solos desde el backend. Hoy no sale
+            ninguno, así que el aviso lo manda el cliente desde su WhatsApp y el paso
+            'confirmacion' no se llega a renderizar nunca: `onSuccess` se va del sitio.
+
+            Para volver a prenderla hay que descomentar CUATRO cosas, que van juntas:
+            este bloque, el estado `turnoCreado`, los componentes `PasoConfirmacion` y
+            `PedirMail` del final del archivo, y sus imports de arriba
+            (`enviarConfirmacion`, `urlCalendario`, el tipo `Turno`). Y sacar la
+            redirección del `onSuccess`, claro.
+
         {paso === 'confirmacion' && turnoCreado && (
           <PasoConfirmacion
             turno={turnoCreado}
@@ -257,7 +298,7 @@ export function ReservarPage() {
             email={clienteEmail.trim()}
             onVolverAlInicio={volverAlInicio}
           />
-        )}
+        )} */}
       </div>
     </main>
   )
@@ -451,8 +492,7 @@ function PasoDatos({
             <ErrorCampo>{errorTelefono}</ErrorCampo>
           ) : (
             <span className="text-tinta-tenue text-xs">
-              Te mandamos la confirmación con el link de tu turno por WhatsApp a
-              este número.
+              Es con lo que Ariel te ubica si hace falta reprogramar.
             </span>
           )}
         </label>
@@ -476,9 +516,7 @@ function PasoDatos({
             <ErrorCampo>{errores.email}</ErrorCampo>
           ) : (
             <span className="text-tinta-tenue text-xs">
-              Por si el WhatsApp no llega: te mandamos el link por mail y el
-              turno para tu calendario. Si no ponés, te lo podemos mandar
-              después.
+              Por si querés tenerlo también por mail.
             </span>
           )}
         </label>
@@ -508,169 +546,191 @@ function PasoDatos({
             disabled={enviando}
             className={`${BTN_OUTLINE} flex-1 disabled:cursor-not-allowed disabled:opacity-50`}
           >
-            {enviando ? 'Confirmando…' : 'Confirmar turno'}
+            {enviando ? 'Abriendo WhatsApp…' : 'Confirmar por WhatsApp'}
           </button>
         </div>
+        {/* Lo que hace el botón, dicho antes de tocarlo. El turno queda reservado igual
+            en el momento del click —el mensaje no es lo que lo confirma— pero avisarle a
+            Ariel por su canal es lo que él pidió, y el link viaja adentro del mensaje:
+            mandarlo es también la forma de que al cliente le quede guardado. */}
         <p className="text-tinta-tenue text-center text-xs">
-          Sin cuenta ni contraseña — tu turno se gestiona con un link único.
+          Te abrimos WhatsApp con el mensaje ya escrito para Ariel, con el link
+          de tu turno adentro. Sin cuenta ni contraseña.
         </p>
       </form>
     </div>
   )
 }
 
-function PasoConfirmacion({
-  turno,
-  nombre,
-  telefono,
-  email,
-  onVolverAlInicio,
-}: {
-  turno: Turno
-  nombre: string
-  telefono: string
-  email: string
-  onVolverAlInicio: () => void
-}) {
-  const [copiado, setCopiado] = useState(false)
-  // Si no dejó mail al reservar, puede cargarlo acá (HU-19). Una vez enviado, esta
-  // pantalla se comporta igual que si lo hubiera dejado desde el principio.
-  const [emailCargado, setEmailCargado] = useState<string | null>(null)
-  const emailDelTurno = email || emailCargado
-  const link = `${window.location.origin}/turno/${turno.id}`
-
-  return (
-    <div className="mx-auto max-w-[56ch] text-center">
-      <Kicker>Turno confirmado</Kicker>
-      <h1 className="font-hero text-tinta mb-4 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
-        ¡Listo, {nombre}!
-      </h1>
-      <p className="font-body text-tinta mb-2 text-lg">
-        {turno.servicio.nombre}
-        {turno.servicio.precio !== null &&
-          ` · ${formatearPesos(turno.servicio.precio)}`}
-      </p>
-      <p className="font-body text-tinta mb-2 text-lg">
-        {fechaLegible(turno.fecha)} · {turno.hora}
-      </p>
-      <p className="font-body text-tinta mb-4 opacity-75">
-        Te contactaremos al {telefono} si hace falta reprogramar.
-      </p>
-
-      {/* Con mail, el link no se muestra: ya le llegó a la casilla y ahí no se pierde.
-          Mostrarlo igual invitaría a copiarlo a mano, que es justo el paso que el mail
-          viene a sacar. Sin mail, el link es lo único que tiene, así que va bien
-          visible y con botón para copiarlo. */}
-      {emailDelTurno ? (
-        <p className="border-borde bg-superficie-2 text-tinta mt-2 rounded-md border px-3 py-2 text-left text-sm">
-          Te mandamos el link para gestionar tu turno a{' '}
-          <strong>{emailDelTurno}</strong>. Con ese link podés cancelar o
-          reprogramar hasta 60 minutos antes. Si no lo ves, fijate en spam.
-        </p>
-      ) : (
-        <>
-          <label className="text-tinta-tenue mb-2 block text-left text-xs tracking-wide uppercase">
-            Tu link para gestionar el turno
-          </label>
-          <div className="border-borde bg-superficie-2 text-tinta mb-3 truncate rounded-md border px-3 py-2 text-left text-sm">
-            {link}
-          </div>
-          <button
-            className={`${BTN_OUTLINE} w-full`}
-            onClick={() => {
-              void navigator.clipboard.writeText(link)
-              setCopiado(true)
-            }}
-          >
-            {copiado ? 'Copiado ✓' : 'Copiar link'}
-          </button>
-
-          <PedirMail turnoId={turno.id} onEnviado={setEmailCargado} />
-        </>
-      )}
-
-      {/* Va al final y no arriba: lo primero que el cliente necesita saber es que el
-          turno quedó y cómo lo va a gestionar. Guardarlo en el calendario es el paso
-          siguiente, opcional. */}
-      <a href={urlCalendario(turno.id)} className={`${BTN_OUTLINE} mt-6 w-full`}>
-        Agregar a mi calendario
-      </a>
-
-      <button
-        onClick={onVolverAlInicio}
-        className={`${BTN_GHOST} mt-4 inline-flex`}
-      >
-        Volver al inicio
-      </button>
-    </div>
-  )
-}
-
-/** HU-19 — Segunda oportunidad para dejar el mail, para el que reservó sin ponerlo.
- *
- * Va acá y no en otro lado porque este es el momento en que el cliente está mirando su
- * link y cae en la cuenta de que lo puede perder. El backend lo acepta una sola vez por
- * turno (ver `guardarEmailDelCliente`), así que este bloque desaparece al enviarlo. */
-function PedirMail({
-  turnoId,
-  onEnviado,
-}: {
-  turnoId: string
-  onEnviado: (email: string) => void
-}) {
-  const [email, setEmail] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  const mutation = useMutation({
-    mutationFn: () => enviarConfirmacion(turnoId, email.trim()),
-    onSuccess: (data) => onEnviado(data.email),
-    onError: (err) => {
-      setError(
-        (isAxiosError<ErrorApi>(err) && err.response?.data.error.mensaje) ||
-          'No pudimos mandarte el mail. Probá de nuevo.',
-      )
-    },
-  })
-
-  return (
-    <form
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (!esEmailValido(email)) {
-          setError(MENSAJE_EMAIL_INVALIDO)
-          return
-        }
-        setError(null)
-        mutation.mutate()
-      }}
-      className="border-borde bg-superficie-2 mt-4 rounded-md border p-3 text-left"
-    >
-      <p className="text-tinta text-sm">
-        ¿Querés que te lo mandemos por mail? Así no dependés de guardar el link
-        ahora.
-      </p>
-      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-        <input
-          type="email"
-          inputMode="email"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value)
-            setError(null)
-          }}
-          placeholder="Ej: juan@gmail.com"
-          className={`${claseInput(Boolean(error))} flex-1`}
-        />
-        <button
-          type="submit"
-          disabled={mutation.isPending}
-          className={`${BTN_OUTLINE} disabled:cursor-not-allowed disabled:opacity-50`}
-        >
-          {mutation.isPending ? 'Enviando…' : 'Mandámelo'}
-        </button>
-      </div>
-      {error && <p className="text-vino mt-2 text-xs">{error}</p>}
-    </form>
-  )
-}
+// ⚠️ COMENTADO, NO BORRADO — la pantalla de confirmación y el pedido de mail.
+//
+// Las dos son el final del flujo que existía cuando el sistema le avisaba al cliente
+// solo: le mostraba su link, le ofrecía mandárselo por mail y le daba el .ics. Hoy el
+// aviso lo manda el cliente por WhatsApp desde el paso de datos, así que a este código
+// no se llega.
+//
+// Se conserva entero porque el día que Meta apruebe la conexión con el número de Ariel
+// —o que se valide el remitente de Brevo y el mail vuelva a entregarse— esta es la
+// pantalla que corresponde, y rehacerla sería trabajo tirado. Es el mismo criterio que
+// la sección Beneficios de la landing.
+//
+// Va comentado línea por línea y no con /* */ porque el bloque tiene comentarios JSX
+// adentro: el primer cierre de comentario lo partiría al medio.
+//
+// Para prenderlo de nuevo, ver la nota del bloque comentado dentro de `ReservarPage`:
+// son cuatro cosas que van juntas, no solo esta.
+// function PasoConfirmacion({
+//   turno,
+//   nombre,
+//   telefono,
+//   email,
+//   onVolverAlInicio,
+// }: {
+//   turno: Turno
+//   nombre: string
+//   telefono: string
+//   email: string
+//   onVolverAlInicio: () => void
+// }) {
+//   const [copiado, setCopiado] = useState(false)
+//   // Si no dejó mail al reservar, puede cargarlo acá (HU-19). Una vez enviado, esta
+//   // pantalla se comporta igual que si lo hubiera dejado desde el principio.
+//   const [emailCargado, setEmailCargado] = useState<string | null>(null)
+//   const emailDelTurno = email || emailCargado
+//   const link = `${window.location.origin}/turno/${turno.id}`
+//
+//   return (
+//     <div className="mx-auto max-w-[56ch] text-center">
+//       <Kicker>Turno confirmado</Kicker>
+//       <h1 className="font-hero text-tinta mb-4 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
+//         ¡Listo, {nombre}!
+//       </h1>
+//       <p className="font-body text-tinta mb-2 text-lg">
+//         {turno.servicio.nombre}
+//         {turno.servicio.precio !== null &&
+//           ` · ${formatearPesos(turno.servicio.precio)}`}
+//       </p>
+//       <p className="font-body text-tinta mb-2 text-lg">
+//         {fechaLegible(turno.fecha)} · {turno.hora}
+//       </p>
+//       <p className="font-body text-tinta mb-4 opacity-75">
+//         Te contactaremos al {telefono} si hace falta reprogramar.
+//       </p>
+//
+//       {/* Con mail, el link no se muestra: ya le llegó a la casilla y ahí no se pierde.
+//           Mostrarlo igual invitaría a copiarlo a mano, que es justo el paso que el mail
+//           viene a sacar. Sin mail, el link es lo único que tiene, así que va bien
+//           visible y con botón para copiarlo. */}
+//       {emailDelTurno ? (
+//         <p className="border-borde bg-superficie-2 text-tinta mt-2 rounded-md border px-3 py-2 text-left text-sm">
+//           Te mandamos el link para gestionar tu turno a{' '}
+//           <strong>{emailDelTurno}</strong>. Con ese link podés cancelar o
+//           reprogramar hasta 60 minutos antes. Si no lo ves, fijate en spam.
+//         </p>
+//       ) : (
+//         <>
+//           <label className="text-tinta-tenue mb-2 block text-left text-xs tracking-wide uppercase">
+//             Tu link para gestionar el turno
+//           </label>
+//           <div className="border-borde bg-superficie-2 text-tinta mb-3 truncate rounded-md border px-3 py-2 text-left text-sm">
+//             {link}
+//           </div>
+//           <button
+//             className={`${BTN_OUTLINE} w-full`}
+//             onClick={() => {
+//               void navigator.clipboard.writeText(link)
+//               setCopiado(true)
+//             }}
+//           >
+//             {copiado ? 'Copiado ✓' : 'Copiar link'}
+//           </button>
+//
+//           <PedirMail turnoId={turno.id} onEnviado={setEmailCargado} />
+//         </>
+//       )}
+//
+//       {/* Va al final y no arriba: lo primero que el cliente necesita saber es que el
+//           turno quedó y cómo lo va a gestionar. Guardarlo en el calendario es el paso
+//           siguiente, opcional. */}
+//       <a href={urlCalendario(turno.id)} className={`${BTN_OUTLINE} mt-6 w-full`}>
+//         Agregar a mi calendario
+//       </a>
+//
+//       <button
+//         onClick={onVolverAlInicio}
+//         className={`${BTN_GHOST} mt-4 inline-flex`}
+//       >
+//         Volver al inicio
+//       </button>
+//     </div>
+//   )
+// }
+//
+// /** HU-19 — Segunda oportunidad para dejar el mail, para el que reservó sin ponerlo.
+//  *
+//  * Va acá y no en otro lado porque este es el momento en que el cliente está mirando su
+//  * link y cae en la cuenta de que lo puede perder. El backend lo acepta una sola vez por
+//  * turno (ver `guardarEmailDelCliente`), así que este bloque desaparece al enviarlo. */
+// function PedirMail({
+//   turnoId,
+//   onEnviado,
+// }: {
+//   turnoId: string
+//   onEnviado: (email: string) => void
+// }) {
+//   const [email, setEmail] = useState('')
+//   const [error, setError] = useState<string | null>(null)
+//
+//   const mutation = useMutation({
+//     mutationFn: () => enviarConfirmacion(turnoId, email.trim()),
+//     onSuccess: (data) => onEnviado(data.email),
+//     onError: (err) => {
+//       setError(
+//         (isAxiosError<ErrorApi>(err) && err.response?.data.error.mensaje) ||
+//           'No pudimos mandarte el mail. Probá de nuevo.',
+//       )
+//     },
+//   })
+//
+//   return (
+//     <form
+//       noValidate
+//       onSubmit={(e) => {
+//         e.preventDefault()
+//         if (!esEmailValido(email)) {
+//           setError(MENSAJE_EMAIL_INVALIDO)
+//           return
+//         }
+//         setError(null)
+//         mutation.mutate()
+//       }}
+//       className="border-borde bg-superficie-2 mt-4 rounded-md border p-3 text-left"
+//     >
+//       <p className="text-tinta text-sm">
+//         ¿Querés que te lo mandemos por mail? Así no dependés de guardar el link
+//         ahora.
+//       </p>
+//       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+//         <input
+//           type="email"
+//           inputMode="email"
+//           value={email}
+//           onChange={(e) => {
+//             setEmail(e.target.value)
+//             setError(null)
+//           }}
+//           placeholder="Ej: juan@gmail.com"
+//           className={`${claseInput(Boolean(error))} flex-1`}
+//         />
+//         <button
+//           type="submit"
+//           disabled={mutation.isPending}
+//           className={`${BTN_OUTLINE} disabled:cursor-not-allowed disabled:opacity-50`}
+//         >
+//           {mutation.isPending ? 'Enviando…' : 'Mandámelo'}
+//         </button>
+//       </div>
+//       {error && <p className="text-vino mt-2 text-xs">{error}</p>}
+//     </form>
+//   )
+// }

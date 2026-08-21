@@ -52,6 +52,14 @@ const NAV: {
 export function AdminLayout() {
   const location = useLocation()
 
+  // La agenda va a ancho completo y el resto del panel se queda en `max-w-5xl`. No es
+  // capricho: la grilla semanal son cinco columnas de turnos y cada píxel que gana es
+  // nombre que se lee sin recortar, mientras que en Cobros o Clientes ensanchar solo
+  // haría renglones larguísimos en un monitor grande. El header acompaña al `main`
+  // para que el nav no quede alineado contra otra cosa.
+  const esAgenda = location.pathname === '/admin'
+  const anchoDelContenido = esAgenda ? 'w-full' : 'mx-auto max-w-5xl'
+
   // El rol, para saber qué ítems del nav mostrar. `staleTime` largo: no cambia durante
   // una sesión, y esta query la comparten el nav, "Mi cuenta" y "Administradores".
   const meQuery = useQuery({
@@ -76,7 +84,9 @@ export function AdminLayout() {
   return (
     <div className="bg-fondo min-h-screen">
       <header className="border-borde border-b">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+        <div
+          className={`flex flex-wrap items-center justify-between gap-4 px-6 py-4 ${anchoDelContenido}`}
+        >
           {/* Solo el nombre del local. "Panel de Ariel" ya lo dice el kicker de cada
               página, y repetirlo acá arriba no aporta: si está viendo esta pantalla,
               sabe perfectamente en qué panel está. */}
@@ -102,7 +112,7 @@ export function AdminLayout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-6 py-8">
+      <main className={`px-6 py-8 ${anchoDelContenido}`}>
         <Outlet />
       </main>
     </div>
