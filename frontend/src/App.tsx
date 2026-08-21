@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { ReservarPage } from './pages/ReservarPage'
 import { GestionTurnoPage } from './pages/GestionTurnoPage'
+import { PrivacidadPage } from './pages/PrivacidadPage'
+import { EliminarDatosPage } from './pages/EliminarDatosPage'
 import { LoginPage } from './pages/admin/LoginPage'
 import { RestablecerPage } from './pages/admin/RestablecerPage'
 import { AdministradoresPage } from './pages/admin/AdministradoresPage'
@@ -30,13 +32,17 @@ function App() {
       <Route path="/" element={<ReservarPage />} />
       <Route path="/turno/:id" element={<GestionTurnoRoute />} />
 
+      {/* Las dos páginas legales que exige Meta para habilitar la Cloud API de WhatsApp.
+          Van sueltas, fuera de `RequireAuth` y fuera del wizard de `ReservarPage`: Meta
+          abre estas URLs directo, sin sesión y sin pasar por el inicio, así que tienen
+          que renderizar solas. El deep link lo sostiene el rewrite de `vercel.json`. */}
+      <Route path="/privacidad" element={<PrivacidadPage />} />
+      <Route path="/eliminar-datos" element={<EliminarDatosPage />} />
+
       <Route path="/admin/login" element={<LoginPage />} />
       {/* HU-26 — Fuera de `RequireAuth` a propósito: quien llega acá es justamente
           alguien que no puede entrar. El token de la URL es la credencial. */}
-      <Route
-        path="/admin/restablecer/:token"
-        element={<RestablecerPage />}
-      />
+      <Route path="/admin/restablecer/:token" element={<RestablecerPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AdminLayout />}>
           <Route path="/admin" element={<AgendaPage />} />

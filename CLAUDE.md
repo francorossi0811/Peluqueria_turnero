@@ -540,6 +540,126 @@ limpieza del `useEffect` no es opcional: sin ella queda un listener vivo por cad
 Ojo con una expectativa que **no** se cumplió: la barra a 375 px pasó de **tres renglones a dos**,
 no a uno. Los dos botones miden 167 y 174 px y no entran juntos en los 327 px útiles.
 
+### WhatsApp por link `wa.me` (21/8/2026) — el camino que no depende de Meta ✅
+
+Pedido de Franco, con el motivo dicho: **puede que la conexión con la Cloud API no se pueda
+hacer**, así que el aviso lo manda el cliente desde su propio WhatsApp con el texto ya escrito.
+Es un link, no una integración: no toca el backend, no depende del token, y el día que la API
+ande queda como respaldo para el envío que falle.
+
+- ⚠️ **Los mensajes van por `api.whatsapp.com/send`, NO por `wa.me`, y eso no es capricho:
+  `wa.me` rompe todo carácter que no entre en latin-1.** Su redirección decodifica el `text`
+  como latin-1 y lo vuelve a encodear, así que **cada emoji sale convertido en `%EF%BF%BD`** —el
+  rombito con el signo de pregunta— y es eso lo que recibe Ariel. Medido, no supuesto: mandando
+  `A 👇 B é C` por `wa.me` llega `A � B é C`; la `é` sobrevive porque **sí** es latin-1, el emoji
+  no. Y no alcanza con elegir un emoji "más chico": `⬇️` y `☝`, que son de 3 bytes y no de 4,
+  también se rompen. Por la URL directa el `%F0%9F%91%87` llega entero. `WHATSAPP_URL` sigue
+  siendo `wa.me` para los links **sin texto** (la landing, el botón de contacto), donde no hay
+  nada que romper.
+  - 🚧 **Falta una comprobación en un celular de verdad**: la página de respaldo de
+    `api.whatsapp.com` **dibuja** el emoji mal en su vista previa aunque la URL lo lleve bien, así
+    que su render no sirve de prueba. Lo que importa es lo que recibe la app.
+- ⚠️ **`turnos.clienteNombre` pasó a salir por el DTO público** (`turnoADto`). Los cuatro
+  mensajes empiezan con "soy ___" y la pantalla de gestión era el único lugar donde ese nombre no
+  se había tipeado en la sesión: sin esto la cancelación y la reprogramación salían sin firmar.
+  No abre un dato nuevo —el que tiene el link ya ve el turno entero y el nombre es el suyo—, al
+  revés que el teléfono y el mail, que siguen siendo solo de admin. Es una **enmienda** a la nota
+  de más arriba que decía que agregarlo no compensaba: compensa cuando el mensaje lo firma.
+- ⚠️ **El de cancelación NO lleva el link** y termina en "Lo lamento.". Un turno cancelado no se
+  gestiona: mandarle el link sería invitarlo a una pantalla donde no hay nada para hacer. Es la
+  misma razón por la que el mail de cancelación no lleva el `.ics`.
+- **`frontend/src/utils/mensajesWhatsapp.ts`** (nuevo) — los mensajes en un solo lugar, con
+  el mismo criterio que `Docs/plantillas-whatsapp.md` del lado del backend: el texto no se
+  escribe en el JSX. Es su espejo — allá los mensajes que el negocio le manda al cliente, acá
+  los que el cliente le manda al negocio. `whatsappCon()` vive en `contacto.ts`, donde ya estaba
+  el número.
+- ⚠️ **El link de gestión viaja adentro del mensaje** (pedido de Franco). No es un secreto frente
+  a Ariel: ve todos los turnos desde el panel. Y tiene un efecto lateral bueno — mandar el
+  mensaje es también la forma de que al cliente le quede el link guardado en su propio chat,
+  que es justo lo que hacía la pantalla de confirmación que se apagó.
+- ⚠️ **El nombre del cliente NO está en la pantalla de gestión.** El DTO público (`Turno`) no
+  trae `clienteNombre` y no se le agregó: publicar un dato personal de más por una línea de
+  cortesía no compensa, y servicio + fecha + hora + link identifican el turno igual. Por eso
+  `DatosDelTurno.nombre` es opcional — en `ReservarPage` sí va (lo tiene el formulario).
+- ⚠️ **`encodeURIComponent` no es un detalle**: los mensajes llevan tildes, el `·` de los
+  separadores, saltos de línea y una URL con `/`. Sin codificar el texto llega cortado en el
+  primer `&`. Verificado con el ida y vuelta `encode`/`decode` en el navegador.
+- ⚠️ **La redirección va con `location.href`, nunca con `window.open`.** Corre dentro del
+  `onSuccess` de la mutación, o sea fuera del gesto del usuario, y ahí Safari bloquea la pestaña
+  nueva. En el celular esto abre la app de WhatsApp y deja el navegador atrás con la página
+  intacta. Hay un `redirigiendo` aparte de `isPending` porque entre que la mutación resuelve y
+  el navegador se va hay un rato en el que el botón volvía a decir "Confirmar por WhatsApp",
+  invitando a un segundo click que crearía un segundo turno.
+- ⚠️ **El turno queda reservado en el click, no en el mensaje.** El botón dice "Confirmar por
+  WhatsApp" pero lo que confirma es el `POST`; el mensaje es el aviso. Si el cliente no llega a
+  mandarlo, el turno existe igual en la agenda. El texto de abajo del botón lo dice.
+- ⚠️ **La pantalla "¡Listo, {nombre}!" está COMENTADA, no borrada** — `PasoConfirmacion` y
+  `PedirMail`, más el estado `turnoCreado`, la rama del `paso === 'confirmacion'` y tres
+  imports. **Son cuatro cosas que van juntas**, y la nota dentro de `ReservarPage` las enumera.
+  Mismo criterio que la sección Beneficios de la landing: es la pantalla que corresponde el día
+  que los avisos salgan solos, y rehacerla sería trabajo tirado. Va comentada línea por línea y
+  no con `/* */` porque el bloque tiene comentarios JSX adentro.
+- ⚠️ **En la pantalla de gestión hay UN botón por acción, no dos** (corregido el mismo día).
+  "Cancelar turno" y "Reprogramar" hacen **las dos cosas de una**: primero el `PATCH` que
+  cambia el turno de verdad —libera el horario, lo saca de la agenda— y recién con eso hecho
+  abren WhatsApp para que el cliente avise. **Nunca al revés**: si abriera el chat primero, el
+  que no llega a mandar el mensaje deja el rato bloqueado sin que nadie se entere. La primera
+  versión ponía los botones de WhatsApp al lado de los online y eso era exactamente ese agujero.
+- ⚠️ **`MotivoWhatsapp` distingue avisar de pedir, porque el tiempo verbal importa.**
+  `confirmado`/`cancelado`/`reprogramado` avisan algo que el sistema **ya hizo** ("Cancelé mi
+  turno por la web"); `pedirReprogramar` **pide**, y sale en la pantalla de elegir nuevo horario
+  cuando ninguno de los que quedan le sirve. Mezclarlos sería el peor error posible acá: decirle
+  "necesito cancelar" por un turno ya cancelado lo manda a cancelar algo que no existe, y
+  decirle "cancelé" por uno que sigue en pie le deja el rato bloqueado creyendo que se liberó.
+- ⚠️ **Pasados los 60 minutos NO hay botón de cancelar ni de reprogramar — tampoco por
+  WhatsApp** (pedido de Franco, 21/8/2026). La primera versión ponía ahí dos botones
+  "Cancelar/Reprogramar por WhatsApp", y estaban ofreciendo una acción que no ocurre: el que los
+  tocaba mandaba un mensaje, se quedaba tranquilo, y el turno seguía en pie hasta que Ariel lo
+  leyera. **En el resto de la pantalla un botón con esa palabra cancela de verdad**; que ahí uno
+  igual no lo hiciera era la misma palabra queriendo decir dos cosas. Queda el cartel ámbar y
+  los botones de `ContactoAriel` (WhatsApp + Llamar), que es HU-03 y es lo que de verdad puede
+  pasar. Por eso tampoco existe un motivo `pedirCancelar`: no hay pantalla que lo use.
+- ⚠️ **Al reprogramar, el mensaje lleva el link del turno NUEVO.** Reprogramar no mueve el
+  turno: crea uno nuevo enlazado al viejo, así que el id cambia. Mandar el viejo le daría a
+  Ariel un turno en estado `reprogramado`.
+- ⚠️ **El botón genérico "WhatsApp" de `ContactoAriel` abre el chat EN BLANCO, y tiene que
+  seguir así.** Precargaba "mi turno quedó confirmado" y estaba mal por dos motivos. Uno: el
+  bloque dice "¿Necesitás hablar con Ariel?", o sea que el que lo toca quiere decir algo suyo, no
+  volver a anunciar un turno del que Ariel ya se enteró. Dos, y es el que lo delató (Franco,
+  21/8/2026, *"reprogramar manda el mensaje de confirmación"*): **esa pantalla es justo donde cae
+  el que acaba de reprogramar**, así que el botón le ofrecía mandar una confirmación dentro del
+  flujo de reprogramación, contando el turno como si fuera nuevo y sin decir que se movió. El
+  botón de reprogramar en sí siempre estuvo bien — verificado dos veces, manda "reprogramé mi
+  turno en la web". La confirmación se manda sola en el único momento que corresponde: al salir
+  del formulario de reserva.
+- Al reprogramar, el `navigate` al turno nuevo va con **`replace: true`**: el link viejo apunta a
+  un turno que quedó `reprogramado` y ya no se gestiona, así que dejarlo en el historial es que
+  el botón "atrás" lo traiga de vuelta — el mismo tropiezo que la v3 ya arregló en `LoginPage`.
+
+**Probado de punta a punta sobre la branch descartable `prueba-wame-links`**, no contra la
+agenda de Ariel. Los tres flujos completos, en el navegador y contra la base:
+
+- **Reservar** → turno `reservado` en la base y `api.whatsapp.com` con el mensaje cargado. Y
+  algo que solo se ve haciéndolo: **WhatsApp resolvió el número a "La Peluquería"**, o sea que
+  el `+549…` de `contacto.ts` apunta de verdad a la cuenta de Ariel.
+- **Reprogramar** → el viejo quedó `reprogramado`, el nuevo `reservado` con su `turno_origen_id`,
+  y el mensaje llevaba el link del **nuevo**.
+- **Cancelar** → quedó `cancelado`, y el mensaje sin link, terminando en "Lo lamento.".
+- La segunda corrida (con los textos definitivos) fue sobre `prueba-wame-textos`, con
+  `push_suscripciones` **vaciada en la branch** para no volver a hacerles sonar el celular.
+- La rama de los 60 minutos vencidos, sobre un turno real ya pasado: los dos botones
+  deshabilitados, **cero links de WhatsApp que prometan cancelar o reprogramar**, y el chat de
+  `ContactoAriel` en blanco. Verificado leyendo el DOM, no solo mirando la pantalla.
+- Producción quedó **intacta y verificada**: 18 turnos y 9 clientes antes y después, cero turnos
+  de prueba. Cero errores de consola, 375 px sin scroll horizontal.
+
+⚠️ **Un efecto lateral que conviene saber antes de volver a probar así:** la branch se copia con
+la tabla `push_suscripciones` adentro, así que **los avisos push del turno de prueba salieron a
+los celulares reales** (`web.push.apple.com → 201`). Los turnos son descartables; las
+notificaciones que ya llegaron, no. Lo mismo con WhatsApp: el backend local tiene
+`WHATSAPP_TOKEN` cargado e intentó los tres avisos por la Cloud API, que rebotaron con
+`(#131030) Recipient phone number not in allowed list` — el número de prueba de Meta.
+
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 
 Seña por Mercado Pago al reservar. **No lo pidió Ariel**; queda anotado porque es la continuación natural. Traería cuenta de MP, webhooks de pago, reembolsos al cancelar y qué hacer con un pago pendiente — o sea, trámites externos como los de WhatsApp. También quedaron afuera los pagos parciales, el historial de precios y la facturación.

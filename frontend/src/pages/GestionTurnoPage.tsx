@@ -19,6 +19,8 @@ import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import { formatearPesos } from '../utils/dinero'
 import { TELEFONO_URL, WHATSAPP_URL } from '../utils/contacto'
+import { whatsappDeTurno } from '../utils/mensajesWhatsapp'
+import type { DatosDelTurno, MotivoWhatsapp } from '../utils/mensajesWhatsapp'
 import type { ErrorApi, EstadoTurno } from '../types/api'
 
 const DIAS_A_MOSTRAR = 14
@@ -37,6 +39,25 @@ const ESTILO_ESTADO: Record<EstadoTurno, string> = {
   reprogramado: 'bg-borde-suave text-tinta-tenue',
   realizado: 'bg-bien-suave text-bien',
   ausente: 'bg-alerta-suave text-alerta',
+}
+
+/** El link único de gestión, que es lo que el mensaje le da a Ariel para abrir el turno. */
+function linkDelTurno(id: string): string {
+  return `${window.location.origin}/turno/${id}`
+}
+
+/** Salir del sitio hacia el chat de Ariel con el mensaje escrito.
+ *
+ * ⚠️ `location.href` y no `window.open`: esto corre dentro del `onSuccess` de una
+ * mutación, o sea fuera del gesto del usuario, y ahí el bloqueador de pop-ups de Safari
+ * se come la pestaña nueva. Con la redirección directa no hay nada que bloquear: en el
+ * celular abre la app de WhatsApp y el navegador queda atrás con la página intacta.
+ *
+ * Va siempre DESPUÉS de que el backend confirmó el cambio. El turno ya está cancelado o
+ * reprogramado cuando esto corre, así que si el cliente no llega a mandar el mensaje, lo
+ * único que se pierde es el aviso — nunca el cambio. */
+function irAWhatsapp(motivo: MotivoWhatsapp, datos: DatosDelTurno): void {
+  window.location.href = whatsappDeTurno(motivo, datos)
 }
 
 type Modo = 'ver' | 'reprogramar'
@@ -70,11 +91,24 @@ export function GestionTurnoPage({ id }: { id: string }) {
     enabled: modo === 'reprogramar' && Boolean(servicioId),
   })
 
+  // ⚠️ Un solo botón hace las dos cosas: cancela el turno de verdad —el `PATCH` libera el
+  // horario y lo saca de la agenda— y recién con eso hecho abre WhatsApp para que el
+  // cliente le avise a Ariel. Nunca al revés: si abriera el chat primero, el que no llega
+  // a mandar el mensaje deja el rato bloqueado sin que nadie se entere.
+  //
+  // Por eso el aviso dice "Cancelé", en pasado. Cuando el mensaje se escribe, ya pasó.
   const cancelarMutation = useMutation({
     mutationFn: () => cancelarTurno(id),
     onSuccess: (turno) => {
       queryClient.setQueryData(['turno', id], turno)
       setConfirmandoCancelacion(false)
+      irAWhatsapp('cancelado', {
+        nombre: turno.clienteNombre,
+        servicio: turno.servicio.nombre,
+        fecha: turno.fecha,
+        hora: turno.hora,
+        link: linkDelTurno(turno.id),
+      })
     },
     onError: () => {
       setErrorAccion('No pudimos cancelar el turno. Probá de nuevo.')
@@ -85,8 +119,24 @@ export function GestionTurnoPage({ id }: { id: string }) {
   const reprogramarMutation = useMutation({
     mutationFn: () =>
       reprogramarTurno(id, { fecha: fechaNueva!, hora: horaNueva! }),
+    // Reprogramar no mueve el turno: crea uno nuevo enlazado al viejo (que queda en
+    // `reprogramado`). O sea que el link cambia — el mensaje tiene que llevar el del
+    // turno NUEVO, que es el que el cliente va a poder gestionar de acá en más.
+    //
+    // El `navigate` va igual y va primero: si el cliente vuelve del chat, la pestaña ya
+    // está parada en su turno nuevo y no en el viejo, que ya no sirve para nada.
     onSuccess: (nuevoTurno) => {
-      navigate(`/turno/${nuevoTurno.id}`)
+      // `replace` y no push: el link viejo apunta a un turno que quedó `reprogramado` y
+      // ya no se puede gestionar. Dejarlo en el historial es que el botón "atrás" lo
+      // traiga de vuelta — el mismo tropiezo que la v3 ya arregló en `LoginPage`.
+      navigate(`/turno/${nuevoTurno.id}`, { replace: true })
+      irAWhatsapp('reprogramado', {
+        nombre: nuevoTurno.clienteNombre,
+        servicio: nuevoTurno.servicio.nombre,
+        fecha: nuevoTurno.fecha,
+        hora: nuevoTurno.hora,
+        link: linkDelTurno(nuevoTurno.id),
+      })
     },
     onError: (err) => {
       const datos = isAxiosError<ErrorApi>(err)
@@ -141,6 +191,15 @@ export function GestionTurnoPage({ id }: { id: string }) {
   }
 
   const turno = turnoQuery.data
+
+  // Lo que todo mensaje a Ariel necesita saber del turno.
+  const datosParaWhatsapp: DatosDelTurno = {
+    nombre: turno.clienteNombre,
+    servicio: turno.servicio.nombre,
+    fecha: turno.fecha,
+    hora: turno.hora,
+    link: `${window.location.origin}/turno/${turno.id}`,
+  }
 
   if (modo === 'reprogramar') {
     return (
@@ -198,7 +257,7 @@ export function GestionTurnoPage({ id }: { id: string }) {
 
         {/* Acá el motivo es concreto: si ningún horario de los que quedan le sirve, la
             salida es hablar con Ariel, no volver atrás. */}
-        <ContactoAriel />
+        <ContactoAriel datos={datosParaWhatsapp} motivo="pedirReprogramar" />
       </PaginaCentrada>
     )
   }
@@ -294,8 +353,19 @@ export function GestionTurnoPage({ id }: { id: string }) {
           <Button variant="outline" className="w-full" disabled>
             Cancelar turno
           </Button>
+          {/* ⚠️ Acá NO va ningún botón de cancelar ni de reprogramar, tampoco por
+              WhatsApp. Pasados los 60 minutos el sistema ya no toca el turno (CU-03), así
+              que un botón que diga "Cancelar por WhatsApp" estaría ofreciendo una acción
+              que no ocurre: el que lo toca manda un mensaje, se queda tranquilo, y el
+              turno sigue en pie hasta que Ariel lo lea y lo dé de baja a mano. En el resto
+              de la pantalla un botón cancela de verdad; que acá uno igual no lo hiciera
+              sería la misma palabra queriendo decir dos cosas.
+
+              Lo que queda es hablar con Ariel, que es lo que de verdad puede pasar, y para
+              eso están los botones de `ContactoAriel` acá abajo (HU-03). */}
           <div className="border-alerta bg-alerta-suave text-alerta mt-2 rounded-md border px-3 py-2 text-sm">
-            Ya no podés cancelar online. Contactá directamente a Ariel.
+            Faltan menos de 60 minutos, así que ya no podés cancelar ni
+            reprogramar desde acá. Escribile o llamalo a Ariel.
           </div>
         </div>
       )}
@@ -312,6 +382,16 @@ export function GestionTurnoPage({ id }: { id: string }) {
         </div>
       )}
 
+      {/* ⚠️ **Este chat abre en blanco, y tiene que seguir así.** Precargaba "mi turno
+          quedó confirmado", y estaba mal por dos motivos. Uno: el botón dice "¿Necesitás
+          hablar con Ariel?", o sea que el que lo toca quiere decir algo suyo, no volver a
+          anunciar un turno del que Ariel ya se enteró. Dos, y peor: esta pantalla es
+          justo donde cae el que **acaba de reprogramar**, así que el botón le ofrecía
+          mandar una confirmación en el flujo de reprogramación, contando el turno como si
+          fuera nuevo y sin decir que se movió.
+
+          La confirmación se manda sola en el único momento en que corresponde: al salir
+          del formulario de reserva. Repetirla después es ruido para Ariel. */}
       <ContactoAriel />
 
       {/* Último a propósito: agendar es lo que se hace una vez y después no se vuelve a
@@ -338,7 +418,18 @@ export function GestionTurnoPage({ id }: { id: string }) {
  *
  * Los dos son links nativos (`wa.me` y `tel:`), así que en el celular abren la app que
  * corresponde sin que tengamos que detectar nada. */
-function ContactoAriel() {
+function ContactoAriel({
+  datos,
+  motivo = 'confirmado',
+}: {
+  /** Sin datos el chat abre en blanco, como antes. Con datos abre con el turno escrito:
+   * el que escribe casi nunca lo hace en abstracto, lo hace por el turno que tiene
+   * abierto en la pantalla, y tipearle a Ariel de qué turno habla es un paso que el
+   * sitio ya puede hacer por él. */
+  datos?: DatosDelTurno
+  motivo?: MotivoWhatsapp
+}) {
+  const href = datos ? whatsappDeTurno(motivo, datos) : WHATSAPP_URL
   return (
     <div className="border-borde mt-6 border-t pt-4">
       <p className="text-tinta-suave mb-2 text-center text-sm">
@@ -346,7 +437,7 @@ function ContactoAriel() {
       </p>
       <div className="flex gap-2">
         <a
-          href={WHATSAPP_URL}
+          href={href}
           target="_blank"
           rel="noreferrer"
           className={`${BTN_OUTLINE} flex-1`}

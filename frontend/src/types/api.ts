@@ -37,6 +37,10 @@ export type EstadoTurno =
 export interface Turno {
   id: string
   estado: EstadoTurno
+  /** El nombre con el que reservó. Lo firman los mensajes de WhatsApp que arma el cliente
+   * ("Hola Ariel, soy ___"), y la pantalla de gestión es el único lugar donde ese nombre
+   * no se tipeó en esta sesión. El teléfono y el mail siguen siendo solo de admin. */
+  clienteNombre: string
   fecha: string // "YYYY-MM-DD"
   hora: string // "HH:mm"
   servicio: Servicio
@@ -47,11 +51,7 @@ export interface Turno {
 /** Por qué un día no tiene horarios. Permite explicarle al cliente qué pasó en vez de
  * mostrarle siempre el mismo "no hay turnos". */
 export type EstadoDia =
-  | 'disponible'
-  | 'cerrado'
-  | 'feriado'
-  | 'bloqueado'
-  | 'completo'
+  'disponible' | 'cerrado' | 'feriado' | 'bloqueado' | 'completo'
 
 export interface DisponibilidadDia {
   fecha: string // "YYYY-MM-DD"
@@ -125,7 +125,8 @@ export interface TurnoAdmin extends Turno {
 
 /** HU-27 — Cómo pagó. Conjunto cerrado: es un enum en la base, no una tabla que Ariel
  * configure (al revés que las etiquetas de HU-25). */
-export type MedioPago = 'efectivo' | 'transferencia' | 'mercado_pago' | 'tarjeta'
+export type MedioPago =
+  'efectivo' | 'transferencia' | 'mercado_pago' | 'tarjeta'
 
 export interface DatosCobro {
   medioPago: MedioPago

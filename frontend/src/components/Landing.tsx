@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Kicker } from './ui/Kicker'
 import { BTN_OUTLINE, BTN_GHOST } from './ui/estilosBoton'
 import { DIRECCION, TELEFONO_LEGIBLE, WHATSAPP_URL } from '../utils/contacto'
@@ -219,8 +220,19 @@ export function Landing({ query, onElegir }: LandingProps) {
       </section>
 
       <footer className="border-borde text-tinta border-t px-[clamp(20px,5vw,72px)] py-6 text-xs opacity-70">
-        <div className="mx-auto max-w-[1240px]">
-          Peluquería de Ariel Enrique — {DIRECCION}
+        <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-x-3 gap-y-1">
+          <span>Peluquería de Ariel Enrique — {DIRECCION}</span>
+          {/* El pie es el único lugar del sitio desde donde se llega a las dos páginas
+              legales. No van en el nav de arriba a propósito: nadie entra al turnero a
+              leer la política de privacidad, pero tiene que poder encontrarla. */}
+          <span className="ml-auto flex gap-3">
+            <Link to="/privacidad" className="hover:text-miel underline">
+              Política de privacidad
+            </Link>
+            <Link to="/eliminar-datos" className="hover:text-miel underline">
+              Eliminar mis datos
+            </Link>
+          </span>
         </div>
       </footer>
     </div>
