@@ -5,7 +5,11 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { marcarEstadoTurno, registrarCobroTurno } from '../../api/agenda'
 import { obtenerServiciosAdmin } from '../../api/servicios'
-import { ETIQUETA_MEDIO_PAGO, formatearPesos } from '../../utils/dinero'
+import {
+  ETIQUETA_MEDIO_PAGO,
+  MEDIOS_COBRABLES,
+  formatearPesos,
+} from '../../utils/dinero'
 import type {
   ErrorApi,
   EstadoTurno,
@@ -20,15 +24,13 @@ import type {
 // más segura de que se olvide. Sobre un turno que ya está realizado, el mismo modal sirve
 // para cargarle el cobro que quedó pendiente o para corregirlo.
 //
-// Los cuatro medios son botones grandes y no un `<select>`: Ariel usa lentes, esto lo hace
-// con el cliente enfrente, y un desplegable son dos toques y una lista chica.
-
-const MEDIOS: MedioPago[] = [
-  'efectivo',
-  'transferencia',
-  'mercado_pago',
-  'tarjeta',
-]
+// Los medios son botones grandes y no un `<select>`: Ariel usa lentes, esto lo hace con el
+// cliente enfrente, y un desplegable son dos toques y una lista chica.
+//
+// ⚠️ Cuáles se ofrecen sale de `MEDIOS_COBRABLES` y no de una lista escrita acá. Eran cuatro
+// hasta el 21/8/2026, cuando Franco sacó `tarjeta` porque Ariel no cobra con tarjeta: con el
+// cliente enfrente, una opción que nunca es la correcta solo sirve para tocarla sin querer.
+// El valor sigue existiendo en la base para no perder lo que se haya cobrado así.
 
 /**
  * Lo que el modal necesita de un turno, y nada más.
@@ -147,7 +149,7 @@ export function ModalCobro({ turno, onClose }: ModalCobroProps) {
             Medio de pago
           </span>
           <div className="grid grid-cols-2 gap-2">
-            {MEDIOS.map((medio) => (
+            {MEDIOS_COBRABLES.map((medio) => (
               <button
                 key={medio}
                 type="button"

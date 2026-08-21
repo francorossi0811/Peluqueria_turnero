@@ -109,19 +109,34 @@ const ENCABEZADOS = [
 /** Cuántas columnas tiene la tabla. Lo usan las bandas, que se pintan de punta a punta. */
 const COLUMNAS = ENCABEZADOS.length
 
-/** Los cuatro medios, **en un orden fijo**.
+/** Los medios que se listan **siempre**, en un orden fijo.
  *
- * ⚠️ Se listan siempre los cuatro aunque alguno haya quedado en cero, y esto es a
- * propósito: `porMedio` viene ordenado por importe y trae solo los que tuvieron
- * movimiento, así que si se copiara tal cual, cada hoja tendría una tabla con distinta
- * cantidad de filas y en distinto orden. Con la forma fija, las semanas se pueden comparar
- * de un vistazo o pegar una debajo de otra. */
-const MEDIOS: MedioPago[] = [
-  'efectivo',
-  'transferencia',
-  'mercado_pago',
-  'tarjeta',
-]
+ * ⚠️ Se listan aunque hayan quedado en cero, y esto es a propósito: `porMedio` viene
+ * ordenado por importe y trae solo los que tuvieron movimiento, así que si se copiara tal
+ * cual, cada hoja tendría una tabla con distinta cantidad de filas y en distinto orden. Con
+ * la forma fija, las semanas se pueden comparar de un vistazo o pegar una debajo de otra.
+ *
+ * ⚠️ **`tarjeta` salió de esta lista el 21/8/2026** (Franco la sacó del panel porque Ariel no
+ * cobra con tarjeta). Dejarla habría significado una fila en `$ 0` en todas las hojas para
+ * siempre. Pero ojo con lo que eso casi rompe — ver `mediosAMostrar`. */
+const MEDIOS_FIJOS: MedioPago[] = ['efectivo', 'transferencia', 'mercado_pago']
+
+/**
+ * Qué medios se dibujan en un desglose: los fijos **más cualquiera que aparezca en los
+ * datos**.
+ *
+ * ⚠️ Esto es lo que evita un error de plata silencioso. Si la tabla recorriera solo
+ * `MEDIOS_FIJOS`, un turno viejo cobrado con `tarjeta` seguiría sumando en `total` —que sale
+ * de `resumirCobros` sobre los datos reales— pero **no tendría fila donde mostrarse**: el
+ * desglose no cerraría con su propio total y no habría ninguna pista de por qué. Que un
+ * medio ya no se pueda elegir no borra lo que se cobró con él.
+ */
+function mediosAMostrar(resumen: ResumenDeCobros): MedioPago[] {
+  const extra = resumen.porMedio
+    .map((fila) => fila.medioPago)
+    .filter((medio) => !MEDIOS_FIJOS.includes(medio))
+  return [...MEDIOS_FIJOS, ...extra]
+}
 
 /** Los mismos textos que `ETIQUETA_MEDIO_PAGO` del panel (`frontend/src/utils/dinero.ts`):
  * la planilla y la pantalla tienen que llamar igual a la misma cosa. */
@@ -280,7 +295,7 @@ function bloqueDeFacturacion(titulo: string, resumen: ResumenDeCobros): Fila[] {
       { value: resumen.total, type: Number, format: FORMATO_PESOS, ...destacado },
       { ...destacado },
     ],
-    ...MEDIOS.map((medio): Fila => {
+    ...mediosAMostrar(resumen).map((medio): Fila => {
       const fila = porMedio.get(medio)
       return [
         { value: ETIQUETA_MEDIO[medio], type: String },

@@ -1,6 +1,11 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import {
+  esquemaDeFecha,
+  FIN_ANTES_QUE_INICIO,
+  periodoDemasiadoLargo,
+} from '../utils/esquemasFecha'
+import {
   agruparPorSemana,
   resumirRealizados,
   turnosParaExportar,
@@ -18,11 +23,11 @@ const MAX_DIAS_RANGO = 425
 
 const rangoSchema = z
   .object({
-    desde: z.iso.date(),
-    hasta: z.iso.date(),
+    desde: esquemaDeFecha('la fecha de inicio'),
+    hasta: esquemaDeFecha('la fecha de fin'),
   })
   .refine((q) => q.hasta >= q.desde, {
-    message: 'hasta debe ser posterior o igual a desde.',
+    message: FIN_ANTES_QUE_INICIO,
     path: ['hasta'],
   })
   .refine(
@@ -30,7 +35,7 @@ const rangoSchema = z
       (fechaDesdeIso(q.hasta).getTime() - fechaDesdeIso(q.desde).getTime()) /
         86_400_000 <=
       MAX_DIAS_RANGO,
-    { message: 'El período es demasiado largo.' },
+    { message: periodoDemasiadoLargo(MAX_DIAS_RANGO) },
   )
 
 const TIPO_XLSX =

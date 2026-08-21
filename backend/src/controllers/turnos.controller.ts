@@ -58,16 +58,18 @@ import {
   MENSAJE_TELEFONO_INEXISTENTE,
   MENSAJE_TELEFONO_INVALIDO,
 } from '../utils/validaciones'
-import type { Turno } from '../../generated/prisma/client.ts'
+import {
+  esquemaDeFecha,
+  esquemaDeHora,
+  FIN_ANTES_QUE_INICIO,
+  periodoDemasiadoLargo,
+} from '../utils/esquemasFecha'
 
-const horaSchema = z
-  .string()
-  .regex(/^\d{2}:\d{2}$/, 'Formato de hora inválido, esperado HH:mm.')
 
 const bodySchema = z.object({
   servicioId: z.uuid(),
-  fecha: z.iso.date(),
-  hora: horaSchema,
+  fecha: esquemaDeFecha('la fecha del turno'),
+  hora: esquemaDeHora('la hora del turno'),
   // Solo letras (más espacios, apóstrofes y guiones). Es la misma clase de regla que el
   // teléfono: sirve para que Ariel pueda ubicar y llamar a una persona, y "Juan123" o un
   // campo lleno de símbolos no ubican a nadie.
@@ -97,8 +99,8 @@ const bodySchema = z.object({
 
 const reprogramarSchema = z.object({
   servicioId: z.uuid().optional(),
-  fecha: z.iso.date(),
-  hora: horaSchema,
+  fecha: esquemaDeFecha('la fecha nueva'),
+  hora: esquemaDeHora('la hora nueva'),
 })
 
 // HU-08: 'online' es exclusivo del flujo público, nunca de la carga manual de Ariel.
@@ -134,14 +136,24 @@ const bodyManualSchema = bodySchema.extend({
 
 // HU-09: mismos fecha/hora que reprogramar, pero sin servicioId (no cambia el servicio).
 const editarSchema = z.object({
-  fecha: z.iso.date(),
-  hora: horaSchema,
+  fecha: esquemaDeFecha('la fecha nueva'),
+  hora: esquemaDeHora('la hora nueva'),
 })
 
 // HU-27 — El cobro. Los dos campos van juntos o no va ninguno: un medio de pago sin
 // monto no suma en ningún total, y un monto sin medio no aparece en ningún desglose.
+//
+// ⚠️ **`tarjeta` no está y no es un olvido** (21/8/2026): Ariel no cobra con tarjeta y
+// Franco la sacó del panel. La regla se aplica **también acá** y no solo en la pantalla,
+// porque si viviera únicamente en el frontend cualquiera podría volver a meter el valor
+// armando el request a mano, y volveríamos a tener una categoría muerta ensuciando los
+// desgloses. El valor **sigue existiendo en el enum de la base** para no perder lo que se
+// hubiera cobrado así antes; sacarlo de ahí es una migración sobre `turnos`, que es la
+// tabla donde vive el `EXCLUDE` escrito a mano.
 const cobroSchema = z.object({
-  medioPago: z.enum(['efectivo', 'transferencia', 'mercado_pago', 'tarjeta']),
+  medioPago: z.enum(['efectivo', 'transferencia', 'mercado_pago'], {
+    message: 'Elegí cómo te pagaron: efectivo, transferencia o Mercado Pago.',
+  }),
   montoCobrado: z
     .int('El monto va en pesos enteros.')
     .nonnegative('El monto no puede ser negativo.')
@@ -166,11 +178,11 @@ const MAX_DIAS_RANGO = 31
 
 const rangoSchema = z
   .object({
-    desde: z.iso.date(),
-    hasta: z.iso.date(),
+    desde: esquemaDeFecha('la fecha de inicio'),
+    hasta: esquemaDeFecha('la fecha de fin'),
   })
   .refine((q) => q.hasta >= q.desde, {
-    message: 'hasta debe ser posterior o igual a desde.',
+    message: FIN_ANTES_QUE_INICIO,
     path: ['hasta'],
   })
 
@@ -585,7 +597,7 @@ export async function getAgenda(req: Request, res: Response) {
     res.status(400).json({
       error: {
         codigo: 'RANGO_DEMASIADO_AMPLIO',
-        mensaje: `El rango no puede superar los ${MAX_DIAS_RANGO} días.`,
+        mensaje: periodoDemasiadoLargo(MAX_DIAS_RANGO),
       },
     })
     return

@@ -15,38 +15,43 @@ import {
   formatearHora,
   horaDesdeString,
 } from '../utils/fechaHora'
+import {
+  esquemaDeFecha,
+  esquemaDeHora,
+  FIN_ANTES_QUE_INICIO,
+  HORA_FIN_ANTES_QUE_INICIO,
+} from '../utils/esquemasFecha'
 import type { BloqueoHorario, Turno } from '../../generated/prisma/client.ts'
 
 const MAX_DIAS_RANGO = 31
 
-const horaSchema = z
-  .string()
-  .regex(/^\d{2}:\d{2}$/, 'Formato de hora inválido, esperado HH:mm.')
-
 const idSchema = z.object({ id: z.uuid() })
 
 const rangoSchema = z
-  .object({ desde: z.iso.date(), hasta: z.iso.date() })
+  .object({
+    desde: esquemaDeFecha('la fecha de inicio'),
+    hasta: esquemaDeFecha('la fecha de fin'),
+  })
   .refine((q) => q.hasta >= q.desde, {
-    message: 'hasta debe ser posterior o igual a desde.',
+    message: FIN_ANTES_QUE_INICIO,
     path: ['hasta'],
   })
 
 const bloqueoSchema = z
   .object({
-    fechaInicio: z.iso.date(),
-    horaInicio: horaSchema.optional(),
-    fechaFin: z.iso.date(),
-    horaFin: horaSchema.optional(),
+    fechaInicio: esquemaDeFecha('la fecha de inicio'),
+    horaInicio: esquemaDeHora('la hora de inicio').optional(),
+    fechaFin: esquemaDeFecha('la fecha de fin'),
+    horaFin: esquemaDeHora('la hora de fin').optional(),
     motivo: z.string().trim().optional(),
     confirmarCancelaciones: z.boolean().optional(),
   })
   .refine((d) => d.fechaFin >= d.fechaInicio, {
-    message: 'fechaFin debe ser posterior o igual a fechaInicio.',
+    message: FIN_ANTES_QUE_INICIO,
     path: ['fechaFin'],
   })
   .refine((d) => !d.horaInicio || !d.horaFin || d.horaInicio < d.horaFin, {
-    message: 'horaInicio debe ser anterior a horaFin.',
+    message: HORA_FIN_ANTES_QUE_INICIO,
     path: ['horaFin'],
   })
 
@@ -154,7 +159,7 @@ export async function postBloqueo(req: Request, res: Response) {
 export async function patchBloqueo(req: Request, res: Response) {
   const parsedId = idSchema.safeParse(req.params)
   if (!parsedId.success) {
-    respondErrorParametrosInvalidos(res, 'Id de bloqueo inválido.')
+    respondErrorParametrosInvalidos(res, 'No encontramos ese bloqueo.')
     return
   }
 
@@ -222,7 +227,7 @@ export async function patchBloqueo(req: Request, res: Response) {
 export async function deleteBloqueo(req: Request, res: Response) {
   const parsed = idSchema.safeParse(req.params)
   if (!parsed.success) {
-    respondErrorParametrosInvalidos(res, 'Id de bloqueo inválido.')
+    respondErrorParametrosInvalidos(res, 'No encontramos ese bloqueo.')
     return
   }
 

@@ -1,6 +1,11 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import {
+  esquemaDeFecha,
+  FIN_ANTES_QUE_INICIO,
+  periodoDemasiadoLargo,
+} from '../utils/esquemasFecha'
+import {
   calcularDisponibilidad,
   DIAS_FUTURO_PUBLICO,
   DIAS_PASADOS_ADMIN,
@@ -14,11 +19,11 @@ const MAX_DIAS_RANGO = 31
 const querySchema = z
   .object({
     servicioId: z.uuid(),
-    desde: z.iso.date(),
-    hasta: z.iso.date(),
+    desde: esquemaDeFecha('la fecha de inicio'),
+    hasta: esquemaDeFecha('la fecha de fin'),
   })
   .refine((q) => q.hasta >= q.desde, {
-    message: 'hasta debe ser posterior o igual a desde.',
+    message: FIN_ANTES_QUE_INICIO,
     path: ['hasta'],
   })
 
@@ -69,7 +74,7 @@ async function responderDisponibilidad(
     res.status(400).json({
       error: {
         codigo: 'RANGO_DEMASIADO_AMPLIO',
-        mensaje: `El rango no puede superar los ${MAX_DIAS_RANGO} días.`,
+        mensaje: periodoDemasiadoLargo(MAX_DIAS_RANGO),
       },
     })
     return

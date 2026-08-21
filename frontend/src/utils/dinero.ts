@@ -10,13 +10,34 @@ import type { MedioPago } from '../types/api'
 /** Cómo se llama cada medio de pago en pantalla. Vive acá y no en `ModalCobro` porque lo
  * leen cuatro componentes: el modal, la fila de la agenda, el detalle del turno y la
  * sección Cobros. (Exportar constantes desde un archivo de componentes además rompe el
- * fast refresh de Vite, que es cómo se notó.) */
+ * fast refresh de Vite, que es cómo se notó.)
+ *
+ * ⚠️ **Sigue teniendo los cuatro, incluida `tarjeta`, aunque ya no se pueda elegir.** Este
+ * mapa es para **mostrar**, y `MEDIOS_COBRABLES` es para **elegir**: son dos cosas
+ * distintas. Si a `tarjeta` se le sacara la etiqueta, un turno viejo cobrado con tarjeta se
+ * dibujaría con el nombre crudo del enum (`mercado_pago` style) o directamente vacío. */
 export const ETIQUETA_MEDIO_PAGO: Record<MedioPago, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transferencia',
   mercado_pago: 'Mercado Pago',
   tarjeta: 'Tarjeta',
 }
+
+/**
+ * Los medios que Ariel **puede elegir** al cobrar (21/8/2026, pedido de Franco).
+ *
+ * `tarjeta` salió de acá porque Ariel no cobra con tarjeta: era una opción que solo servía
+ * para tocarla sin querer con el cliente enfrente. No se borró del enum de la base ni de
+ * `ETIQUETA_MEDIO_PAGO` a propósito — ver la advertencia de arriba, y en el backend el
+ * comentario de `medioPago` en `schema.prisma`. Sacar un valor de un enum de Postgres es
+ * una migración sobre `turnos`, que es justo la tabla donde vive el `EXCLUDE` escrito a
+ * mano: mucho riesgo para borrar un dato que nadie usa.
+ */
+export const MEDIOS_COBRABLES: MedioPago[] = [
+  'efectivo',
+  'transferencia',
+  'mercado_pago',
+]
 
 /**
  * `12500` → `"$ 12.500"`. Sin decimales a propósito: no existen en los datos.
