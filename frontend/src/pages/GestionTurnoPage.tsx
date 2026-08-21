@@ -20,6 +20,7 @@ import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import { formatearPesos } from '../utils/dinero'
 import { TELEFONO_URL, WHATSAPP_URL } from '../utils/contacto'
 import { whatsappDeTurno } from '../utils/mensajesWhatsapp'
+import { WHATSAPP_AUTOMATICO } from '../utils/avisos'
 import type { DatosDelTurno, MotivoWhatsapp } from '../utils/mensajesWhatsapp'
 import type { ErrorApi, EstadoTurno } from '../types/api'
 
@@ -57,6 +58,9 @@ function linkDelTurno(id: string): string {
  * reprogramado cuando esto corre, así que si el cliente no llega a mandar el mensaje, lo
  * único que se pierde es el aviso — nunca el cambio. */
 function irAWhatsapp(motivo: MotivoWhatsapp, datos: DatosDelTurno): void {
+  // Cuando el backend ya avisa por la Cloud API, mandar al cliente a WhatsApp sería
+  // pedirle que cuente algo que Ariel ya sabe. Ver `utils/avisos.ts`.
+  if (WHATSAPP_AUTOMATICO) return
   window.location.href = whatsappDeTurno(motivo, datos)
 }
 

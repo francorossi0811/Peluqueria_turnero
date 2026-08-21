@@ -15,6 +15,7 @@ import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import { formatearPesos } from '../utils/dinero'
 import { WHATSAPP_URL } from '../utils/contacto'
 import { whatsappDeTurno } from '../utils/mensajesWhatsapp'
+import { WHATSAPP_AUTOMATICO } from '../utils/avisos'
 import {
   esEmailValido,
   esNombreValido,
@@ -106,6 +107,15 @@ export function ReservarPage() {
     // Y si la redirección igual no pasara, el turno no se pierde: existe en la agenda de
     // Ariel y su link viaja adentro del mensaje.
     onSuccess: (turno) => {
+      // Con el backend avisando por la Cloud API no hay nada que redirigir: el mensaje ya
+      // salió. Se va a la pantalla de gestión del turno, que es donde el cliente puede
+      // hacer algo. Ver `utils/avisos.ts`.
+      if (WHATSAPP_AUTOMATICO) {
+        setRedirigiendo(true)
+        window.location.href = `/turno/${turno.id}`
+        return
+      }
+
       setRedirigiendo(true)
       window.location.href = whatsappDeTurno('confirmado', {
         nombre: clienteNombre,

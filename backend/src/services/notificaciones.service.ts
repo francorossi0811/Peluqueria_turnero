@@ -313,7 +313,12 @@ async function intentarAvisoPorWhatsapp(
 ): Promise<boolean> {
   if (!turno.clienteTelefono) return false
 
-  const destino = aE164(turno.clienteTelefono)
+  // ⚠️ El `9` se omite solo cuando estamos sobre el número de prueba de Meta. Acá el
+  // resultado es un **destino**, no la identidad del cliente: por eso el flag vive en este
+  // llamado y no adentro de `aE164`, que también usa `clientes.service` para las fichas.
+  const destino = aE164(turno.clienteTelefono, {
+    conNueve: !configWhatsapp().numeroDePrueba,
+  })
   if (!destino) {
     console.warn(
       `[notificaciones] el teléfono del turno ${turno.id} no se pudo pasar a E.164; ` +

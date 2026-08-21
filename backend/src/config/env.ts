@@ -109,6 +109,10 @@ export interface ConfigWhatsapp {
   plantillaCanceladoNegocio: string
   idioma: string
   version: string
+  /** ⚠️ Estamos usando el número de PRUEBA de Meta, no el de Ariel. Su lista de
+   * destinatarios autorizados guarda los números sin el `9` de celular y compara literal,
+   * así que hay que enviar sin él. Se apaga el día que el número real esté conectado. */
+  numeroDePrueba: boolean
 }
 
 /** Configuración de WhatsApp (HU-21).
@@ -153,6 +157,7 @@ export function configWhatsapp(): ConfigWhatsapp {
       'turno_cancelado_negocio',
     idioma: process.env.WHATSAPP_IDIOMA || 'es_AR',
     version: process.env.WHATSAPP_API_VERSION || 'v23.0',
+    numeroDePrueba: process.env.WHATSAPP_NUMERO_DE_PRUEBA === 'true',
   }
 }
 
