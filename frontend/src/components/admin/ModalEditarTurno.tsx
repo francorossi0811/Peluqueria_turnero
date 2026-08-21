@@ -42,9 +42,10 @@ export function ModalEditarTurno({ turno, onClose }: ModalEditarTurnoProps) {
       onClose()
     },
     onError: (err) => {
-      const codigo = isAxiosError<ErrorApi>(err)
-        ? err.response?.data.error.codigo
+      const datos = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error
         : null
+      const codigo = datos?.codigo
 
       if (codigo === 'HORARIO_NO_DISPONIBLE') {
         setError('Ese horario se acaba de ocupar. Elegí otro.')
@@ -55,6 +56,13 @@ export function ModalEditarTurno({ turno, onClose }: ModalEditarTurnoProps) {
       if (codigo === 'TURNO_NO_MODIFICABLE') {
         setError('Este turno ya no está activo.')
         void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+        return
+      }
+      // El backend explica qué fecha u hora está mal, con las palabras que usa esta
+      // pantalla (`utils/esquemasFecha.ts`). Sin este paso, ese mensaje moría acá y Ariel
+      // veía siempre el genérico de abajo — que no le dice qué corregir.
+      if (codigo === 'PARAMETROS_INVALIDOS' && datos?.mensaje) {
+        setError(datos.mensaje)
         return
       }
       setError('No pudimos mover el turno. Probá de nuevo.')

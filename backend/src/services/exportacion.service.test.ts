@@ -210,3 +210,31 @@ describe('resumirRealizados', () => {
     )
   })
 })
+
+/** HU-27, enmendada el 21/8/2026: `tarjeta` dejó de ofrecerse en el panel, pero el enum de la
+ * base la conserva. Estos casos fijan que sacarla de la lista de opciones no borre plata que
+ * ya se cobró — el desglose de la planilla tiene que seguir cerrando con su propio total. */
+describe('un medio de pago que ya no se ofrece', () => {
+  it('sigue sumando al total del período', () => {
+    const r = resumirRealizados([
+      turno('2026-08-11', { medioPago: 'efectivo', montoCobrado: 16000 }),
+      turno('2026-08-12', { medioPago: 'tarjeta', montoCobrado: 9000 }),
+    ])
+
+    expect(r.total).toBe(25000)
+    expect(r.porMedio).toContainEqual({
+      medioPago: 'tarjeta',
+      total: 9000,
+      turnos: 1,
+    })
+  })
+
+  it('la suma de los medios sigue dando el total', () => {
+    const r = resumirRealizados([
+      turno('2026-08-11', { medioPago: 'tarjeta', montoCobrado: 9000 }),
+      turno('2026-08-11', { medioPago: 'transferencia', montoCobrado: 20000 }),
+    ])
+
+    expect(r.porMedio.reduce((acc, f) => acc + f.total, 0)).toBe(r.total)
+  })
+})

@@ -335,8 +335,13 @@ Como Ariel, quiero anotar cómo me pagó cada cliente y ver cuánto entró en el
 semana o el mes, para dejar de llevar eso de memoria y en la planilla.
 - **Me lo pregunta cuando marco el turno como Realizado.** Es el momento en que la persona
   está pagando; si fuera una pantalla aparte, no la abriría nunca.
-- Elijo entre **efectivo, transferencia, Mercado Pago y tarjeta**. Son los cuatro que uso;
-  no necesito armarme una lista como con las etiquetas.
+- Elijo entre **efectivo, transferencia y Mercado Pago**. Son los que uso; no necesito
+  armarme una lista como con las etiquetas.
+  - ⚠️ *Enmienda del 21/8/2026:* acá decía "los cuatro que uso" e incluía **tarjeta**.
+    Franco la sacó porque Ariel no cobra con tarjeta: con el cliente enfrente, una opción
+    que nunca es la correcta solo sirve para tocarla sin querer. **El valor sigue existiendo
+    en la base** — se sacó de lo que se puede *elegir*, no de lo que se puede *mostrar*, así
+    que si alguna vez se cobró así, esa plata se sigue viendo y sumando.
 - El **monto viene puesto** con el precio del servicio (HU-13) y lo puedo cambiar ahí
   mismo, para el que le hago un descuento o el jubilado.
 - **Puedo marcar Realizado sin registrar el cobro** y cargarlo después. A veces me pagan
@@ -472,7 +477,8 @@ que también se leía— y no se pivotea. Si algún día hiciera falta filtrarlo
 volver a poner la columna "Día" en cada fila.
 
 *Sobre los cuatro medios de pago:* la tabla de facturación lista **siempre los cuatro**
-(efectivo, transferencia, Mercado Pago y tarjeta), incluso los que quedaron en cero. Es lo que
+(efectivo, transferencia y Mercado Pago), incluso los que quedaron en cero — más cualquier
+otro que aparezca en los datos, como la `tarjeta` de un cobro viejo. Es lo que
 permite comparar una semana con otra de un vistazo, o pegar una debajo de la otra: si cada
 hoja mostrara solo los medios con movimiento, ninguna tendría la misma forma.
 

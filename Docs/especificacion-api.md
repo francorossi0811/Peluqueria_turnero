@@ -361,8 +361,15 @@ escritura: partirlo en dos requests dejaría la puerta abierta a que el segundo 
 turno quede marcado sin cobro sin que nadie se entere. `cobro` es **opcional**: se puede
 marcar Realizado sin registrarlo y completarlo después.
 
-`medioPago` es uno de `efectivo | transferencia | mercado_pago | tarjeta`, y `montoCobrado`
+`medioPago` es uno de `efectivo | transferencia | mercado_pago`, y `montoCobrado`
 va en **pesos enteros** (un decimal responde `400`).
+
+⚠️ **`tarjeta` salió del enum aceptado el 21/8/2026**, pero **sigue existiendo en la base**.
+Ariel no cobra con tarjeta y Franco la sacó del panel; la API la rechaza también, para que la
+regla no viva solo en el frontend. Lo que **no** cambió es la lectura: un turno viejo cobrado
+con tarjeta se sigue devolviendo, mostrando y sumando en `GET /api/admin/cobros` y en la
+exportación. Sacarla del enum de Postgres sería una migración sobre `turnos`, que es la tabla
+donde vive el `EXCLUDE` escrito a mano — mucho riesgo por un valor que nadie usa.
 
 **Un `cobro` con `"estado": "ausente"` responde `400`**, y `PATCH …/cobro` sobre un turno
 que no está `realizado` responde `409 TURNO_NO_COBRABLE`. El que no vino no pagó, y un

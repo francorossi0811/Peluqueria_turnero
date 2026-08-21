@@ -1,5 +1,10 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
+import {
+  esquemaDeFecha,
+  FIN_ANTES_QUE_INICIO,
+  periodoDemasiadoLargo,
+} from '../utils/esquemasFecha'
 import { obtenerCobros } from '../services/cobros.service'
 import { clienteDto, type TurnoConCliente } from '../services/clientes.service'
 import {
@@ -17,11 +22,11 @@ const MAX_DIAS_RANGO = 425
 
 const rangoSchema = z
   .object({
-    desde: z.iso.date(),
-    hasta: z.iso.date(),
+    desde: esquemaDeFecha('la fecha de inicio'),
+    hasta: esquemaDeFecha('la fecha de fin'),
   })
   .refine((q) => q.hasta >= q.desde, {
-    message: 'hasta debe ser posterior o igual a desde.',
+    message: FIN_ANTES_QUE_INICIO,
     path: ['hasta'],
   })
   .refine(
@@ -29,7 +34,7 @@ const rangoSchema = z
       (fechaDesdeIso(q.hasta).getTime() - fechaDesdeIso(q.desde).getTime()) /
         86_400_000 <=
       MAX_DIAS_RANGO,
-    { message: 'El período es demasiado largo.' },
+    { message: periodoDemasiadoLargo(MAX_DIAS_RANGO) },
   )
 
 /** Más chico que `TurnoAdmin`: esta pantalla es una lista de cobros, no la agenda. No

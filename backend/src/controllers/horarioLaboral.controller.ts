@@ -6,18 +6,15 @@ import {
 } from '../services/horarioLaboral.service'
 import { FranjaInvalidaError } from '../services/errores'
 import { formatearHora, horaDesdeString } from '../utils/fechaHora'
+import { esquemaDeHora } from '../utils/esquemasFecha'
 import type { HorarioLaboral } from '../../generated/prisma/client.ts'
-
-const horaSchema = z
-  .string()
-  .regex(/^\d{2}:\d{2}$/, 'Formato de hora inválido, esperado HH:mm.')
 
 const putSchema = z.object({
   franjas: z.array(
     z.object({
       diaSemana: z.int().min(0).max(6),
-      horaInicio: horaSchema,
-      horaFin: horaSchema,
+      horaInicio: esquemaDeHora('la hora de apertura'),
+      horaFin: esquemaDeHora('la hora de cierre'),
     }),
   ),
 })
