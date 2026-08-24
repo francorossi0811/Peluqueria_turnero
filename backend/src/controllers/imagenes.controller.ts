@@ -6,7 +6,6 @@ import {
   borrarFotoDeServicio,
   fotoDto,
   listarFotosDeCliente,
-  MAX_FOTOS_POR_FICHA,
   obtenerImagen,
   ponerFotoDeServicio,
   usoDeAlmacenamiento,
@@ -16,7 +15,6 @@ import {
   ImagenDemasiadoGrandeError,
   ImagenInvalidaError,
   ImagenNoEncontradaError,
-  LimiteDeFotosError,
   ServicioNoEncontradoError,
 } from '../services/errores'
 import { MAX_BYTES } from '../utils/dataUrl'
@@ -46,15 +44,6 @@ function manejarErroresDeImagen(err: unknown, res: Response): boolean {
       error: {
         codigo: 'IMAGEN_DEMASIADO_GRANDE',
         mensaje: `La foto pesa demasiado (máximo ${Math.round(MAX_BYTES / 1024)} KB).`,
-      },
-    })
-    return true
-  }
-  if (err instanceof LimiteDeFotosError) {
-    res.status(409).json({
-      error: {
-        codigo: 'LIMITE_DE_FOTOS',
-        mensaje: `Esta ficha ya tiene ${MAX_FOTOS_POR_FICHA} fotos. Borrá alguna para poder sumar otra.`,
       },
     })
     return true
@@ -128,7 +117,7 @@ export async function getFotosDeCliente(req: Request, res: Response) {
   }
 
   const fotos = await listarFotosDeCliente(parsed.data.id)
-  res.json({ fotos: fotos.map(fotoDto), maximo: MAX_FOTOS_POR_FICHA })
+  res.json({ fotos: fotos.map(fotoDto) })
 }
 
 export async function postFotoDeCliente(req: Request, res: Response) {

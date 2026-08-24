@@ -597,12 +597,12 @@ Los consumidores tienen que tratarlo como una URL opaca, **no** asumir que empie
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/imagenes/:id` | El binario. **Público** — ver la nota de abajo |
-| GET | `/api/admin/clientes/:id/fotos` | 🔒 La galería de una ficha: `{ "fotos": [...], "maximo": 5 }` |
+| GET | `/api/admin/clientes/:id/fotos` | 🔒 La galería de una ficha: `{ "fotos": [...] }`. **Sin tope de cantidad** desde el 23/8/2026 |
 | POST | `/api/admin/clientes/:id/fotos` | 🔒 Suma una foto |
 | DELETE | `/api/admin/clientes/:id/fotos/:fotoId` | 🔒 Borra una. `204` |
 | PUT | `/api/admin/servicios/:id/foto` | 🔒 Pone o reemplaza la del servicio |
 | DELETE | `/api/admin/servicios/:id/foto` | 🔒 La saca; el servicio vuelve a su ruta estática o al stock |
-| GET | `/api/admin/almacenamiento` | 🔒 `{ "fotos": 12, "bytes": 1843200 }` — cuánto se está ocupando |
+| GET | `/api/admin/almacenamiento` | 🔒 `{ "fotos": 12, "bytes": 1843200, "presupuestoBytes": 419430400 }` — cuánto se ocupa y sobre cuánto |
 
 La subida viaja como **data URL dentro de un JSON**, no como multipart:
 ```json
@@ -616,7 +616,9 @@ infla base64, despreciable sobre una foto de 150 KB. La respuesta es
 Errores: **400 `IMAGEN_INVALIDA`** (no es una data URL, o el formato no está permitido — solo
 `image/jpeg`, `image/png` y `image/webp`; ⚠️ **SVG se rechaza a propósito**, es un documento que
 puede traer `<script>` y se serviría desde nuestro dominio), **400 `IMAGEN_DEMASIADO_GRANDE`**
-(más de 600 KB ya decodificados) y **409 `LIMITE_DE_FOTOS`** (la ficha llegó a 5).
+(más de 600 KB ya decodificados). ⚠️ **Ya no existe `409 LIMITE_DE_FOTOS`**: el tope de 5 fotos
+por ficha se sacó el 23/8/2026 a pedido de Ariel, y con él el error y el campo `maximo` de la
+respuesta del listado. El peso por foto **no** cambió.
 
 ⚠️ **`GET /api/imagenes/:id` no pide autenticación, ni siquiera para las fotos de las fichas**, y
 la autorización es conocer el uuid — el mismo criterio que `GET /api/turnos/:id`, donde el id *es*

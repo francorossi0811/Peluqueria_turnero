@@ -32,9 +32,9 @@ export class TurnoSeSolapaConRealizadoError extends Error {}
 // entera. Las dos son errores del **cliente**: las acciones de Ariel no pasan por acá.
 export class LimiteSemanalError extends Error {}
 export class FueraDeHorizonteError extends Error {}
-// HU-29 — Fotos. Son tres y no uno solo porque mandan a hacer cosas distintas: cambiar el
-// archivo, achicarlo, o borrar alguna de las que ya están.
+// HU-29 — Fotos. Son dos y no uno solo porque mandan a hacer cosas distintas: cambiar el
+// archivo o achicarlo. (Había un tercero, `LimiteDeFotosError`, para el tope de 5 por ficha;
+// se fue el 23/8/2026 junto con el tope.)
 export class ImagenInvalidaError extends Error {}
 export class ImagenDemasiadoGrandeError extends Error {}
 export class ImagenNoEncontradaError extends Error {}
-export class LimiteDeFotosError extends Error {}

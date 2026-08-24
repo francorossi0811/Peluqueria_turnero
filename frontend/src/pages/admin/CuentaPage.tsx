@@ -88,6 +88,11 @@ export function CuentaPage() {
  *
  * Va en "Mi cuenta" porque es la pantalla donde ya vive lo que el sistema sabe de sí mismo (el
  * diagnóstico de los avisos), y no hacía falta inventarle un lugar nuevo.
+ *
+ * ⚠️ Desde el 23/8/2026 dejó de ser informativo. Cuando existía el tope de 5 fotos por ficha,
+ * el techo era estructural y este número era una curiosidad; sacado el tope (pedido de Ariel),
+ * **este medidor es la única defensa que queda**, y por eso el peso usado va siempre contra el
+ * total. Un número suelto no dice si falta mucho o poco.
  */
 function SeccionAlmacenamiento() {
   const query = useQuery({
@@ -106,11 +111,14 @@ function SeccionAlmacenamiento() {
           <p className="text-tinta text-sm">
             <span className="font-semibold">{query.data.fotos}</span>{' '}
             {query.data.fotos === 1 ? 'foto guardada' : 'fotos guardadas'} ·{' '}
-            <span className="font-semibold">{formatearPeso(query.data.bytes)}</span>
+            <span className="font-semibold">{formatearPeso(query.data.bytes)}</span>{' '}
+            de {formatearPeso(query.data.presupuestoBytes)}
           </p>
           <p className="text-tinta-tenue text-sm">
-            Las fotos se achican solas antes de guardarse. Si alguna ficha ya no las
-            necesita, podés borrarlas desde la ficha, en la sección Clientes.
+            Podés subir todas las fotos que quieras; se achican solas antes de guardarse.
+            Lo único que tiene tope es el espacio total, y ahí arriba ves cuánto llevás
+            usado. Si alguna ficha ya no las necesita, podés borrarlas desde la ficha, en
+            la sección Clientes.
           </p>
         </div>
       )}

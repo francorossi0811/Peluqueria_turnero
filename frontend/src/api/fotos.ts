@@ -15,7 +15,6 @@ export interface Foto {
 
 export interface GaleriaDeFicha {
   fotos: Foto[]
-  maximo: number
 }
 
 /** El `src` que va en un `<img>`, a partir de lo que devuelve la API.
@@ -81,6 +80,9 @@ export async function borrarFotoDeServicio(servicioId: string): Promise<void> {
 export interface UsoDeAlmacenamiento {
   fotos: number
   bytes: number
+  /** El techo, que lo fija el backend. No se copia acá: sería un segundo número capaz de
+   * divergir del que el sistema aplica de verdad. */
+  presupuestoBytes: number
 }
 
 export async function obtenerUsoDeAlmacenamiento(): Promise<UsoDeAlmacenamiento> {
