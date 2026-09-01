@@ -271,6 +271,8 @@ mensaje, no que lo entregó" — ver `Docs/plantillas-whatsapp.md`.
 
 ---
 
+---
+
 ## 3. Endpoints de administración (`/api/admin/*` — JWT requerido)
 
 ### Auth y cuenta — HU-15, HU-16
@@ -741,6 +743,47 @@ endpoint disparado por el usuario donde antes este documento decía que iba a se
 sin él, un feriado decretado a mitad de año no entraría nunca. Un cron no existe en el plan
 gratuito de Render, y que Ariel decida cuándo refrescar es más predecible que adivinar un
 intervalo.
+
+---
+
+### Sincronización de Coexistence — HU-22 (solo `super_admin`)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/coexistence` | Qué sincronizaciones ya se ejecutaron, con su `request_id` |
+| POST | `/api/admin/coexistence/sincronizar` | Ejecuta las dos llamadas de `smb_app_data`, en orden |
+
+Son las dos llamadas que Meta pide después de que el negocio completa el Embedded Signup:
+`smb_app_state_sync` primero, `history` después. Van a
+`POST https://graph.facebook.com/<version>/<PHONE_NUMBER_ID>/smb_app_data`.
+
+⚠️ **Cada llamada se puede ejecutar UNA sola vez en la vida del número, y hay 24 horas de
+plazo desde el onboarding.** Si una se repite o falla, Meta obliga al negocio a
+desvincularse y rehacer el Embedded Signup entero. De ahí sale todo lo demás:
+
+- **No corre sola en ningún lado.** La dispara una persona desde el panel y mira el
+  resultado. Un job con reintentos, un redeploy o un doble click se llevarían puesta la
+  única oportunidad.
+- **Es `super_admin`**, no `admin`: no es una acción de la operación diaria de la
+  peluquería, así que no está al alcance de la cuenta de Ariel.
+- **La fila se inserta antes de llamar a Meta** (tabla `coexistence_sincronizaciones`, ver
+  `Docs/modelo-datos.md`). Al revés, una caída entre la llamada y el registro dejaría la
+  llamada hecha y sin rastro, y el próximo intento la repetiría.
+- **Si la primera falla, la segunda no se ejecuta**: `history` sin el estado de la app
+  sincronizado no tiene sentido y gastaría su única oportunidad al pedo.
+
+**Respuestas**
+
+- `200` — `{ "sincronizaciones": [{ "syncType": "...", "requestId": "..." }, ...] }`. El
+  `request_id` es lo que se le pasa a soporte de Meta si algo sale mal; se persiste.
+- `409 SINCRONIZACION_YA_EJECUTADA` — ya se corrió. El mensaje dice cuándo, con qué estado
+  y, si quedó en `error`, **nombra la tabla y da el `DELETE`** para destrabarlo a mano.
+- `502 SINCRONIZACION_FALLIDA` — falló del lado de Meta. Es 502 y no 500 porque el que
+  falló no fuimos nosotros. El detalle de la respuesta de Meta va entero al cliente: lo mira
+  una persona que necesita llevárselo a soporte.
+
+⚠️ **Usa una versión de la Graph API distinta del resto** (`WHATSAPP_COEXISTENCE_API_VERSION`,
+v26) — ver `CLAUDE.md`.
 
 ---
 

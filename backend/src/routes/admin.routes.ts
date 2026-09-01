@@ -61,6 +61,10 @@ import {
   postAdministrador,
 } from '../controllers/administradores.controller'
 import { requireAuth, requireSuperAdmin } from '../middlewares/auth.middleware'
+import {
+  getEstadoCoexistence,
+  postSincronizarCoexistence,
+} from '../controllers/coexistence.controller'
 
 export const adminRouter = Router()
 
@@ -172,3 +176,25 @@ adminRouter.get('/admin/bloqueos', requireAuth, getBloqueos)
 adminRouter.post('/admin/bloqueos', requireAuth, postBloqueo)
 adminRouter.patch('/admin/bloqueos/:id', requireAuth, patchBloqueo)
 adminRouter.delete('/admin/bloqueos/:id', requireAuth, deleteBloqueo)
+
+// HU-22 — Sincronización de Coexistence (SMB App Data API).
+//
+// ⚠️ `requireSuperAdmin` y no `requireAuth`: cada una de las dos llamadas se puede ejecutar
+// UNA sola vez en la vida del número, y repetirla obliga a desvincular y rehacer el
+// Embedded Signup entero. No es una acción de la operación diaria de la peluquería, así que
+// no tiene por qué estar al alcance de la cuenta de Ariel.
+// ⚠️ `requireAuth` va PRIMERO: `requireSuperAdmin` solo lee `req.admin.rol`, que lo pone
+// aquel leyéndolo de la base. Sin él, `req.admin` queda `undefined` y la ruta responde 403
+// siempre — falla cerrado, pero queda inalcanzable.
+adminRouter.get(
+  '/admin/coexistence',
+  requireAuth,
+  requireSuperAdmin,
+  getEstadoCoexistence,
+)
+adminRouter.post(
+  '/admin/coexistence/sincronizar',
+  requireAuth,
+  requireSuperAdmin,
+  postSincronizarCoexistence,
+)

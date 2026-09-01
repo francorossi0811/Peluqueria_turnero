@@ -221,6 +221,52 @@ la cancelación se partió en dos, y las trampas que aparecieron conectando— v
 
 **Fuera de alcance dentro de WhatsApp:** el recordatorio previo al turno, y la respuesta automática al cliente que escribe primero (⚠️ esta última **no necesita código nuestro**: la da la app de WhatsApp Business con su mensaje de bienvenida, y solo hay que pegarle el link del turnero).
 
+### Sincronización de Coexistence (1/9/2026) — el endpoint de un solo disparo
+
+`POST /api/admin/coexistence/sincronizar` ejecuta las dos llamadas de `smb_app_data` que
+Meta pide después del Embedded Signup. El detalle está en `Docs/especificacion-api.md` y la
+tabla en `Docs/modelo-datos.md`; acá va lo que hay que saber antes de tocarlo.
+
+- ⚠️ **Cada llamada se puede hacer UNA sola vez en la vida del número, y hay 24 horas de
+  plazo.** Repetirla o que falle obliga a desvincular el número y rehacer el Embedded
+  Signup entero. Por eso **no corre sola en ningún lado**: la dispara una persona y mira el
+  resultado. Un job con reintentos o un doble click se llevarían puesta la oportunidad.
+- ⚠️ **La garantía de "una sola vez" es el `@unique` de `sync_type`, no un `if`.** Dos
+  requests simultáneos pasarían un chequeo en aplicación los dos. Mismo criterio que el
+  `EXCLUDE` de `turnos`.
+- ⚠️ **La fila se inserta ANTES de llamar a Meta.** Al revés, una caída entre la llamada y
+  el registro la dejaría hecha y sin rastro, y el próximo intento la repetiría — el único
+  desenlace sin arreglo. Consecuencia asumida: **una llamada fallida bloquea el reintento**,
+  y destrabarla es borrar la fila a mano. El 409 lo explica nombrando la tabla y el `DELETE`.
+- Es **`super_admin`**: no es operación diaria de la peluquería. ⚠️ Y va con `requireAuth`
+  **antes** — `requireSuperAdmin` solo lee `req.admin.rol`, que lo pone aquel; solo, la ruta
+  responde 403 siempre.
+
+⚠️ **Conviven DOS versiones de la Graph API a propósito.** Los envíos de mensajes siguen en
+`WHATSAPP_API_VERSION` (v23) y la sincronización usa `WHATSAPP_COEXISTENCE_API_VERSION`
+(v26), que es la que `smb_app_data` necesita. Subir la global en la misma tarea que una
+operación irreversible mezclaría dos riesgos: si algo sale mal, no habría forma de saber
+cuál de los dos cambios lo causó. **El upgrade de todos los envíos a v26 es tarea aparte.**
+
+⚠️ **Los eventos `history` del webhook se loguean resumidos** (`phase`, `chunk_order`,
+`progress`) y no enteros: durante una sincronización llegan **cientos de chunks** y el log
+queda inservible justo el día que hay que mirarlo. Efecto lateral bueno y verificado: cada
+chunk trae conversaciones reales de clientes, y el resumen **no las deja pasar al log**.
+
+### ⚠️ La base local NO es la de Render (1/9/2026)
+
+| | |
+|---|---|
+| `DATABASE_URL` de `backend/.env` | branch **`prueba-ajustes-23ago`** |
+| Lo que sirve Render | branch **`production`** (default) |
+
+**Toda migración futura necesita un paso explícito contra `production`**, porque
+`migrate deploy` a secas la aplica solo a la branch del `.env`. Si se olvida, el código sale
+desplegado buscando una tabla que ahí no existe y revienta con 500. La forma que funcionó:
+sacar la connection string de production con la MCP de Neon y pasarla por `DATABASE_URL` en
+el `migrate diff` y en el `migrate deploy`, y después confirmar contra `pg_constraint` que
+`turnos_no_solapamiento` sigue en pie.
+
 ⚠️ **Enmienda (22/8/2026): el webhook ya no está enteramente fuera de alcance.** Existe `GET`/`POST /api/webhooks/whatsapp` porque Meta lo exige para dar de alta la suscripción — ver `Docs/especificacion-api.md`. **Pero solo cumple el contrato mínimo**: el `GET` hace el handshake y el `POST` responde 200 y loguea. Lo que sigue sin estar es **procesar los eventos**: validar `X-Hub-Signature-256` y leer los `statuses`. O sea que la advertencia de abajo sigue valiendo igual.
 
 ⚠️ Sin procesar los estados, **el respaldo por mail cubre el envío que falla, no el que rebota**: Meta responde cuando acepta el mensaje, no cuando lo entrega. **Esto se vio pasar de verdad el 20/8/2026** — un aviso de cancelación que Meta aceptó y nunca llegó, sin nada que loguear.

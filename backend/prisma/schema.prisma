@@ -434,3 +434,53 @@ model Turno {
 // WHERE (estado = 'reservado')
 // Prisma no puede expresar un EXCLUDE constraint en el schema; ver Docs/modelo-datos.md
 // sección "Reglas de integridad clave" y el plan de esta etapa.
+
+/// El estado de una de las dos llamadas de sincronización de Coexistence.
+///
+/// `en_curso` no es cosmético: la fila se inserta **antes** de llamar a Meta, así que ese
+/// es el estado real mientras la llamada está en vuelo, y también el que queda pegado si
+/// el proceso se cae en el medio. Ver el modelo de abajo.
+enum EstadoSincronizacion {
+  en_curso
+  ok
+  error
+}
+
+/// Las dos llamadas de sincronización de Coexistence (SMB App Data API), una fila cada una.
+///
+/// ⚠️ **Cada llamada se puede ejecutar UNA sola vez en la vida del número.** Si se repite o
+/// falla, Meta obliga al negocio a desvincularse y rehacer el Embedded Signup entero. De
+/// ahí sale todo el diseño de esta tabla:
+///
+/// - `syncType` es **`@unique`**, y esa es la garantía real de "una sola vez". Un chequeo
+///   en la aplicación lo pasarían dos requests simultáneos y las dos ejecutarían — la misma
+///   razón por la que la doble reserva se previene con un constraint y no con un `if`.
+/// - La fila se inserta **antes** de llamar a Meta. Al revés, una caída entre la llamada y
+///   el `INSERT` dejaría la llamada hecha y sin registro, y el próximo intento la
+///   repetiría: el único desenlace que no tiene arreglo. Insertando primero, el peor caso
+///   es una fila marcada como usada sin `requestId`, que se resuelve hablando con soporte.
+///
+/// Consecuencia asumida: **una llamada fallida bloquea el reintento igual**. Destrabarla es
+/// borrar la fila a mano, y el 409 del segundo intento lo dice con todas las letras.
+model CoexistenceSincronizacion {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// `smb_app_state_sync` o `history`, tal cual los nombra Meta. Es el valor que viaja en
+  /// el cuerpo del POST, así que se guarda igual y no traducido.
+  syncType String @unique @map("sync_type")
+
+  estado EstadoSincronizacion @default(en_curso)
+
+  /// Lo que devuelve Meta y hay que darle a soporte si algo sale mal. Es la única razón
+  /// por la que esta tabla guarda algo además del "ya se corrió".
+  requestId String? @map("request_id")
+
+  /// La respuesta completa, como vino. Sin parsear: si algo falla, lo que sirve es el
+  /// cuerpo crudo y no nuestra interpretación de él.
+  respuesta String?
+
+  iniciadoEn  DateTime  @default(now()) @map("iniciado_en")
+  terminadoEn DateTime? @map("terminado_en")
+
+  @@map("coexistence_sincronizaciones")
+}

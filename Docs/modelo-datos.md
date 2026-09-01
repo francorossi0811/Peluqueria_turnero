@@ -449,6 +449,42 @@ existe.
 
 ---
 
+### `coexistence_sincronizaciones` — HU-22
+
+Las dos llamadas de sincronización de Coexistence (SMB App Data API), una fila cada una.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | uuid | PK |
+| `sync_type` | text | **UNIQUE** — `smb_app_state_sync` o `history`, tal cual los nombra Meta |
+| `estado` | enum | `en_curso` · `ok` · `error` |
+| `request_id` | text? | Lo que devuelve Meta; es lo que se le pasa a soporte |
+| `respuesta` | text? | La respuesta completa, sin parsear |
+| `iniciado_en` | timestamp | |
+| `terminado_en` | timestamp? | |
+
+⚠️ **Esta tabla no guarda datos del negocio: guarda que algo ya se hizo.** Existe porque
+cada una de esas llamadas se puede ejecutar **una sola vez en la vida del número**, y
+repetirla obliga a desvincular y rehacer el Embedded Signup entero.
+
+⚠️ **La unicidad de `sync_type` es la garantía real, no un `if` en la aplicación.** Dos
+requests simultáneos pasarían un `findFirst` + `if` los dos y ejecutarían las dos llamadas.
+Es el mismo criterio que el `EXCLUDE` de `turnos`: la regla que no se puede violar vive en
+la base.
+
+⚠️ **La fila se inserta antes de llamar a Meta.** Al revés —llamar y después registrar— una
+caída en el medio dejaría la llamada hecha y sin rastro, y el siguiente intento la
+repetiría: el único desenlace que no tiene arreglo. Insertando primero, el peor caso es una
+fila marcada como usada sin `request_id`, que se resuelve hablando con soporte.
+
+**Consecuencia asumida:** una llamada fallida bloquea el reintento igual. Destrabarla es
+borrar la fila a mano, y el 409 del segundo intento lo dice con todas las letras — nombra la
+tabla y da el `DELETE`, porque quien se cruce con esto lo va a leer una sola vez en su vida.
+
+`estado = en_curso` no es cosmético: es el estado real mientras la llamada está en vuelo, y
+el que queda pegado si el proceso se cae en el medio.
+
+
 ## 3. Reglas de integridad clave
 
 | Regla | Cómo se implementa |
