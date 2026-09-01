@@ -132,15 +132,21 @@ const CLASES_ESTADO: Record<string, string> = {
 }
 
 /** El pendiente es el único estado que se parte en dos, y se parte por **cuándo**: blanco
- * el de hoy, mostaza el de cualquier otro día.
+ * lo que está **abierto** (hoy, o un día que ya pasó y quedó sin cerrar), mostaza lo que
+ * **todavía va a pasar**.
+ *
+ * ⚠️ El corte es "hoy o antes", no "hoy". Hasta el 23/8/2026 era `dia === hoy`, y eso hacía
+ * que un `reservado` de ayer que Ariel nunca marcó volviera a mostaza, o sea que se veía
+ * igual que uno de la semana que viene. Un pendiente pasado no es un turno futuro: es el que
+ * hay que ir a marcar Realizado o Ausente, y era justo el que quedaba disfrazado.
  *
  * No contradice la regla de que el color dice el estado: los dos siguen queriendo decir
  * "pendiente". Lo que agrega es la pregunta que Ariel se hace primero al abrir la semana —
- * qué me queda hoy — sin tener que buscar la columna. El cerrado (realizado / ausente) no
- * se parte porque ahí la pregunta ya no existe. */
-function clasesDeEstado(estado: string, esDeHoy: boolean): string {
+ * qué me queda por resolver — sin tener que buscar la columna. El cerrado (realizado /
+ * ausente) no se parte porque ahí la pregunta ya no existe. */
+function clasesDeEstado(estado: string, esHoyOPasado: boolean): string {
   if (estado === 'reservado') {
-    return esDeHoy
+    return esHoyOPasado
       ? 'bg-turno-hoy text-agenda-tinta'
       : 'bg-turno-futuro text-agenda-tinta'
   }
@@ -599,7 +605,9 @@ function TramoGrilla({
                   // en el turno en curso, junto con el borde grueso.
                   className={`border-agenda-linea absolute overflow-hidden rounded-md border-2 text-left shadow-sm transition hover:brightness-110 ${clasesDeEstado(
                     t.estado,
-                    dia === hoy,
+                    // Strings ISO `YYYY-MM-DD`, que se ordenan solos. Nunca `new Date(dia)`:
+                    // lo parsearía en UTC y en Argentina correría el borde un día.
+                    dia <= hoy,
                   )} ${enCurso ? CLASES_EN_CURSO : ''}`}
                   style={{
                     top: (inicio - tramo.inicio) / MINUTOS_POR_PX,

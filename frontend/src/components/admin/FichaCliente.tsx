@@ -247,7 +247,6 @@ function Galeria({ clienteId }: { clienteId: string }) {
 
   const galeria = galeriaQuery.data
   const fotos = galeria?.fotos ?? []
-  const lleno = galeria ? fotos.length >= galeria.maximo : false
 
   function elegir(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0]
@@ -265,7 +264,7 @@ function Galeria({ clienteId }: { clienteId: string }) {
           {galeria && (
             <span className="text-tinta-tenue">
               {' '}
-              · {fotos.length} de {galeria.maximo}
+              · {fotos.length} {fotos.length === 1 ? 'foto' : 'fotos'}
             </span>
           )}
         </p>
@@ -278,21 +277,13 @@ function Galeria({ clienteId }: { clienteId: string }) {
         />
         <button
           type="button"
-          disabled={lleno || subirMutation.isPending}
+          disabled={subirMutation.isPending}
           onClick={() => inputRef.current?.click()}
           className="text-miel text-sm font-semibold hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:no-underline"
         >
           {subirMutation.isPending ? 'Subiendo…' : '+ Agregar foto'}
         </button>
       </div>
-
-      {/* Cuando está lleno, decir por qué el botón no anda. Un botón gris sin explicación es
-          el momento en que alguien piensa que la app se rompió. */}
-      {lleno && (
-        <p className="text-tinta-tenue mb-2 text-xs">
-          Llegaste al máximo. Borrá alguna para poder sumar otra.
-        </p>
-      )}
 
       {error && <p className="text-vino mb-2 text-sm">{error}</p>}
 

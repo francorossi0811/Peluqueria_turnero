@@ -109,6 +109,10 @@ export interface ConfigWhatsapp {
   plantillaCanceladoNegocio: string
   idioma: string
   version: string
+  /** El secreto del handshake del webhook: lo inventamos nosotros y se pega igual en el
+   * panel de Meta. `null` cuando no está configurado, y en ese caso el `GET` del webhook
+   * responde 403 siempre — sin token esperado no hay con qué comparar. */
+  verifyToken: string | null
   /** ⚠️ Estamos usando el número de PRUEBA de Meta, no el de Ariel. Su lista de
    * destinatarios autorizados guarda los números sin el `9` de celular y compara literal,
    * así que hay que enviar sin él. Se apaga el día que el número real esté conectado. */
@@ -157,6 +161,11 @@ export function configWhatsapp(): ConfigWhatsapp {
       'turno_cancelado_negocio',
     idioma: process.env.WHATSAPP_IDIOMA || 'es_AR',
     version: process.env.WHATSAPP_API_VERSION || 'v23.0',
+    // ⚠️ Deliberadamente **fuera** del chequeo todo-o-nada de arriba. Aquel existe porque
+    // media configuración de envío es casi siempre un error de deploy; esto es otra cosa:
+    // un backend que no expone el webhook tiene que poder arrancar igual, y sin la variable
+    // el endpoint simplemente no verifica a nadie.
+    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || null,
     numeroDePrueba: process.env.WHATSAPP_NUMERO_DE_PRUEBA === 'true',
   }
 }

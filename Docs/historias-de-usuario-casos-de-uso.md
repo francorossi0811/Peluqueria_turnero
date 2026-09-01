@@ -221,7 +221,8 @@ Como Ariel, quiero ver la semana entera con los días en columnas y las horas ha
 - Los ratos en los que no abro (por ejemplo las 9 de la mañana un martes, que solo abro el sábado) se ven rayados y no se pueden tocar: mostrarlos como libres sería mentir.
 - Los horarios que ya pasaron tampoco se tocan — miro semanas anteriores para saber quién vino, no para cargar turnos ahí.
 - Cada turno muestra el nombre **en mayúsculas y en blanco**, para leerlo de lejos: uso lentes. El color del turno lo dan el fondo y el borde, no la letra.
-- El color dice el estado: ámbar reservado, verde realizado, rojo ausente. Un turno que todavía no vi lleva un anillo alrededor.
+- El color dice el estado: verde realizado, rojo ausente, y el pendiente se parte en dos según **cuándo**: **blanco** el que está abierto (hoy, o un día que ya pasó y quedé sin cerrar) y **amarillo** el que todavía va a pasar. Un turno que todavía no vi lleva un anillo alrededor.
+- ⚠️ *Enmienda del 23/8/2026:* antes el blanco era solo el de **hoy**, así que un turno de ayer que no marqué volvía a amarillo y se veía igual que uno de la semana que viene. Justo el que tengo que ir a cerrar era el que quedaba disfrazado de futuro. Ahora el amarillo quiere decir una sola cosa: **todavía no llegó**.
 - Los feriados se ven en la grilla: el día lleva el nombre del feriado arriba, y el rato en que no atiendo queda rayado — en un feriado de medio día, la tarde entera.
 - Un turno ya reservado en la tarde de un feriado de medio día **se sigue viendo**. El feriado deja de ofrecer horarios nuevos, no borra los que ya estaban.
 
@@ -415,13 +416,15 @@ Como Ariel, quiero que nadie pueda acaparar mis horarios reservando de a montone
 
 **HU-29 — Fotos en las fichas y en los servicios**
 Como Ariel, quiero guardar fotos de cómo quedó el corte en la ficha de cada cliente, y ponerle una foto propia a cada servicio, para no depender de mi memoria ni dejar la web con una imagen genérica.
-- En la ficha sumo **hasta 5 fotos** por persona. Es lo que resuelve el "quiero el mismo de la otra vez", que en la planilla de papel no tenía dónde vivir.
+- En la ficha sumo **las fotos que hagan falta** por persona. Es lo que resuelve el "quiero el mismo de la otra vez", que en la planilla de papel no tenía dónde vivir. (Hasta el 23/8/2026 había un tope de 5 y lo pedí sacar: sé que ocupan, y prefiero cuidarlo yo antes de que el sistema me corte en la mitad de un trabajo.)
 - **Puedo borrar las viejas**, y las borro yo: si no, el tope se convierte en una pared y el espacio se llena de fotos que ya no le sirven a nadie. En "Mi cuenta" veo cuántas hay y cuánto pesan, así decido con un número y no a ojo.
 - A cada servicio le pongo **una** foto, y se la puedo poner también a uno que acabo de crear. Antes un servicio nuevo quedaba con una imagen de stock y no había forma de cambiarla desde el panel.
 - Las fotos **se achican solas** antes de guardarse: una de 1,4 MB del celular queda en ~150 KB, con el lado más largo en 900 px. No tengo que hacer nada.
 - Si a un servicio le saco la foto, vuelve a mostrarse la que tenía antes, o una genérica si nunca tuvo.
 
-*Por qué hay un tope de 5 y por qué las fotos se achican:* las dos cosas son la misma decisión. Los archivos se guardan en la base de datos, y el plan gratuito que usa el proyecto son 0,5 GB. Con 5 fotos de ~150 KB una ficha ocupa ~750 KB, o sea que entran unas 300 fichas cómodas. Con 12 fotos de 300 KB el límite se pasa antes de las 150. **Los números no son decoración: son lo que hace que la decisión de dónde guardarlas se sostenga.**
+*Por qué las fotos se achican, y qué reemplazó al tope de 5 (enmienda del 23/8/2026):* los archivos se guardan en la base de datos, y el plan gratuito que usa el proyecto son 0,5 GB. Eso se sostenía con **dos** números: la compresión a ~150 KB y el tope de 5 fotos por ficha. Ariel pidió sacar el segundo, así que **queda uno solo**, y con él el techo dejó de ser estructural: ya no hay nada que impida que una sola ficha se lleve el espacio de cien.
+
+Lo que ocupa ese lugar es el **medidor de "Mi cuenta"**, que por eso dejó de ser informativo: muestra el espacio usado **contra un presupuesto de 400 MB** (no los 500 de Neon — la misma base guarda turnos y clientes, y un medidor que llega al 100% cuando la base ya no acepta escrituras no avisa nada). Con ~150 KB por foto son ~2.700 fotos de margen, sobre ~230 clientes por mes: el problema no es inminente, pero pasó a depender de que alguien mire el número. **Si alguna vez se llena, lo que hay que mover es dónde viven los archivos —un bucket—, y eso no cambia una sola pantalla.**
 
 *Por qué en la base y no en un servicio de imágenes:* no había **ningún** lugar donde un archivo subido sobreviviera — la carpeta pública del frontend se arma al compilar y el disco del servidor se borra en cada reinicio. Un servicio tipo Cloudinary pedía cuenta nueva y trámite externo, que es exactamente lo que tiene frenado a WhatsApp (HU-22). Como la aplicación solo maneja la URL `/api/imagenes/<id>`, mudarse a un bucket más adelante no cambia una sola pantalla.
 

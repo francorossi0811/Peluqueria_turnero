@@ -12,18 +12,24 @@ import {
   ImagenDemasiadoGrandeError,
   ImagenInvalidaError,
   ImagenNoEncontradaError,
-  LimiteDeFotosError,
   ServicioNoEncontradoError,
 } from './errores'
 
-/** Cuántas fotos puede tener una ficha.
+/** El presupuesto de espacio para las fotos, y el número que se le muestra a Ariel en
+ * "Mi cuenta".
  *
- * ⚠️ No es un número decorativo: es, junto con la compresión del navegador, lo que hace viable
- * haber guardado los archivos en Postgres. Con 5 fotos de ~150 KB son ~750 KB por ficha, o sea
- * ~225 MB en 300 fichas contra los 0,5 GB del plan gratuito de Neon. Subirlo a 12 fotos de
- * 300 KB pasa el límite antes de las 150 fichas. Si algún día hace falta más, lo que hay que
- * mover es dónde viven los archivos, no este número. */
-export const MAX_FOTOS_POR_FICHA = 5
+ * ⚠️ Desde el 23/8/2026 es la **única** defensa que queda: hasta esa fecha había además un tope
+ * de 5 fotos por ficha, y Ariel pidió sacarlo porque le cortaba el trabajo. De los dos números
+ * que hacían viable guardar los archivos en Postgres queda uno solo —la compresión del
+ * navegador, ~150 KB por foto— y este medidor, que dejó de ser informativo.
+ *
+ * Son 400 MB y no los 500 del plan gratuito de Neon a propósito: la misma base guarda turnos,
+ * clientes e imágenes, y un medidor que recién llega al 100% cuando la base ya no acepta
+ * escrituras no avisa nada. Con ~150 KB por foto son ~2.700 fotos de margen.
+ *
+ * Si algún día se llena, lo que hay que mover es **dónde viven los archivos** (un bucket) y eso
+ * no toca ninguna pantalla: el frontend solo ve `/api/imagenes/<id>`. */
+export const PRESUPUESTO_DE_FOTOS = 400 * 1024 * 1024
 
 /** Lo que se devuelve de una foto: todo menos el binario.
  *
@@ -92,8 +98,9 @@ export async function agregarFotoACliente(clienteId: string, dataUrl: string) {
       : new ImagenInvalidaError()
   }
 
+  // Sin tope de cantidad desde el 23/8/2026 (ver `PRESUPUESTO_DE_FOTOS`). El conteo se queda
+  // igual: ahora su único trabajo es darle el `orden` a la foto nueva, así que no está huérfano.
   const cuantas = await prisma.imagen.count({ where: { clienteId } })
-  if (cuantas >= MAX_FOTOS_POR_FICHA) throw new LimiteDeFotosError()
 
   return prisma.imagen.create({
     data: { ...decodificada.imagen, clienteId, orden: cuantas },
@@ -154,6 +161,10 @@ export async function borrarFotoDeServicio(servicioId: string) {
 export interface UsoDeAlmacenamiento {
   fotos: number
   bytes: number
+  /** ⚠️ Viaja por la API en vez de estar hardcodeado en el frontend para que no haya dos
+   * números que puedan divergir: el que la pantalla dibuja y el que el sistema aplica. Es el
+   * mismo defecto de copia que este proyecto ya se comió con el `ausente` de dos colores. */
+  presupuestoBytes: number
 }
 
 /** Cuánto se está ocupando (HU-29). Suma la columna `bytes` en vez de `length(datos)`: es
@@ -163,5 +174,9 @@ export async function usoDeAlmacenamiento(): Promise<UsoDeAlmacenamiento> {
     _count: { _all: true },
     _sum: { bytes: true },
   })
-  return { fotos: r._count._all, bytes: r._sum.bytes ?? 0 }
+  return {
+    fotos: r._count._all,
+    bytes: r._sum.bytes ?? 0,
+    presupuestoBytes: PRESUPUESTO_DE_FOTOS,
+  }
 }

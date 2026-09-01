@@ -88,5 +88,8 @@ export async function comprimirImagen(archivo: File): Promise<string> {
 export function formatearPeso(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  // Un decimal, salvo que sea redondo: el techo de 400 MB que se muestra en "Mi cuenta" es
+  // un número elegido a mano y leerlo como "400.0 MB" lo hace parecer una medición.
+  const mb = bytes / (1024 * 1024)
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`
 }
