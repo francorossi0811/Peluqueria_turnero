@@ -9,6 +9,7 @@ import { imagenesRouter } from './routes/imagenes.routes'
 import { pushRouter } from './routes/push.routes'
 import { serviciosRouter } from './routes/servicios.routes'
 import { turnosRouter } from './routes/turnos.routes'
+import { webhooksRouter } from './routes/webhooks.routes'
 
 export const app = express()
 
@@ -27,6 +28,13 @@ app.use(cors({ exposedHeaders: [HEADER_TOKEN_RENOVADO] }))
 // La alternativa —subir el límite global— haría que *toda* la API acepte cuerpos de megabytes
 // para que dos endpoints puedan. Reservar un turno no tiene por qué.
 app.use('/api', imagenesRouter)
+
+// El webhook de WhatsApp también va antes del `express.json()` global, pero por un motivo
+// distinto del de las fotos: no es el tamaño del cuerpo, es que Meta firma cada evento en
+// `X-Hub-Signature-256` sobre los **bytes exactos** que manda. `express.json()` los consume
+// y deja solo el objeto parseado, y eso es irreversible — `JSON.stringify` no reproduce los
+// mismos bytes. Su router trae un `express.raw()` propio (ver `webhooks.routes.ts`).
+app.use('/api', webhooksRouter)
 
 app.use(express.json())
 

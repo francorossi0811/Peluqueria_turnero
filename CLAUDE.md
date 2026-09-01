@@ -219,7 +219,11 @@ la cancelación se partió en dos, y las trampas que aparecieron conectando— v
 6. Verificar que los **mensajes automáticos de la app de WhatsApp Business** (el de bienvenida con
    el link al turnero) sigan funcionando con Coexistence activado. Debería, pero no está probado.
 
-**Fuera de alcance dentro de WhatsApp:** los webhooks de estado de Meta (entregado/leído/rebotado), el recordatorio previo al turno, y la respuesta automática al cliente que escribe primero. ⚠️ Sin webhooks, **el respaldo por mail cubre el envío que falla, no el que rebota**: Meta responde cuando acepta el mensaje, no cuando lo entrega.
+**Fuera de alcance dentro de WhatsApp:** el recordatorio previo al turno, y la respuesta automática al cliente que escribe primero (⚠️ esta última **no necesita código nuestro**: la da la app de WhatsApp Business con su mensaje de bienvenida, y solo hay que pegarle el link del turnero).
+
+⚠️ **Enmienda (22/8/2026): el webhook ya no está enteramente fuera de alcance.** Existe `GET`/`POST /api/webhooks/whatsapp` porque Meta lo exige para dar de alta la suscripción — ver `Docs/especificacion-api.md`. **Pero solo cumple el contrato mínimo**: el `GET` hace el handshake y el `POST` responde 200 y loguea. Lo que sigue sin estar es **procesar los eventos**: validar `X-Hub-Signature-256` y leer los `statuses`. O sea que la advertencia de abajo sigue valiendo igual.
+
+⚠️ Sin procesar los estados, **el respaldo por mail cubre el envío que falla, no el que rebota**: Meta responde cuando acepta el mensaje, no cuando lo entrega. **Esto se vio pasar de verdad el 20/8/2026** — un aviso de cancelación que Meta aceptó y nunca llegó, sin nada que loguear.
 
 ### Etapa 3 — feriados y agenda en grilla ✅ código terminado (HU-23, HU-24)
 

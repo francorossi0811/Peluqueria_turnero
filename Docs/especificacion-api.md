@@ -225,6 +225,52 @@ nuevo (mismo shape que el POST de creación).
 
 ---
 
+### Webhook de WhatsApp — HU-22
+
+Lo llama **Meta**, no el frontend. Es público y sin JWT: el que golpea es un servidor de
+Meta, que no tiene con qué autenticarse contra nosotros.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/webhooks/whatsapp` | Handshake de alta de la suscripción |
+| POST | `/api/webhooks/whatsapp` | Recepción de eventos (estados de entrega, mensajes entrantes) |
+
+**GET** — Meta lo llama una sola vez, al guardar el webhook en su panel. Manda
+`hub.mode`, `hub.verify_token` y `hub.challenge` como query params. Si `hub.mode` es
+`subscribe` y el token coincide con `WHATSAPP_VERIFY_TOKEN`, se responde **200 con el
+`hub.challenge` en texto plano**; cualquier otro caso es **403 sin cuerpo**.
+
+⚠️ La respuesta del 200 va como `text/plain`, **no** como JSON. Meta compara el cuerpo con
+el challenge que mandó, y un `res.json(challenge)` lo devolvería entre comillas
+(`"1158201444"`), lo que hace fallar la verificación sin explicar por qué.
+
+⚠️ El 403 va **sin cuerpo**: un mensaje distinto según si falló el token o el modo le diría
+a quien esté probando la URL qué parte tiene que ajustar.
+
+⚠️ Sin `WHATSAPP_VERIFY_TOKEN` configurado el GET responde 403 **siempre**. Es deliberado
+que eso no rompa el arranque del backend: un despliegue que no expone el webhook es un
+estado válido, y ahí no hay con qué comparar.
+
+**POST** — responde **200 antes de procesar nada**. Meta reintenta el evento si la
+respuesta tarda o no es 2xx, y si eso se repite termina desuscribiendo el webhook: un error
+manejando un payload raro no puede costar el canal entero. Por eso también acepta cualquier
+cuerpo —JSON inválido, otro `Content-Type`, o vacío— sin cambiar la respuesta.
+
+⚠️ **Esta ruta se monta antes del `express.json()` global** (ver `app.ts`) y trae su propio
+`express.raw()`. No es por el tamaño del cuerpo, como en las fotos: Meta firma cada evento
+en `X-Hub-Signature-256` sobre los **bytes exactos** que manda, y `express.json()` los
+consume dejando solo el objeto parseado. Eso es irreversible — `JSON.stringify` no
+reproduce los mismos bytes— así que parsear primero sería perder la posibilidad de validar
+la firma para siempre.
+
+**Alcance actual:** el POST solo deja el payload en el log del servidor, con el prefijo
+`[webhook whatsapp]`. Es el contrato mínimo que Meta exige para dar de alta la suscripción.
+Validar `X-Hub-Signature-256` y procesar los `statuses` (`sent` / `delivered` / `read` /
+`failed`) está **pendiente**, y es lo que taparía el agujero de "Meta responde que aceptó el
+mensaje, no que lo entregó" — ver `Docs/plantillas-whatsapp.md`.
+
+---
+
 ## 3. Endpoints de administración (`/api/admin/*` — JWT requerido)
 
 ### Auth y cuenta — HU-15, HU-16
