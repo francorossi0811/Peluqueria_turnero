@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { configWhatsapp } from '../config/env'
+import { resumirEventoHistory } from '../utils/eventoHistory'
 import { resolverVerificacion } from '../utils/verificacionWebhook'
 
 /** El handshake de alta del webhook (`GET`).
@@ -58,10 +59,23 @@ export function postWebhookWhatsapp(req: Request, res: Response) {
         ? ''
         : JSON.stringify(req.body)
 
-    console.log(
-      '[webhook whatsapp] evento recibido:',
-      crudo === '' ? '(cuerpo vacío)' : crudo,
-    )
+    // ⚠️ Los eventos de historial se resumen en tres campos en vez de loguearse enteros.
+    // Durante una sincronización de Coexistence llegan **cientos de chunks**, y volcarlos
+    // completos deja el log inservible justo el día en que hay que mirarlo. Además cada
+    // chunk trae mensajes reales de clientes. Ver `utils/eventoHistory.ts`.
+    const historial = resumirEventoHistory(parsearSinRomper(crudo))
+
+    if (historial) {
+      console.log(
+        `[webhook whatsapp] history · phase=${historial.phase} ` +
+          `chunk_order=${historial.chunkOrder} progress=${historial.progress}`,
+      )
+    } else {
+      console.log(
+        '[webhook whatsapp] evento recibido:',
+        crudo === '' ? '(cuerpo vacío)' : crudo,
+      )
+    }
 
     // 👉 Punto de enganche. Acá va el manejo de eventos cuando se implemente:
     //    parsear `crudo`, validar `X-Hub-Signature-256` contra el app secret, y de ahí
@@ -71,5 +85,16 @@ export function postWebhookWhatsapp(req: Request, res: Response) {
     // ⚠️ Lo que se agregue acá tiene que seguir sin poder tumbar la respuesta: ya se envió.
   } catch (err) {
     console.error('[webhook whatsapp] no se pudo leer el evento:', err)
+  }
+}
+
+/** El payload viene de un tercero por un endpoint público: que no sea JSON válido es un
+ * caso esperable, no una excepción. Devolver `null` hace que el evento se loguee crudo, que
+ * es lo correcto para algo que no pudimos entender. */
+function parsearSinRomper(crudo: string): unknown {
+  try {
+    return JSON.parse(crudo)
+  } catch {
+    return null
   }
 }

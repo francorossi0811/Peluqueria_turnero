@@ -109,6 +109,12 @@ export interface ConfigWhatsapp {
   plantillaCanceladoNegocio: string
   idioma: string
   version: string
+  /** ⚠️ **Una versión aparte, a propósito.** Las llamadas de sincronización de Coexistence
+   * (`smb_app_data`) necesitan v26, pero los envíos de mensajes vienen andando en v23 desde
+   * que se conectó todo. Subir la versión global en la misma tarea que una operación
+   * irreversible y de un solo disparo sería mezclar dos riesgos: si algo sale mal, no habría
+   * forma de saber cuál de los dos cambios lo causó. El upgrade global es tarea aparte. */
+  versionCoexistence: string
   /** El secreto del handshake del webhook: lo inventamos nosotros y se pega igual en el
    * panel de Meta. `null` cuando no está configurado, y en ese caso el `GET` del webhook
    * responde 403 siempre — sin token esperado no hay con qué comparar. */
@@ -161,6 +167,8 @@ export function configWhatsapp(): ConfigWhatsapp {
       'turno_cancelado_negocio',
     idioma: process.env.WHATSAPP_IDIOMA || 'es_AR',
     version: process.env.WHATSAPP_API_VERSION || 'v23.0',
+    versionCoexistence:
+      process.env.WHATSAPP_COEXISTENCE_API_VERSION || 'v26.0',
     // ⚠️ Deliberadamente **fuera** del chequeo todo-o-nada de arriba. Aquel existe porque
     // media configuración de envío es casi siempre un error de deploy; esto es otra cosa:
     // un backend que no expone el webhook tiene que poder arrancar igual, y sin la variable
