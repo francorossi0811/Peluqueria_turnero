@@ -17,6 +17,23 @@ function eventoHistory(historial: unknown) {
 }
 
 describe('resumirEventoHistory', () => {
+  // ⚠️ ESTA es la forma real, copiada de un evento que mandó Meta desde su panel el
+  // 1/9/2026. Los tres campos van adentro de `metadata`, no en la raíz del chunk, y `phase`
+  // viene como número. Leer solo la raíz —que fue la primera implementación— daba los tres
+  // en `null`: el resumen salía igual, pero sin el progreso que es su única razón de ser.
+  it('lee los campos de `metadata`, que es donde Meta los manda de verdad', () => {
+    const resumen = resumirEventoHistory(
+      eventoHistory([
+        {
+          metadata: { phase: 1, chunk_order: 131, progress: 30 },
+          threads: [{ messages: [{ text: { body: 'un mensaje de un cliente' } }] }],
+        },
+      ]),
+    )
+
+    expect(resumen).toEqual({ phase: '1', chunkOrder: 131, progress: 30 })
+  })
+
   it('saca phase, chunk_order y progress de un chunk', () => {
     const resumen = resumirEventoHistory(
       eventoHistory([{ phase: 'initial_chunk', chunk_order: 3, progress: 42 }]),
