@@ -22,18 +22,23 @@ export function resumirEventoHistory(payload: unknown): ResumenHistory | null {
   const historial = buscarHistorial(payload)
   if (!historial) return null
 
+  // ⚠️ Meta mete los tres campos adentro de `metadata`, no en la raíz del chunk. Se
+  // comprobó sobre un evento real enviado desde el panel de Meta:
+  //   history: [{ metadata: { phase: 1, chunk_order: 131, progress: 30 }, threads: [...] }]
+  // Se mira `metadata` primero y la raíz después, por si alguna versión los manda planos:
+  // leer solo la raíz daba los tres en `null`, que es un resumen que no resume nada.
+  const campos = esObjeto(historial.metadata) ? historial.metadata : historial
+
   return {
-    phase: texto(historial.phase),
-    chunkOrder: numero(historial.chunk_order),
-    progress: numero(historial.progress),
+    phase: texto(campos.phase),
+    chunkOrder: numero(campos.chunk_order),
+    progress: numero(campos.progress),
   }
 }
 
 /** El `history` vive en `entry[].changes[].value.history[]`. Cualquier eslabón puede faltar
  * o venir con otra forma, así que cada uno se verifica antes de bajar al siguiente. */
-function buscarHistorial(
-  payload: unknown,
-): { phase?: unknown; chunk_order?: unknown; progress?: unknown } | null {
+function buscarHistorial(payload: unknown): Record<string, unknown> | null {
   if (!esObjeto(payload)) return null
 
   const entries = payload.entry
@@ -65,8 +70,13 @@ function esObjeto(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
+/** ⚠️ `phase` viene como **número** en los eventos reales de Meta (`"phase": 1`), aunque la
+ * documentación lo muestre con nombres. Se acepta lo que venga y se pasa a texto: el valor
+ * es para leerlo en el log, no para decidir nada. */
 function texto(v: unknown): string | null {
-  return typeof v === 'string' ? v : null
+  if (typeof v === 'string') return v
+  if (typeof v === 'number') return String(v)
+  return null
 }
 
 function numero(v: unknown): number | null {
