@@ -122,6 +122,7 @@ ninguno el día figura como `completo`.
 | Método | Ruta | Descripción |
 |---|---|---|
 | POST | `/api/turnos` | Crea una reserva (CU-01) |
+| POST | `/api/turnos/grupo` | Crea 1 a 3 reservas de una, con un solo teléfono (HU-31) |
 | GET | `/api/turnos/:id` | Detalle del turno (el link único que recibe el cliente apunta acá) |
 | POST | `/api/turnos/:id/cancelar` | Cancela el turno, valida ventana de 60 min (CU-02) |
 | POST | `/api/turnos/:id/reprogramar` | Reprograma a un nuevo horario, valida ventana de 60 min + disponibilidad (CU-02, HU-04) |
@@ -177,7 +178,7 @@ antes — lo rechaza en última instancia el `EXCLUDE` constraint de la base):
 Response `409` — HU-28, los dos topes de la reserva pública. **Los devuelven solo esta ruta y
 `POST /api/turnos/:id/reprogramar`**; `POST /api/admin/turnos` no tiene ninguno de los dos:
 ```json
-{ "error": { "codigo": "LIMITE_SEMANAL_ALCANZADO", "mensaje": "Ya tenés 3 turnos reservados para esos días. Cancelá alguno desde tu link o escribinos por WhatsApp." } }
+{ "error": { "codigo": "LIMITE_SEMANAL_ALCANZADO", "mensaje": "Ya tenés 6 turnos reservados para esos días. Cancelá alguno desde tu link o escribinos por WhatsApp." } }
 ```
 ```json
 { "error": { "codigo": "FUERA_DE_HORIZONTE", "mensaje": "Por ahora se puede reservar hasta 90 días adelante." } }
@@ -191,6 +192,51 @@ ventana de 7 días corridos alrededor de la fecha pedida.
 *status* y no por `codigo` los confunde entre sí. No es hipotético: `ReservarPage` hacía
 exactamente eso y hubo que arreglarlo al agregar estos dos, porque le mostraba "ese horario se
 acaba de ocupar" a alguien que había llegado a su tope semanal.
+
+### `POST /api/turnos/grupo` — HU-31
+
+Reservar 2 o 3 turnos de una sola vez (la mamá que trae a los hijos). **Pública, sin auth**,
+igual que `POST /api/turnos`.
+
+```json
+{
+  "clienteTelefono": "351 456 7890",
+  "clienteEmail": "ana@gmail.com",
+  "turnos": [
+    { "servicioId": "uuid", "fecha": "2026-09-11", "hora": "10:00", "clienteNombre": "Ana Lopez" },
+    { "servicioId": "uuid", "fecha": "2026-09-11", "hora": "10:20", "clienteNombre": "Toto Lopez" }
+  ]
+}
+```
+
+⚠️ **El teléfono y el mail van afuera del array, no adentro de cada turno.** Es lo que hace
+estructuralmente imposible mandar tres teléfonos distintos y terminar con tres fichas: la ficha
+del cliente es **una sola** para todo el grupo (HU-25). El nombre sí va por turno.
+
+Response `201`: un **array** de turnos, cada uno con el mismo cuerpo que devuelve
+`POST /api/turnos`. Cada id es el token de gestión de *su* turno; una vez creados son
+independientes en todo sentido y nada en la base los ata (ver `modelo-datos.md`).
+
+⚠️ **Los inserts van en una transacción: entran todos o no entra ninguno.** Si el segundo choca
+contra el EXCLUDE, el primero tampoco queda.
+
+**Por qué es una ruta nueva y no un `POST /api/turnos` que acepte array:** así el caso de un
+turno solo —el 99% de las reservas— no pasa por una sola línea de código nueva, ni en el
+backend ni en el cliente de API.
+
+Errores, **todos con los mismos códigos que la ruta de a uno** salvo el propio:
+
+- `400 PARAMETROS_INVALIDOS` — el array vacío, con más de **3** turnos, o cualquier campo mal.
+- `409 TURNOS_DEL_GRUPO_SE_PISAN` — dos del propio grupo se solapan. El mensaje nombra **las
+  dos horas**, porque la salida es sacar uno de los dos y hay que saber cuáles son. ⚠️ Es un
+  error distinto de `HORARIO_NO_DISPONIBLE` a propósito: aquel dice "alguien te ganó de mano",
+  este dice "elegiste dos que no pueden convivir", y se arreglan en pantallas distintas.
+- `409 HORARIO_NO_DISPONIBLE`, `409 LIMITE_SEMANAL_ALCANZADO`, `409 FUERA_DE_HORIZONTE` — los
+  mismos de la ruta de a uno. El tope semanal cuenta el **grupo entero** contra lo ya agendado,
+  no turno por turno.
+
+⚠️ Igual que en la ruta de a uno: **cuatro** de estos errores son 409, así que hay que ramificar
+por `codigo` y nunca por status.
 
 **POST `/api/turnos/:id/cancelar`** — sin body. Response `409` si faltan menos de 60
 minutos:

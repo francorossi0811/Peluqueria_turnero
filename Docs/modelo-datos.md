@@ -497,6 +497,20 @@ el que queda pegado si el proceso se cae en el medio.
 | Servicio largo que no entra antes del cierre/descanso (caso borde) | Se valida en el cálculo de disponibilidad del backend (CU-04); no es una constraint de tabla, depende de `horario_laboral` y `bloqueos_horario` vigentes en el momento de la consulta |
 | Cambio de duración de un servicio no afecta turnos ya reservados (caso borde) | Columnas `servicio_nombre_snapshot` / `servicio_duracion_snapshot` en `turnos`, independientes de `servicios` |
 | Un turno nunca se borra físicamente | La aplicación nunca hace `DELETE` sobre `turnos`; todo cambio es un `UPDATE` de `estado` (+ `updated_at`) |
+| Los turnos de una reserva en grupo entran todos o ninguno (HU-31) | `prisma.$transaction([...])` con los N `create`. **No hay ninguna columna que los ate** — ver la nota de abajo |
+⚠️ **Por qué NO hay una columna `grupo_id` en `turnos` (HU-31).** Es la primera pregunta que
+va a hacer quien lea esto, así que queda escrita: una reserva en grupo crea 2 o 3 turnos con el
+mismo `cliente_id` y el mismo `created_at`, y nada más. Una vez creados son **independientes en
+todo sentido** —cada uno tiene su id/token, se cancela, se reprograma (con su propio
+`turno_origen_id`), se marca y se cobra por separado, y la agenda los dibuja como bloques
+sueltos— y **ninguna regla del negocio los necesita juntos**: el tope semanal cuenta por ficha,
+los avisos se arman por turno, la exportación los lista por día. Una columna que se escribe una
+vez y no se lee nunca es estado que puede desincronizarse a cambio de nada — el mismo criterio
+con el que no se hizo la tabla `pagos` (HU-27) ni la tabla del token de reset (HU-26). Y sería
+una migración sobre `turnos`, la tabla del `EXCLUDE` escrito a mano: el riesgo más caro del
+repo por el beneficio más chico. Si algún día aparece "cancelaste uno de los tres, ¿cancelo los
+otros dos?", se agrega **entonces**, con su historia.
+
 | Cliente pierde su link único (caso borde) | Ariel puede buscar el turno en el panel por nombre/teléfono/fecha y reconstruir el link a partir del `id` (no hace falta mecanismo de recuperación aparte) |
 
 ---

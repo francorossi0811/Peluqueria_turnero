@@ -65,6 +65,33 @@ export function construirNotificacionTurnoNuevo(turno: Turno): {
   }
 }
 
+/** HU-31 — Función pura: el aviso de una reserva en grupo.
+ *
+ * ⚠️ Con **un** turno delega en `construirNotificacionTurnoNuevo`, byte por byte. No es una
+ * optimización: es lo que hace imposible que la reserva de a uno —el caso normal— derive de
+ * lo que Ariel ve hoy. Hay un test que lo fija con un `toEqual`.
+ *
+ * Con varios va **una sola** notificación y no N: tres avisos seguidos por una sola persona
+ * reservando es ruido, y Ariel ya tiene bastantes problemas con los push. */
+export function construirNotificacionTurnosNuevos(turnos: Turno[]): {
+  title: string
+  body: string
+  url: string
+  tag: string
+} {
+  if (turnos.length === 1) return construirNotificacionTurnoNuevo(turnos[0])
+
+  return {
+    title: `${turnos.length} turnos nuevos reservados`,
+    body: turnos.map(resumenDelTurno).join('\n'),
+    url: '/admin',
+    // Distinto del `turno-<id>` del alta individual, por el mismo motivo que el de la
+    // cancelación: con el mismo tag, este aviso **reemplazaría** en pantalla al de una
+    // reserva anterior y esa se perdería sin que nadie se entere.
+    tag: `turnos-grupo-${turnos[0].id}`,
+  }
+}
+
 /** Función pura — el aviso de que un cliente canceló solo (HU-03). */
 export function construirNotificacionTurnoCancelado(turno: Turno): {
   title: string
@@ -89,6 +116,16 @@ export async function notificarNuevoTurno(turno: Turno): Promise<void> {
     await enviarATodos(construirNotificacionTurnoNuevo(turno))
   } catch (err) {
     console.error('[notificaciones] no se pudo avisar del turno nuevo:', err)
+  }
+}
+
+/** HU-31 — Le avisa a Ariel de una reserva en grupo, con un solo push. */
+export async function notificarNuevosTurnos(turnos: Turno[]): Promise<void> {
+  if (turnos.length === 0) return
+  try {
+    await enviarATodos(construirNotificacionTurnosNuevos(turnos))
+  } catch (err) {
+    console.error('[notificaciones] no se pudo avisar de los turnos nuevos:', err)
   }
 }
 

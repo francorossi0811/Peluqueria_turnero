@@ -3,6 +3,7 @@ import {
   esCobrable,
   estaDentroDeVentanaDeCambio,
   excedeLimiteSemanal,
+  indiceDelSolapamientoInterno,
   fechaCargableComoAdmin,
   fechaReservablePorCliente,
 } from './turnos.service'
@@ -111,45 +112,200 @@ describe('fechaReservablePorCliente', () => {
 // HU-28 — El tope de turnos por persona. La "semana" es una ventana móvil de 7 días, así
 // que los casos que importan son los bordes: el turno que todavía cae adentro y el que se
 // escapó por un día. Van de a pares, como el resto de los bordes del proyecto.
+//
+// ⚠️ El tope es **6** desde el 23/8/2026 (era 3). Los casos de abajo están poblados para ese
+// número: lo que fijan no es el 6 sino dónde corta la ventana, y por eso cada par cambia una
+// sola fecha entre el caso que da `true` y el que da `false`.
 describe('excedeLimiteSemanal', () => {
   const dia = (n: number) => new Date(Date.UTC(2026, 7, n))
   // El que se quiere reservar: lunes 10 de agosto de 2026.
-  const NUEVA = dia(10)
+  const NUEVA = [dia(10)]
 
   it('deja reservar cuando la persona no tiene ninguno cerca', () => {
     expect(excedeLimiteSemanal([], NUEVA)).toBe(false)
   })
 
-  it('deja llegar hasta el tope: con 2 agendados, el tercero entra', () => {
-    expect(excedeLimiteSemanal([dia(8), dia(9)], NUEVA)).toBe(false)
+  it('deja llegar hasta el tope: con 5 agendados, el sexto entra', () => {
+    expect(
+      excedeLimiteSemanal([dia(6), dia(7), dia(8), dia(9), dia(11)], NUEVA),
+    ).toBe(false)
   })
 
-  it('corta el cuarto de la misma semana', () => {
-    expect(excedeLimiteSemanal([dia(8), dia(9), dia(11)], NUEVA)).toBe(true)
+  it('corta el séptimo de la misma semana', () => {
+    expect(
+      excedeLimiteSemanal(
+        [dia(6), dia(7), dia(8), dia(9), dia(11), dia(12)],
+        NUEVA,
+      ),
+    ).toBe(true)
   })
 
   it('cuenta el turno de 6 días antes, que todavía comparte ventana', () => {
-    expect(excedeLimiteSemanal([dia(4), dia(5), dia(6)], NUEVA)).toBe(true)
+    expect(
+      excedeLimiteSemanal(
+        [dia(4), dia(5), dia(6), dia(7), dia(8), dia(9)],
+        NUEVA,
+      ),
+    ).toBe(true)
   })
 
   it('no cuenta el de 7 días antes: ya salió de la ventana', () => {
     // El único que cambia respecto del test de arriba es el primero (día 3 en vez del 4).
-    expect(excedeLimiteSemanal([dia(3), dia(4), dia(5)], NUEVA)).toBe(false)
+    expect(
+      excedeLimiteSemanal(
+        [dia(3), dia(5), dia(6), dia(7), dia(8), dia(9)],
+        NUEVA,
+      ),
+    ).toBe(false)
   })
 
   it('cuenta el turno de 6 días después, que también comparte ventana', () => {
-    expect(excedeLimiteSemanal([dia(11), dia(12), dia(16)], NUEVA)).toBe(true)
+    expect(
+      excedeLimiteSemanal(
+        [dia(11), dia(12), dia(13), dia(14), dia(15), dia(16)],
+        NUEVA,
+      ),
+    ).toBe(true)
   })
 
   it('no cuenta el de 7 días después', () => {
-    expect(excedeLimiteSemanal([dia(11), dia(12), dia(17)], NUEVA)).toBe(false)
+    // Igual que el de arriba salvo el último: el día 17 ya no comparte ventana con el 10.
+    expect(
+      excedeLimiteSemanal(
+        [dia(11), dia(12), dia(13), dia(14), dia(15), dia(17)],
+        NUEVA,
+      ),
+    ).toBe(false)
   })
 
-  // Esto es lo que la ventana móvil compra sobre la semana del calendario: 3 turnos de
-  // viernes a domingo y 3 más de lunes a martes son 6 en cinco días, y con lunes-a-domingo
-  // los seis serían legales.
+  // Esto es lo que la ventana móvil compra sobre la semana del calendario: con lunes-a-domingo
+  // estos siete turnos serían legales (3 en una semana, 4 en la otra) aunque caen todos en
+  // siete días corridos.
   it('corta el racimo que quedaría a caballo de dos semanas del calendario', () => {
-    // Viernes 7, sábado 8, domingo 9 ya agendados; el nuevo es el lunes 10.
-    expect(excedeLimiteSemanal([dia(7), dia(8), dia(9)], NUEVA)).toBe(true)
+    // Viernes 7, sábado 8, domingo 9 más lunes 11, martes 12, miércoles 13; el nuevo es el
+    // lunes 10, justo en el medio.
+    expect(
+      excedeLimiteSemanal(
+        [dia(7), dia(8), dia(9), dia(11), dia(12), dia(13)],
+        NUEVA,
+      ),
+    ).toBe(true)
+  })
+
+  // HU-31 — El grupo. Lo que cambia respecto de reservar de a uno es que ahora entran varias
+  // fechas de una, así que el conteo tiene que verlas **entre sí** y no solo contra lo ya
+  // agendado.
+  describe('reservando en grupo', () => {
+    const GRUPO = [dia(10), dia(10), dia(10)]
+
+    it('deja a la mamá con los tres hijos el mismo día', () => {
+      expect(excedeLimiteSemanal([], GRUPO)).toBe(false)
+    })
+
+    it('llega justo al tope: 3 agendados más los 3 del grupo son 6', () => {
+      expect(excedeLimiteSemanal([dia(8), dia(9), dia(11)], GRUPO)).toBe(false)
+    })
+
+    it('corta cuando el grupo pasa el tope: 4 agendados más 3 son 7', () => {
+      expect(
+        excedeLimiteSemanal([dia(8), dia(9), dia(11), dia(12)], GRUPO),
+      ).toBe(true)
+    })
+
+    it('cuenta los agendados de 6 días antes, que comparten ventana con el grupo', () => {
+      expect(
+        excedeLimiteSemanal([dia(4), dia(4), dia(5), dia(6)], GRUPO),
+      ).toBe(true)
+    })
+
+    it('no cuenta los de 7 días antes: el espejo del borde', () => {
+      // Los mismos cuatro, corridos un día: el 3 ya salió de toda ventana que toque al 10.
+      expect(
+        excedeLimiteSemanal([dia(3), dia(3), dia(3), dia(3)], GRUPO),
+      ).toBe(false)
+    })
+
+    // ⚠️ El que importa: si el bucle se anclara solo en `nuevas[0]` (el día 10), no miraría
+    // nunca la ventana del día 30 y este caso pasaría como válido.
+    it('se ancla en CADA fecha nueva, no solo en la primera', () => {
+      const repartido = [dia(10), dia(30)]
+      const cercaDelSegundo = [dia(26), dia(27), dia(28), dia(29), dia(31), dia(31)]
+      expect(excedeLimiteSemanal(cercaDelSegundo, repartido)).toBe(true)
+    })
+
+    // ⚠️ Fija que las nuevas se cuentan **dentro de la ventana** y no como un `+1` fijo. Con
+    // el `+1` viejo esto daría 0 + 1 = 1 y pasaría, aunque son siete turnos el mismo día.
+    it('cuenta las nuevas entre sí, aunque no haya nada agendado', () => {
+      const siete = Array.from({ length: 7 }, () => dia(10))
+      expect(excedeLimiteSemanal([], siete)).toBe(true)
+    })
+  })
+})
+
+// HU-31 — Que los turnos del grupo no se pisen entre sí. Los bordes van de a pares, como el
+// resto del proyecto: el que se toca justo entra, el que se pisa un minuto no.
+describe('indiceDelSolapamientoInterno', () => {
+  const DIA = new Date(Date.UTC(2026, 8, 4))
+  const OTRO_DIA = new Date(Date.UTC(2026, 8, 5))
+  const t = (fecha: Date, hora: string, duracionMinutos: number) => ({
+    fecha,
+    hora,
+    duracionMinutos,
+  })
+
+  it('no ve solapamiento en una lista de uno solo', () => {
+    expect(indiceDelSolapamientoInterno([t(DIA, '10:00', 20)])).toBeNull()
+  })
+
+  it('deja convivir a los que se tocan borde con borde', () => {
+    // 10:00-10:20 y 10:20-10:40: es el caso que la mamá quiere, turnos seguidos.
+    expect(
+      indiceDelSolapamientoInterno([t(DIA, '10:00', 20), t(DIA, '10:20', 20)]),
+    ).toBeNull()
+  })
+
+  it('corta cuando se pisan un solo minuto', () => {
+    // El espejo del test de arriba: un minuto antes y ya no entra.
+    expect(
+      indiceDelSolapamientoInterno([t(DIA, '10:00', 20), t(DIA, '10:19', 20)]),
+    ).toEqual([0, 1])
+  })
+
+  it('corta cuando arrancan a la misma hora', () => {
+    expect(
+      indiceDelSolapamientoInterno([t(DIA, '10:00', 20), t(DIA, '10:00', 20)]),
+    ).toEqual([0, 1])
+  })
+
+  it('no confunde la misma hora en días distintos', () => {
+    expect(
+      indiceDelSolapamientoInterno([
+        t(DIA, '10:00', 20),
+        t(OTRO_DIA, '10:00', 20),
+      ]),
+    ).toBeNull()
+  })
+
+  // ⚠️ El que fija que se usa la duración de CADA servicio y no una fija: con 20 minutos
+  // para los dos, la Barba de 15 no llegaría a las 10:20 y este caso pasaría.
+  it('usa la duración de cada servicio, no una sola', () => {
+    // Corte + Barba de 30 a las 10:00 termina 10:30, así que se come la Barba de las 10:15.
+    expect(
+      indiceDelSolapamientoInterno([t(DIA, '10:00', 30), t(DIA, '10:15', 15)]),
+    ).toEqual([0, 1])
+    // Y la misma Barba después de una de 15 (que termina 10:15) sí entra.
+    expect(
+      indiceDelSolapamientoInterno([t(DIA, '10:00', 15), t(DIA, '10:15', 15)]),
+    ).toBeNull()
+  })
+
+  it('encuentra el par aunque no sean los dos primeros', () => {
+    expect(
+      indiceDelSolapamientoInterno([
+        t(DIA, '10:00', 20),
+        t(DIA, '11:00', 20),
+        t(DIA, '11:10', 20),
+      ]),
+    ).toEqual([1, 2])
   })
 })

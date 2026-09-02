@@ -402,7 +402,8 @@ Como cliente, quiero agregar el turno al calendario de mi celular, para que me l
 
 **HU-28 — Que una sola persona no me llene la agenda**
 Como Ariel, quiero que nadie pueda acaparar mis horarios reservando de a montones, para que la agenda siga sirviendo aunque reservar sea gratis y no cobre seña.
-- Una misma persona puede tener **hasta 3 turnos reservados en cualquier tramo de 7 días corridos**. El cuarto de esa semana se rechaza con un mensaje que explica qué pasa y le ofrece escribirnos por WhatsApp.
+- Una misma persona puede tener **hasta 6 turnos reservados en cualquier tramo de 7 días corridos**. El séptimo de esa semana se rechaza con un mensaje que explica qué pasa y le ofrece escribirnos por WhatsApp.
+- ⚠️ *Enmienda del 23/8/2026 — el tope era 3 y pasó a 6.* Lo pidió Ariel junto con la reserva en grupo (HU-31): hay clientas que vienen con los hijos y sacan tres turnos seguidos, y con 3 no les alcanzaba ni para eso, menos para volver ellas esa misma semana. Una familia no es lo que este límite quiere frenar. **La consecuencia hay que decirla: esto también afloja el tope del que reserva de a uno**, que ahora puede sacar 6 en la semana. Sostener "3 por pasada pero 6 por semana" pediría una columna de grupo en `turnos` —una migración sobre la tabla del EXCLUDE escrito a mano— para defender un caso que todavía no ocurrió.
 - La "semana" es una **ventana móvil, no lunes a domingo**. Con la semana del calendario alguien podría sacar 3 turnos de viernes a domingo y 3 más de lunes a martes: seis en cinco días, todos legales. La ventana móvil no tiene esa costura.
 - Se puede reservar **hasta 90 días adelante**. Antes no había ningún tope hacia el futuro y la API aceptaba un turno para dentro de dos años.
 - **Cuentan solo los turnos reservados.** Un cancelado o un ausente liberaron el rato y un realizado ya pasó: ninguno de los tres le gasta un cupo a nadie. Si el cliente cancela uno, el lugar se le libera enseguida.
@@ -429,6 +430,23 @@ Lo que ocupa ese lugar es el **medidor de "Mi cuenta"**, que por eso dejó de se
 *Por qué en la base y no en un servicio de imágenes:* no había **ningún** lugar donde un archivo subido sobreviviera — la carpeta pública del frontend se arma al compilar y el disco del servidor se borra en cada reinicio. Un servicio tipo Cloudinary pedía cuenta nueva y trámite externo, que es exactamente lo que tiene frenado a WhatsApp (HU-22). Como la aplicación solo maneja la URL `/api/imagenes/<id>`, mudarse a un bucket más adelante no cambia una sola pantalla.
 
 *Sobre quién puede ver una foto:* la lectura es **pública para el que conoce el identificador**, que es el mismo criterio del link del turno (HU-01). No es un descuido: una etiqueta `<img>` no puede mandar credenciales, así que pedirlas rompería la galería del panel y la web a la vez. Es aceptable porque acordamos que son **fotos del corte, sin caras**. ⚠️ **Si algún día se le sacan fotos a la cara de alguien, esto hay que revisarlo**: la salida es traer la imagen con la sesión y dibujarla desde memoria, y ahí sí se puede exigir estar logueado para las de ficha.
+
+**HU-31 — Reservar para mí y para los míos en una sola vez**
+Como clienta que viene con los hijos, quiero sacar los turnos de todos de una sola pasada, para no tener que cargar mi nombre y mi teléfono tres veces seguidas.
+
+- Elijo el servicio y el horario del primero, toco **"Agregar otro turno"** y vuelvo al principio a elegir el del que sigue. Lo que ya elegí no se pierde: la pantalla me lo recuerda arriba.
+- **Hasta 3 turnos por vez.** Tres es la familia que motivó esto; más que eso deja de ser "vengo con los míos".
+- Los datos se cargan **una sola vez, al final**: un nombre por turno (son mis hijos, y Ariel necesita saber quién es cada uno), y **un solo teléfono y un solo mail** para todo el grupo.
+- Antes de confirmar veo **los turnos juntos con el total**, y puedo **sacar uno** si me equivoqué, sin rehacer todo.
+- Se confirman **todos o ninguno**. Si el horario del segundo se ocupó justo en el medio, no me queda el primero reservado y el resto no: o entran los tres o no entra ninguno.
+- Cada turno queda con **su propio link** para reprogramarlo o cancelarlo por separado, y el mensaje de WhatsApp que le mando a Ariel los lleva a los tres.
+- **El sistema no me deja elegir dos que se pisen.** Cuando voy a elegir el horario del segundo, los ratos que ya se llevó el primero no aparecen.
+
+*Por qué una sola ficha de cliente y no una por nombre:* la identidad es el teléfono (HU-25), y el teléfono es uno solo. La ficha queda a nombre del primero de la lista; el apodo que le ponga Ariel manda sobre eso igual que siempre. ⚠️ Consecuencia asumida: si la mamá reserva **solo** para los hijos, la ficha queda con el nombre de un hijo y su teléfono — que es exactamente lo que ya pasaba reservando de a uno.
+
+*Por qué los turnos no quedan atados entre sí:* una vez creados son independientes en todo sentido —cada uno se cancela, se reprograma, se marca y se cobra solo—, y ninguna regla del negocio los necesita juntos. Atarlos con una columna sería estado que se escribe una vez y no se lee nunca.
+
+⚠️ *Lo que este flujo NO consigue, y conviene tenerlo escrito:* los turnos del grupo **no se empaquetan perfectos**. El sistema ofrece los horarios de la grilla de 20 minutos más el final de cada turno **ya agendado**, y los del grupo todavía no están agendados cuando se elige el siguiente. Entonces una Barba de 15 a las 10:00 no habilita las 10:15 para el segundo: el que sigue cae en las 10:20. Es una molestia, no un error —no se ofrece nada imposible ni se esconde nada que estuviera libre—, y la salida sería mandarle los turnos tentativos al cálculo de disponibilidad.
 
 **HU-30 — Llevarme la agenda a una planilla**
 Como Ariel, quiero bajarme la agenda de un período en un Excel, con una hoja por semana y las
@@ -576,7 +594,10 @@ cada turno o bloqueo de ese día**.
 | Ariel cambia el horario laboral general | Los turnos ya reservados fuera del nuevo horario se mantienen válidos; solo los horarios *nuevos* respetan la config actualizada |
 | Cliente pierde su link único | Si dejó email, el link le llegó por mail y además quedó dentro del evento del calendario (HU-02, HU-19). Si no dejó email, no hay recuperación automática: le escribe a Ariel, que busca el turno en su panel y le reenvía el link |
 | Cliente reprograma repetidamente para "trabar" horarios | ⚠️ **Enmienda del 15/8/2026:** hasta esta fecha decía "fuera de alcance v1 — posible mejora futura (límite de reprogramaciones)". HU-28 lo cubre **en parte**: reprogramar no puede amontonar más de 3 turnos en una semana ni llevarlos más allá de los 90 días, así que ya no sirve para trabar horarios lejanos ni para concentrarlos. Lo que sigue sin límite es la **cantidad de veces** que se mueve un mismo turno, que no le quita el lugar a nadie |
-| Una persona reserva muchos turnos y llena la agenda | Máximo 3 turnos reservados por ficha de cliente en cualquier ventana de 7 días, más un horizonte de 90 días (HU-28). Se cuenta por teléfono normalizado, así que **no** frena a quien invente un número distinto en cada reserva — decisión consciente, ver la nota de HU-28 |
+| Una persona reserva muchos turnos y llena la agenda | Máximo **6** turnos reservados por ficha de cliente en cualquier ventana de 7 días, más un horizonte de 90 días (HU-28). ⚠️ Eran 3 hasta el 23/8/2026; subió con la reserva en grupo (HU-31). Se cuenta por teléfono normalizado, así que **no** frena a quien invente un número distinto en cada reserva — decisión consciente, ver la nota de HU-28 |
+| Los turnos de un mismo grupo se pisan entre sí | La pantalla no ofrece los horarios que el propio grupo ya tomó, y el backend lo vuelve a chequear antes de escribir (409 `TURNOS_DEL_GRUPO_SE_PISAN`, con las dos horas en el mensaje). ⚠️ La validación de disponibilidad **no puede** verlo: ninguno de los turnos del grupo existe todavía en la base, así que sin este chequeo el choque llegaría al EXCLUDE y se explicaría como "ese horario se acaba de ocupar", que sería falso |
+| El segundo turno del grupo se ocupa entre que se elige y se confirma | Los inserts van en una transacción: **o entran todos o no entra ninguno**. No puede quedar el primero reservado y el resto no. El cliente vuelve a la grilla con el que falló, y los otros siguen elegidos |
+| Un grupo entero no entra en el tope de la ventana de 7 días | El conteo mira el grupo **completo** contra lo ya agendado, no turno por turno: tres turnos nuevos cuentan como tres. El rechazo llega antes de crear nada |
 
 ---
 

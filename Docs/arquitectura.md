@@ -45,6 +45,26 @@ Lo que sí sigue fuera de alcance:
 
 ## Decisiones de la v3
 
+- **La reserva en grupo es el primer `$transaction` del proyecto (HU-31).** Hasta el 23/8/2026
+  no había ninguno: cada escritura era una sola sentencia, y lo que impedía el daño real —dos
+  personas sobre el mismo rato— era el `EXCLUDE` de la base, no una transacción. Con 2 o 3
+  turnos que tienen que entrar juntos eso deja de alcanzar, y `prisma.$transaction([...])`
+  garantiza que si el segundo choca, el primero tampoco queda.
+  - Es la variante de **array** y no la interactiva (`$transaction(async tx => …)`) a propósito.
+    La interactiva invita a meter las validaciones adentro, y para eso habría que pasarle el
+    `tx` a `obtenerHorariosDelDia` y a toda la capa de disponibilidad, que hoy usa el `prisma`
+    singleton importado a nivel de módulo. Sería refactorizar media capa para perseguir algo que
+    el proyecto ya decidió **no** perseguir: la carrera entre validar y escribir está aceptada
+    (está escrito en `validarLimiteSemanal` y en `crearTurno`), porque el daño real lo tapa el
+    `EXCLUDE`. La transacción está para la **atomicidad del grupo**, no para serializar.
+  - ⚠️ `vincularCliente` queda **afuera**, corriendo antes. Si la transacción falla, la ficha
+    queda creada sin turnos: es una ficha vacía, no un dato falso —la persona existe y dejó su
+    teléfono— y es exactamente lo que ya pasaba cuando `crearTurno` chocaba contra el `EXCLUDE`
+    después de haber vinculado. Meterla adentro obligaría a pasar el `tx` a `clientes.service`.
+  - Verificado contra Neon, porque no era obvio: el SQLSTATE `23P01` **sobrevive** anidado
+    dentro del `$transaction` en la misma ruta (`meta.driverAdapterError.cause.code`) que ya
+    leía `esViolacionDeSolapamiento`, así que el choque sigue devolviendo 409 y no 500.
+
 - **El token de "me olvidé la contraseña" no tiene tabla (HU-26).** Es un JWT firmado con
   el secreto global **más el hash actual de la contraseña de esa cuenta**. De ahí sale que
   valga un solo uso: al restablecer, el hash cambia y el token viejo deja de verificar. La
