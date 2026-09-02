@@ -70,11 +70,15 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
 - ⚠️ **Un turno `realizado` no se puede pisar; uno `ausente` o `cancelado` sí** (14/8/2026). Antes `ocupados` solo miraba `reservado` y, con el pasado habilitado, eso pasó a ser un agujero real. La regla vive en los dos lados: `obtenerDetalleDelDia` y el predicado del `EXCLUDE`, que ahora es `estado IN ('reservado','realizado')`. **`ausente` sigue afuera a propósito** — liberar el rato al marcarlo es el flujo que Ariel usa todos los días. Consecuencia: marcar Realizado puede fallar con 409 `TURNO_SE_SOLAPA_CON_REALIZADO` si ese rato ya se le dio a otro turno que se hizo.
 - **`origen` es `online | presencial | llamada | whatsapp`** (14/8/2026). `presencial` es el cliente de vidriera; `llamada` se llamaba `telefono` y se renombró porque se confundía con `clienteTelefono`, que es un dato de contacto y no un canal. El `RENAME VALUE` de la migración conservó las filas que ya existían.
 - ⚠️ **Una persona no puede acaparar la agenda** (HU-28, 15/8/2026): máximo **6 turnos `reservado` en cualquier ventana móvil de 7 días** por ficha de cliente, y **90 días** de horizonte hacia adelante (`DIAS_FUTURO_PUBLICO`). Antes no había **nada**: ni tope de cantidad ni tope hacia el futuro, así que la API aceptaba un turno para 2028. Los dos valen en las **dos** puertas públicas —`crearTurno` y `reprogramarTurno`— y **ninguno alcanza a Ariel**: se apagan con el mismo `esAdmin = Boolean(input.origen)` que ya distinguía los dos llamadores. La ventana es móvil y no lunes-a-domingo a propósito: con la semana del calendario entran 3 turnos de viernes a domingo y 3 más de lunes a martes, seis en cinco días. Solo cuenta `reservado` —cancelado y ausente liberaron el rato, realizado ya pasó—, así que cancelar libera el cupo enseguida. Al reprogramar, el turno no se cuenta contra sí mismo: si no, moverlo dentro de su propia semana fallaría justo cuando no cambia nada. ⚠️ **El tope era 3 y pasó a 6 el 23/8/2026**, junto con la reserva en grupo (HU-31): una familia de tres no es un acaparador, y con 3 no le alcanzaba ni para una pasada. Y eso **afloja el tope también para el que reserva de a uno** — inevitable sin una columna de grupo, que se decidió no crear. ⚠️ **El límite es por teléfono normalizado, así que no frena a quien inventa un número distinto en cada reserva.** Es una decisión consciente y está escrita en HU-28, no un olvido: la alternativa era rate limit por IP (castiga a la familia que reserva desde la misma casa) u OTP (un paso más en *todas* las reservas para frenar algo que todavía no pasó).
-- ⚠️ **Un cliente puede reservar hasta 3 turnos en una pasada** (HU-31, 23/8/2026): la mamá que trae a los hijos elige servicio+horario, toca "Agregar otro turno", y carga los datos **una sola vez** al final — un nombre por turno, **un solo teléfono y un solo mail**, así que la ficha es una sola. Va por `POST /api/turnos/grupo`, **endpoint aparte**: reservar un turno solo no pasa por una línea de código nueva, ni en el backend ni en el frontend (`turnos.length === 1` sigue llamando a `crearTurno`), y esa es la garantía de que el caso normal no puede romperse. Los inserts van en el **primer `$transaction` del proyecto**: entran todos o ninguno.
-  - ⚠️ **`excedeLimiteSemanal` toma una LISTA de fechas nuevas, y ya no suma un `+1` fijo.** Con un grupo de tres el mismo día, aquel `+1` contaba 1 en vez de 3 y el tope no frenaba nada. Ahora las nuevas se cuentan dentro de la ventana, y el bucle se ancla en **cada** una: si se anclara solo en `nuevas[0]`, un grupo repartido en semanas distintas pasaría entero. Hay dos tests que se caen si alguien deshace cualquiera de las dos cosas.
-  - ⚠️ **El grupo no puede pisarse consigo mismo, y la disponibilidad NO puede detectarlo**: ninguno de los hermanos existe en la base cuando se valida el siguiente. Por eso existe `indiceDelSolapamientoInterno` (409 `TURNOS_DEL_GRUPO_SE_PISAN`, con las dos horas en el mensaje). Sin él el choque llegaría al `EXCLUDE` y se explicaría como "ese horario se acaba de ocupar", que sería mentira. Del lado del cliente lo tapa `descontarHorariosDelGrupo` — ⚠️ que cruza **la duración de cada elegido con la del que se está eligiendo**: un Corte+Barba de 30 a las 10:00 tiene que sacar 10:00 **y** 10:20 de la grilla de un Corte de 20; sacar solo el horario exacto es el bug que llega hasta la base.
-  - ⚠️ **El grupo pierde el empaquetado prolijo, y es sabido.** La disponibilidad ofrece la grilla de 20 minutos **más el final de cada turno ya agendado**, y los del grupo todavía no lo están: una Barba de 15 a las 10:00 no habilita las 10:15 para el segundo hijo, que cae en 10:20. No ofrece nada imposible ni esconde nada que estuviera libre; la salida sería mandarle los turnos tentativos al endpoint de disponibilidad, y quedó fuera de alcance.
-  - ⚠️ **"Agregar otro turno" cambia `paso` y nada más** — nada de `navigate`: la landing es el paso 1 del wizard, no una ruta, así que **no se siembra ni una entrada de historial** (medido: `history.length` no se mueve).
+- ⚠️ **Un cliente puede reservar un BLOQUE de hasta 6 turnos seguidos** (HU-31, 23/8/2026). El flujo es: elige un servicio → **le pregunta cuántos turnos** (1 a 6) → dice qué se hace cada uno → el sistema le ofrece solo los horarios donde entra el bloque **completo** → carga los datos una vez (un nombre por turno, **un solo teléfono y un solo mail**, así que la ficha es una sola). Va por `POST /api/turnos/grupo`, **endpoint aparte**: reservar un turno solo no pasa por una línea de código nueva, ni en el backend ni en el frontend (`turnos.length === 1` sigue llamando a `crearTurno`), y esa es la garantía de que el caso normal no puede romperse. Los inserts van en el **primer `$transaction` del proyecto**: entran todos o ninguno.
+  - ⚠️ **La idea que hace simple todo esto: un bloque pegado ocupa lo mismo que UN turno de la duración total.** Así que "¿dónde entran los tres?" lo responde `calcularHorariosDelDia` con la suma de las duraciones — **no hay un buscador de huecos aparte**, que habría sido reimplementar CU-04 al lado de CU-04. De ahí salen gratis dos cosas que si no habría que programar: el bloque **no puede cruzar el descanso** (cada franja se evalúa por separado) ni pasarse del cierre. Y hereda el re-anclaje a lo agendado: verificado, un bloque de 65 min se ofreció a las **11:05**, que es el final de un turno existente.
+  - ⚠️ **El cliente manda UNA sola hora, la del primero; las demás las deriva el backend** (`horariosDelBloque`). Eso **eliminó** una clase entera de errores en vez de validarla: cuando cada turno llevaba su propia hora había que chequear que no se pisaran entre sí y explicarlo con un error propio, porque la disponibilidad no puede verlo (ninguno existe todavía en la base). Con una sola hora, un bloque con huecos o superpuesto **no es representable**. Se fueron `indiceDelSolapamientoInterno`, el 409 `TURNOS_DEL_GRUPO_SE_PISAN` y el filtro `descontarHorariosDelGrupo` del frontend.
+  - ⚠️ **Y arregló el empaquetado**, que en la versión anterior era una limitación anotada: los turnos van pegados borde con borde, así que una Barba de 15 a las 10:00 hace arrancar al siguiente 10:15 y no 10:20. Verificado contra la base: 11:05–11:20, 11:20–11:40, 11:40–12:10, sin un minuto de hueco.
+  - ⚠️ **`MAX_TURNOS_POR_GRUPO` ES `MAX_TURNOS_POR_SEMANA`**, los dos 6. Quien pide el bloque más grande gasta de una todo su cupo de la semana, y no hay razón para que la pasada corte antes que la ventana; dos números distintos obligaban a explicar dos reglas en la misma pantalla.
+  - ⚠️ **Un bloque de 6 puede no entrar en ningún lado**: 6 × 30 = 180 minutos, exactamente lo que dura la franja de la mañana. La pantalla lo dice con esas palabras y ofrece sacar menos, en vez de mostrar una grilla vacía día tras día. 🚧 Esa rama está escrita pero **no se llegó a ver en pantalla**: en la base de prueba siempre había algún día con la franja libre.
+  - ⚠️ **`excedeLimiteSemanal` toma una LISTA de fechas nuevas, y ya no suma un `+1` fijo.** Con un bloque de tres el mismo día, aquel `+1` contaba 1 en vez de 3 y el tope no frenaba nada. Ahora las nuevas se cuentan dentro de la ventana, y el bucle se ancla en **cada** una. Hay dos tests que se caen si alguien deshace cualquiera de las dos cosas.
+  - **`GET /api/disponibilidad` acepta `servicioIds` (lista) además de `servicioId`.** El singular se queda porque lo usan la reprogramación y el panel, que preguntan por un servicio.
+  - ⚠️ **Se perdió poder reservar en días distintos en una pasada.** El flujo anterior ("Agregar otro turno") lo permitía; el bloque es por definición un solo día y seguido. Fue una decisión de Franco.
   - El push a Ariel es **uno solo** con tag propio (`turnos-grupo-<id>`); los mails al cliente son **N, secuenciales**, cada uno con su link y su `.ics`. `construirNotificacionTurnosNuevos` y `mensajeDeTurnosConfirmados` **delegan** en la versión de a uno cuando hay uno, con tests de igualdad que lo fijan.
 - ⚠️ **En la grilla semanal el pendiente se parte por CUÁNDO, y el corte es "hoy o antes"** (`clasesDeEstado` en `GrillaSemana.tsx`, 23/8/2026): blanco lo que está **abierto** —hoy, o un día que ya pasó y Ariel nunca cerró—, mostaza lo que **todavía va a pasar**. Hasta esa fecha el corte era `dia === hoy`, y un `reservado` de ayer volvía a mostaza: se veía **igual que uno de la semana que viene**, o sea que la fila que hay que ir a marcar Realizado o Ausente era justo la que quedaba disfrazada de futuro. ⚠️ La comparación es de **strings ISO** (`dia <= hoy`), nunca `new Date(dia)`: `YYYY-MM-DD` se parsea en UTC y en Argentina correría el borde un día. **La vista Día no se tocó** — su `ESTILO_ESTADO` tiene escrito por qué ahí el chip `reservado` es siempre mostaza: la vista ya está parada en un día, así que "es de hoy" no distingue nada. El re-render a medianoche ya estaba cubierto por `useMinutosAhora` + el `hoyIso()` que se llama en el JSX.
 - ⚠️ **Las fotos que sube Ariel viven en Postgres** (`imagenes.datos`, HU-29, 16/8/2026), comprimidas **en el navegador** a ~150 KB antes de subir. No fue preferencia: no había ningún lugar donde un archivo subido sobreviviera —`frontend/public` se hornea en el build de Vercel y el disco de Render es efímero— y un bucket traía cuenta nueva y trámite externo, lo mismo que tiene frenado a WhatsApp. **El techo es real**: Neon free son 0,5 GB. ⚠️ **Eran dos los números que lo sostenían y desde el 23/8/2026 queda uno solo**: Franco pidió sacar el tope de **5 fotos por ficha** (Ariel sabe que ocupan y prefiere cuidarlo él antes de que el sistema le corte en la mitad de un trabajo), así que lo único que queda es la compresión a ~150 KB. El techo dejó de ser estructural y pasó a depender de que alguien mire un número — por eso el medidor de "Mi cuenta" **dejó de ser informativo** y ahora muestra el uso contra `PRESUPUESTO_DE_FOTOS` (400 MB, no los 500 de Neon: la misma base guarda turnos y clientes). Mudarse a un bucket después no toca ninguna pantalla, porque el frontend solo ve `/api/imagenes/<id>`.
@@ -268,7 +272,7 @@ Tres pedidos del uso real. Los dos primeros son chicos; el tercero es HU-31.
    ir a cerrar era el único que se veía como futuro.
 2. **Sin tope de 5 fotos por ficha**, y el medidor de "Mi cuenta" mostrando el uso **contra
    400 MB**. Ver la regla de las fotos: el techo dejó de ser estructural.
-3. **HU-31 — hasta 3 turnos en una pasada.** Ver la regla en "Reglas de negocio clave".
+3. **HU-31 — un bloque de hasta 6 turnos seguidos.** Ver la regla en "Reglas de negocio clave".
 
 **Verificado de verdad, no compilado**, sobre la branch descartable `prueba-ajustes-23ago`:
 
@@ -276,30 +280,35 @@ Tres pedidos del uso real. Los dos primeros son chicos; el tercero es HU-31.
   contra la de antes. Sale idéntica (420 caracteres, el 👇 entero), y el paso de datos con un
   turno se dibuja exactamente igual — label "Nombre y apellido", resumen de una línea, sin ✕ ni
   total.
-- El grupo de 3: `201`, tres ids distintos, **una sola ficha** con una sola etiqueta "Nuevo" y
-  los tres nombres por turno. En la agenda, tres bloques de **222 px de ancho cada uno** (o sea
-  el ancho entero: no se reparten en columnas) y altos de 108/72/54 px para 30/20/15 minutos.
-- **El filtro de horarios, medido en el DOM**: con un Corte + Barba de 30 a las 10:00, el
-  segundo turno ya no ve ni 10:00 ni 10:20, y sí 10:40. Es el caso que más fácil salía mal.
+- El bloque de 3 con **duraciones distintas** (Barba 15 + Corte 20 + Corte + Barba 30 = 65 min):
+  `201`, tres ids distintos, **una sola ficha**, y en la base `11:05–11:20`, `11:20–11:40`,
+  `11:40–12:10` — pegados, **sin un minuto de hueco**. Es el caso que la versión anterior no
+  conseguía.
+- La disponibilidad del bloque, medida: 60 minutos corta la mañana en **12:00** (no cruza el
+  descanso) y la tarde en **19:00** (no se pasa del cierre), contra 12:40 y 19:40 de un turno
+  suelto. Y el bloque de 65 min se ofreció a las **11:05**, el final de un turno agendado.
 - ⚠️ **El riesgo número uno quedó descartado midiendo, no razonando**: el SQLSTATE `23P01`
   **sí** sobrevive dentro de un `$transaction` de array, en la misma ruta que ya leía
   `esViolacionDeSolapamiento`. Y la transacción es atómica de verdad: 38 turnos antes y 38
   después de forzar el choque.
-- Bordes por API: grupo de 4 → `400` diciendo 3; dos que se pisan → `409`
-  `TURNOS_DEL_GRUPO_SE_PISAN`; ficha con 3 + grupo de 3 → `201` (justo 6); una más → `409`; a 7
-  días de distancia entra de nuevo; el 3º a 91 días → `409 FUERA_DE_HORIZONTE`.
-- La ✕ del resumen devuelve la pantalla al formato de un turno solo y **el horario vuelve a
-  ofrecerse enseguida** (es estado derivado, no hay cache que invalidar).
-- `history.length` **no se mueve** al usar "Agregar otro turno". Cero errores de consola (el
-  único 409 del log es el límite semanal forzado a propósito). 375 px sin scroll horizontal.
+- Bordes por API: bloque de 7 → `400` diciendo 6; bloque de 6 → `201` y **gasta todo el cupo
+  semanal** (el séptimo turno de esa semana da `409 LIMITE_SEMANAL_ALCANZADO`); el bloque que
+  choca contra un turno existente → `409` sin crear nada; a 91 días → `409 FUERA_DE_HORIZONTE`.
+- **La regresión de un turno solo, en pantalla**: título = el nombre del servicio, sin el
+  cartel de "buscamos un hueco", label "Nombre y apellido", sin total ni ✕, copy en singular, y
+  la URL de WhatsApp de 426 caracteres con el mismo texto de siempre.
+- `history.length` **no se mueve** al entrar al paso "¿cuántos turnos?". Cero errores de consola
+  propios. 375 px sin scroll horizontal, con los 6 selectores de servicio.
+- ⚠️ Un defecto encontrado **usándolo y no compilando**: tocar el número saltaba derecho al
+  horario, así que los selectores de servicio por turno nunca llegaban a verse y la mamá con dos
+  varones y una nena no tenía dónde pedir el corte de mujer. Elegir la cantidad ahora **no**
+  cambia de paso.
 - 8 fotos seguidas a una ficha dan `201` (antes la 5ª daba `409`), el listado vuelve sin
   `maximo`, y una foto de 700 KB **sigue** dando `400`.
 
 ⚠️ **Se agregó `vitest` al frontend**, que hasta ahora no tenía tests. Es dev-only y no entra al
-bundle; `npm audit` no sumó ningún aviso nuevo (sigue solo el `nanoid` de siempre). Cubre las
-dos funciones puras más frágiles del cambio: `descontarHorariosDelGrupo` y
-`mensajeDeTurnosConfirmados`, esta última con el test de igualdad que protege el caso de un
-turno solo.
+bundle; `npm audit` no sumó ningún aviso nuevo (sigue solo el `nanoid` de siempre). Cubre
+`mensajeDeTurnosConfirmados`, con el test de igualdad que protege el caso de un turno solo.
 
 ⚠️ **`tsc --noEmit` a secas NO chequea este frontend** (hay project references): pasaba en verde
 con dos errores reales adentro. Hay que correr **`tsc -b --force`**.

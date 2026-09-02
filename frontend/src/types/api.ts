@@ -68,12 +68,12 @@ export interface DisponibilidadDia {
 export interface NuevoGrupoDeTurnos {
   clienteTelefono: string
   clienteEmail?: string
-  turnos: {
-    servicioId: string
-    fecha: string // "YYYY-MM-DD"
-    hora: string // "HH:mm"
-    clienteNombre: string
-  }[]
+  /** El día del bloque entero: los turnos van pegados, así que es uno solo. */
+  fecha: string // "YYYY-MM-DD"
+  /** A qué hora arranca el **primero**. Las demás las calcula el backend encadenando
+   * duraciones, así que un bloque con huecos o superpuesto no se puede ni expresar. */
+  hora: string // "HH:mm"
+  turnos: { servicioId: string; clienteNombre: string }[]
 }
 
 export interface NuevoTurno {

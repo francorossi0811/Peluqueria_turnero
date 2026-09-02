@@ -1,15 +1,24 @@
 import { apiClient } from './client'
 import type { DisponibilidadDia } from '../types/api'
 
+/** HU-31 — Acepta **uno o varios** servicios. Con varios, lo que devuelve son los horarios
+ * donde entra el **bloque completo**: el backend suma las duraciones, porque N turnos
+ * pegados ocupan lo mismo que un turno único de esa duración.
+ *
+ * Con uno solo manda `servicioId` y se comporta igual que siempre — es lo que usa la
+ * reprogramación. */
 export async function obtenerDisponibilidad(
-  servicioId: string,
+  servicioIds: string[],
   desde: string,
   hasta: string,
 ): Promise<DisponibilidadDia[]> {
   const { data } = await apiClient.get<{ disponibilidad: DisponibilidadDia[] }>(
     '/disponibilidad',
     {
-      params: { servicioId, desde, hasta },
+      params:
+        servicioIds.length === 1
+          ? { servicioId: servicioIds[0], desde, hasta }
+          : { servicioIds: servicioIds.join(','), desde, hasta },
     },
   )
   return data.disponibilidad

@@ -91,7 +91,7 @@ export function GestionTurnoPage({ id }: { id: string }) {
 
   const disponibilidadQuery = useQuery({
     queryKey: ['disponibilidad', servicioId, desde, hasta],
-    queryFn: () => obtenerDisponibilidad(servicioId!, desde, hasta),
+    queryFn: () => obtenerDisponibilidad([servicioId!], desde, hasta),
     enabled: modo === 'reprogramar' && Boolean(servicioId),
   })
 

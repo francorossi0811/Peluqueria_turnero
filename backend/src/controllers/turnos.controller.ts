@@ -28,7 +28,6 @@ import {
   FueraDeVentanaError,
   HorarioNoDisponibleError,
   LimiteSemanalError,
-  TurnosDelGrupoSeSolapanError,
   ServicioNoDisponibleError,
   TurnoNoCobrableError,
   TurnoNoEncontradoError,
@@ -116,12 +115,15 @@ const grupoSchema = z.object({
     (v) => (v === '' || v === null ? undefined : v),
     z.email('El email no parece válido.').optional(),
   ),
+  // ⚠️ La fecha y la hora son del **bloque**, no de cada turno: los turnos van pegados uno
+  // atrás del otro y el backend deriva la hora de cada uno encadenando duraciones. Un bloque
+  // con huecos o superpuesto dejó de ser representable, así que no hay nada que validar.
+  fecha: esquemaDeFecha('la fecha del turno'),
+  hora: esquemaDeHora('la hora del turno'),
   turnos: z
     .array(
       z.object({
         servicioId: z.uuid(),
-        fecha: esquemaDeFecha('la fecha del turno'),
-        hora: esquemaDeHora('la hora del turno'),
         clienteNombre: z
           .string()
           .trim()
@@ -352,18 +354,6 @@ function manejarErroresComunes(err: unknown, res: Response): boolean {
     })
     return true
   }
-  // HU-31 — Es 409 como los otros dos, así que el frontend **tiene que ramificar por
-  // `codigo` y no por status**. El mensaje nombra las dos horas: la salida es sacar uno de
-  // los dos del resumen, y para eso hay que saber cuáles son.
-  if (err instanceof TurnosDelGrupoSeSolapanError) {
-    res.status(409).json({
-      error: {
-        codigo: 'TURNOS_DEL_GRUPO_SE_PISAN',
-        mensaje: `Elegiste dos turnos que se pisan: ${err.horas[0]} y ${err.horas[1]}. Cambiá uno de los dos.`,
-      },
-    })
-    return true
-  }
   // HU-08 — El mensaje nombra el problema concreto porque la salida no es obvia: hay que
   // decidir cuál de los dos turnos se hizo de verdad y marcar el otro Ausente.
   if (err instanceof TurnoSeSolapaConRealizadoError) {
@@ -452,18 +442,15 @@ export async function postTurnosEnGrupo(req: Request, res: Response) {
     return
   }
 
-  const { clienteTelefono, clienteEmail, turnos } = parsed.data
+  const { clienteTelefono, clienteEmail, fecha, hora, turnos } = parsed.data
 
   try {
     const creados = await crearTurnosEnGrupo({
       clienteTelefono,
       clienteEmail,
-      turnos: turnos.map((t) => ({
-        servicioId: t.servicioId,
-        fecha: fechaDesdeIso(t.fecha),
-        hora: t.hora,
-        clienteNombre: t.clienteNombre,
-      })),
+      fecha: fechaDesdeIso(fecha),
+      hora,
+      turnos,
     })
     res.status(201).json(creados.map(turnoADto))
 

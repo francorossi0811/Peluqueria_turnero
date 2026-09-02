@@ -68,6 +68,7 @@ saldría sola y nada fallaría.
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/disponibilidad?servicioId=&desde=&hasta=` | Horarios disponibles para ese servicio entre `desde` y `hasta` (fechas), aplicando `horario_laboral`, `bloqueos_horario`, `feriados` y turnos ya reservados (CU-04) |
+| GET | `/api/disponibilidad?servicioIds=a,b,c&desde=&hasta=` | HU-31 — Lo mismo para un **bloque**: devuelve las horas de arranque donde entran los N turnos **seguidos**. La duración que se busca es la **suma** |
 | GET | `/api/admin/disponibilidad?servicioId=&desde=&hasta=&incluirPasado=` | 🔒 Lo mismo, con las reglas de Ariel: sin la antelación mínima de 30 min y, con `incluirPasado=true`, los últimos 7 días (HU-08) |
 
 ⚠️ **Son dos rutas y no un parámetro de la primera**, por el mismo criterio que
@@ -83,6 +84,12 @@ responde **400 `PARAMETROS_INVALIDOS`** si la fecha se pasa.
 La ruta **pública** recorta de los dos lados por el mismo motivo: `desde` nunca antes de hoy, y
 desde HU-28 `hasta` nunca más allá de **hoy + 90 días**. Si el recorte deja el rango dado vuelta
 (se pidió solo días fuera del horizonte), devuelve `{ "disponibilidad": [] }` en vez de un error.
+
+⚠️ **`servicioId` y `servicioIds` son excluyentes y hay que mandar uno.** El singular se
+mantiene porque es lo que usan la reprogramación y el panel de Ariel, que preguntan por **un**
+servicio y a los que el plural no les diría nada. Con `servicioIds` el tope es el mismo
+`MAX_TURNOS_POR_GRUPO` de la reserva en bloque: preguntar por un bloque más grande del que se
+puede reservar no tiene sentido.
 Ese techo es lo que mantiene la promesa del párrafo de arriba en la otra dirección: la grilla no
 puede ofrecer un día que `POST /api/turnos` va a rechazar con `FUERA_DE_HORIZONTE`. La ruta admin
 **no** tiene techo — Ariel ya toma turnos a meses vista.
@@ -122,7 +129,7 @@ ninguno el día figura como `completo`.
 | Método | Ruta | Descripción |
 |---|---|---|
 | POST | `/api/turnos` | Crea una reserva (CU-01) |
-| POST | `/api/turnos/grupo` | Crea 1 a 3 reservas de una, con un solo teléfono (HU-31) |
+| POST | `/api/turnos/grupo` | Crea un **bloque** de 1 a 6 turnos seguidos, con un solo teléfono (HU-31) |
 | GET | `/api/turnos/:id` | Detalle del turno (el link único que recibe el cliente apunta acá) |
 | POST | `/api/turnos/:id/cancelar` | Cancela el turno, valida ventana de 60 min (CU-02) |
 | POST | `/api/turnos/:id/reprogramar` | Reprograma a un nuevo horario, valida ventana de 60 min + disponibilidad (CU-02, HU-04) |
@@ -195,48 +202,55 @@ acaba de ocupar" a alguien que había llegado a su tope semanal.
 
 ### `POST /api/turnos/grupo` — HU-31
 
-Reservar 2 o 3 turnos de una sola vez (la mamá que trae a los hijos). **Pública, sin auth**,
+Reservar un **bloque** de turnos seguidos (la mamá que trae a los hijos). **Pública, sin auth**,
 igual que `POST /api/turnos`.
 
 ```json
 {
   "clienteTelefono": "351 456 7890",
   "clienteEmail": "ana@gmail.com",
+  "fecha": "2026-09-15",
+  "hora": "11:05",
   "turnos": [
-    { "servicioId": "uuid", "fecha": "2026-09-11", "hora": "10:00", "clienteNombre": "Ana Lopez" },
-    { "servicioId": "uuid", "fecha": "2026-09-11", "hora": "10:20", "clienteNombre": "Toto Lopez" }
+    { "servicioId": "uuid", "clienteNombre": "Ana" },
+    { "servicioId": "uuid", "clienteNombre": "Toto" }
   ]
 }
 ```
 
-⚠️ **El teléfono y el mail van afuera del array, no adentro de cada turno.** Es lo que hace
-estructuralmente imposible mandar tres teléfonos distintos y terminar con tres fichas: la ficha
-del cliente es **una sola** para todo el grupo (HU-25). El nombre sí va por turno.
+⚠️ **La fecha y la hora son del bloque, no de cada turno.** El backend deriva la hora de cada
+uno encadenando duraciones: con una Barba de 15 y un Corte de 20 arrancando 11:05, salen
+11:05–11:20 y 11:20–11:40. Un bloque con huecos o superpuesto **no se puede expresar**, así
+que no hay ningún error de "tus turnos se pisan" — dejó de existir junto con el formato viejo.
 
-Response `201`: un **array** de turnos, cada uno con el mismo cuerpo que devuelve
+⚠️ **El teléfono y el mail van afuera del array.** Es lo que hace estructuralmente imposible
+mandar varios teléfonos y terminar con varias fichas: la ficha del cliente es **una sola** para
+todo el bloque (HU-25). El nombre sí va por turno.
+
+Response `201`: un **array** de turnos, en el mismo orden, cada uno con el cuerpo que devuelve
 `POST /api/turnos`. Cada id es el token de gestión de *su* turno; una vez creados son
-independientes en todo sentido y nada en la base los ata (ver `modelo-datos.md`).
+independientes y nada en la base los ata (ver `modelo-datos.md`).
 
-⚠️ **Los inserts van en una transacción: entran todos o no entra ninguno.** Si el segundo choca
-contra el EXCLUDE, el primero tampoco queda.
+⚠️ **Los inserts van en una transacción: entran todos o no entra ninguno.**
 
-**Por qué es una ruta nueva y no un `POST /api/turnos` que acepte array:** así el caso de un
-turno solo —el 99% de las reservas— no pasa por una sola línea de código nueva, ni en el
-backend ni en el cliente de API.
+**Cómo se valida que el bloque entra:** una sola pregunta, con la **suma** de las duraciones.
+Un bloque pegado ocupa exactamente lo mismo que un turno único de esa duración, así que reusa
+`calcularHorariosDelDia` (CU-04) en vez de tener un buscador de huecos propio. De ahí sale
+gratis que el bloque no pueda cruzar el descanso ni pasarse del cierre.
 
-Errores, **todos con los mismos códigos que la ruta de a uno** salvo el propio:
+**Por qué es una ruta nueva y no un `POST /api/turnos` extendido:** así el caso de un turno
+solo —el 99% de las reservas— no pasa por una sola línea de código nueva.
 
-- `400 PARAMETROS_INVALIDOS` — el array vacío, con más de **3** turnos, o cualquier campo mal.
-- `409 TURNOS_DEL_GRUPO_SE_PISAN` — dos del propio grupo se solapan. El mensaje nombra **las
-  dos horas**, porque la salida es sacar uno de los dos y hay que saber cuáles son. ⚠️ Es un
-  error distinto de `HORARIO_NO_DISPONIBLE` a propósito: aquel dice "alguien te ganó de mano",
-  este dice "elegiste dos que no pueden convivir", y se arreglan en pantallas distintas.
-- `409 HORARIO_NO_DISPONIBLE`, `409 LIMITE_SEMANAL_ALCANZADO`, `409 FUERA_DE_HORIZONTE` — los
-  mismos de la ruta de a uno. El tope semanal cuenta el **grupo entero** contra lo ya agendado,
-  no turno por turno.
+Errores:
 
-⚠️ Igual que en la ruta de a uno: **cuatro** de estos errores son 409, así que hay que ramificar
-por `codigo` y nunca por status.
+- `400 PARAMETROS_INVALIDOS` — el array vacío, con más de **6** turnos, o cualquier campo mal.
+- `409 HORARIO_NO_DISPONIBLE` — el bloque no entra a esa hora (o el rato se ocupó en el medio).
+- `409 LIMITE_SEMANAL_ALCANZADO` — el bloque **completo** se cuenta contra lo ya agendado, no
+  turno por turno.
+- `409 FUERA_DE_HORIZONTE`.
+
+⚠️ Igual que en la ruta de a uno: los tres últimos son 409, así que hay que ramificar por
+`codigo` y nunca por status.
 
 **POST `/api/turnos/:id/cancelar`** — sin body. Response `409` si faltan menos de 60
 minutos:

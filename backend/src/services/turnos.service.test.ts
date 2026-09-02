@@ -3,7 +3,7 @@ import {
   esCobrable,
   estaDentroDeVentanaDeCambio,
   excedeLimiteSemanal,
-  indiceDelSolapamientoInterno,
+  horariosDelBloque,
   fechaCargableComoAdmin,
   fechaReservablePorCliente,
 } from './turnos.service'
@@ -242,70 +242,40 @@ describe('excedeLimiteSemanal', () => {
   })
 })
 
-// HU-31 — Que los turnos del grupo no se pisen entre sí. Los bordes van de a pares, como el
-// resto del proyecto: el que se toca justo entra, el que se pisa un minuto no.
-describe('indiceDelSolapamientoInterno', () => {
-  const DIA = new Date(Date.UTC(2026, 8, 4))
-  const OTRO_DIA = new Date(Date.UTC(2026, 8, 5))
-  const t = (fecha: Date, hora: string, duracionMinutos: number) => ({
-    fecha,
-    hora,
-    duracionMinutos,
+// HU-31 — El bloque: los turnos van pegados uno atrás del otro y el backend deriva la hora
+// de cada uno. Esto reemplazó al chequeo de solapamiento interno que había antes — con una
+// sola hora de arranque, un bloque superpuesto dejó de ser representable.
+describe('horariosDelBloque', () => {
+  it('con un solo turno devuelve la hora que le dieron', () => {
+    expect(horariosDelBloque('10:00', [20])).toEqual(['10:00'])
   })
 
-  it('no ve solapamiento en una lista de uno solo', () => {
-    expect(indiceDelSolapamientoInterno([t(DIA, '10:00', 20)])).toBeNull()
+  it('encadena las duraciones, cada uno arranca cuando termina el anterior', () => {
+    expect(horariosDelBloque('10:00', [20, 20, 20])).toEqual([
+      '10:00',
+      '10:20',
+      '10:40',
+    ])
   })
 
-  it('deja convivir a los que se tocan borde con borde', () => {
-    // 10:00-10:20 y 10:20-10:40: es el caso que la mamá quiere, turnos seguidos.
-    expect(
-      indiceDelSolapamientoInterno([t(DIA, '10:00', 20), t(DIA, '10:20', 20)]),
-    ).toBeNull()
+  // ⚠️ El que importa: cada turno aporta **su** duración. Con una fija (los 20 de la grilla)
+  // este caso daría 10:20 para el segundo, y el bloque quedaría con un hueco de 5 minutos.
+  it('usa la duración de cada servicio y no una fija', () => {
+    // Barba 15 + Corte 20 + Corte + Barba 30.
+    expect(horariosDelBloque('10:00', [15, 20, 30])).toEqual([
+      '10:00',
+      '10:15',
+      '10:35',
+    ])
   })
 
-  it('corta cuando se pisan un solo minuto', () => {
-    // El espejo del test de arriba: un minuto antes y ya no entra.
-    expect(
-      indiceDelSolapamientoInterno([t(DIA, '10:00', 20), t(DIA, '10:19', 20)]),
-    ).toEqual([0, 1])
+  // Es justo lo que la versión vieja no conseguía: el segundo turno caía en 10:20 porque la
+  // disponibilidad solo ofrecía múltiplos de la grilla.
+  it('arranca el siguiente en un horario fuera de la grilla de 20 si corresponde', () => {
+    expect(horariosDelBloque('10:00', [15, 15])).toEqual(['10:00', '10:15'])
   })
 
-  it('corta cuando arrancan a la misma hora', () => {
-    expect(
-      indiceDelSolapamientoInterno([t(DIA, '10:00', 20), t(DIA, '10:00', 20)]),
-    ).toEqual([0, 1])
-  })
-
-  it('no confunde la misma hora en días distintos', () => {
-    expect(
-      indiceDelSolapamientoInterno([
-        t(DIA, '10:00', 20),
-        t(OTRO_DIA, '10:00', 20),
-      ]),
-    ).toBeNull()
-  })
-
-  // ⚠️ El que fija que se usa la duración de CADA servicio y no una fija: con 20 minutos
-  // para los dos, la Barba de 15 no llegaría a las 10:20 y este caso pasaría.
-  it('usa la duración de cada servicio, no una sola', () => {
-    // Corte + Barba de 30 a las 10:00 termina 10:30, así que se come la Barba de las 10:15.
-    expect(
-      indiceDelSolapamientoInterno([t(DIA, '10:00', 30), t(DIA, '10:15', 15)]),
-    ).toEqual([0, 1])
-    // Y la misma Barba después de una de 15 (que termina 10:15) sí entra.
-    expect(
-      indiceDelSolapamientoInterno([t(DIA, '10:00', 15), t(DIA, '10:15', 15)]),
-    ).toBeNull()
-  })
-
-  it('encuentra el par aunque no sean los dos primeros', () => {
-    expect(
-      indiceDelSolapamientoInterno([
-        t(DIA, '10:00', 20),
-        t(DIA, '11:00', 20),
-        t(DIA, '11:10', 20),
-      ]),
-    ).toEqual([1, 2])
+  it('cruza la hora sin romperse', () => {
+    expect(horariosDelBloque('10:50', [20, 30])).toEqual(['10:50', '11:10'])
   })
 })

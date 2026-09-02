@@ -15,7 +15,6 @@ import {
   FueraDeVentanaError,
   HorarioNoDisponibleError,
   LimiteSemanalError,
-  TurnosDelGrupoSeSolapanError,
   TurnoNoCobrableError,
   TurnoNoEncontradoError,
   TurnoNoModificableError,
@@ -25,8 +24,8 @@ import {
 import {
   ahoraArgentina,
   combinarFechaHora,
+  formatearHora,
   horaDesdeString,
-  seSolapan,
 } from '../utils/fechaHora'
 import type {
   EstadoTurno,
@@ -56,10 +55,14 @@ export interface DatosNuevoTurno {
 export interface DatosGrupoDeTurnos {
   clienteTelefono: string
   clienteEmail?: string
+  /** El día del bloque entero: los turnos van pegados uno atrás del otro, así que es uno
+   * solo. */
+  fecha: Date
+  /** A qué hora arranca el **primero**. Las de los demás las calcula el backend
+   * encadenando duraciones — ver `horariosDelBloque`. */
+  hora: string // "HH:mm"
   turnos: {
     servicioId: string
-    fecha: Date
-    hora: string // "HH:mm"
     clienteNombre: string
   }[]
 }
@@ -147,13 +150,18 @@ export function fechaReservablePorCliente(fecha: Date, ahora: Date): boolean {
  * mano, para defender un caso que todavía no ocurrió. */
 export const MAX_TURNOS_POR_SEMANA = 6
 
-/** HU-31 — Cuántos turnos entran en una sola pasada del formulario. Tres son la familia que
- * motivó la historia (la mamá con dos hijos, o los tres hermanos); más que eso deja de ser
- * "vengo con los míos" y empieza a parecerse a lo que HU-28 quiere frenar.
+/** HU-31 — Cuántos turnos entran en un bloque, o sea en una sola pasada del formulario.
  *
- * Es un tope **distinto** de `MAX_TURNOS_POR_SEMANA` y no lo reemplaza: este limita una
- * pasada, aquel limita la ventana de 7 días, y el grupo pasa por los dos. */
-export const MAX_TURNOS_POR_GRUPO = 3
+ * Es **el mismo número** que `MAX_TURNOS_POR_SEMANA` a propósito: quien pide el bloque más
+ * grande posible gasta de una todo su cupo de la semana, y no hay ninguna razón para que la
+ * pasada corte antes que la ventana. Tener dos números distintos obligaba a explicar dos
+ * reglas en la misma pantalla.
+ *
+ * ⚠️ Un bloque de 6 puede no entrar en ningún lado: 6 turnos de 30 minutos son 180, que es
+ * exactamente lo que dura la franja de la mañana. No es un error — es la agenda diciendo que
+ * no hay lugar—, pero la pantalla tiene que decirlo con esas palabras en vez de mostrar una
+ * grilla vacía. */
+export const MAX_TURNOS_POR_GRUPO = MAX_TURNOS_POR_SEMANA
 
 /** "Semana" es una ventana **móvil** de 7 días, no lunes a domingo. La diferencia no es
  * cosmética: con la semana del calendario se pueden tener 3 turnos viernes/sábado/domingo y
@@ -255,42 +263,31 @@ async function validarLimiteSemanal(
   if (excedeLimiteSemanal(cercanas, fechas)) throw new LimiteSemanalError()
 }
 
-/** HU-31 — Los turnos que un mismo grupo eligió, ¿se pisan entre sí? Devuelve el par de
- * índices que choca (para poder decir **cuáles** dos) o `null`.
+/** HU-31 — Las horas de arranque de cada turno del bloque, encadenando duraciones.
  *
- * ⚠️ Existe porque la validación de disponibilidad **no puede ver a los hermanos del grupo**:
- * ninguno está en la base todavía, así que `obtenerHorariosDelDia` ofrece los tres horarios
- * como libres y el choque recién aparecería en el EXCLUDE, ya adentro de la transacción y
- * con el mensaje equivocado ("ese horario se acaba de ocupar", que sería mentira: lo ocupó
- * la misma persona hace diez segundos, en la pantalla anterior).
+ * ⚠️ Esto es lo que **elimina** una clase entera de errores en vez de validarla. Antes el
+ * cliente mandaba una hora por turno y había que chequear que no se pisaran entre sí (y
+ * explicar el choque con un mensaje propio, porque la disponibilidad no puede verlo: ninguno
+ * de los hermanos existe todavía en la base). Ahora manda **una sola hora**, la del primero,
+ * y las demás las deriva el backend: un bloque con huecos o superpuesto dejó de ser
+ * representable.
  *
- * Pura y exportada para poder fijarla con tests. Reusa `seSolapan`, el mismo predicado que
- * usan disponibilidad y bloqueos: **tocarse borde con borde no es pisarse** (10:00-10:20 y
- * 10:20-10:40 conviven), que es exactamente la semántica del EXCLUDE. */
-export function indiceDelSolapamientoInterno(
-  turnos: { fecha: Date; hora: string; duracionMinutos: number }[],
-): [number, number] | null {
-  const tramos = turnos.map((t) => {
-    const inicio = horaDesdeString(t.hora)
-    return {
-      dia: t.fecha.getTime(),
-      inicio,
-      fin: new Date(inicio.getTime() + t.duracionMinutos * 60_000),
-    }
-  })
-
-  for (let a = 0; a < tramos.length; a++) {
-    for (let b = a + 1; b < tramos.length; b++) {
-      if (tramos[a].dia !== tramos[b].dia) continue
-      if (
-        seSolapan(tramos[a].inicio, tramos[a].fin, tramos[b].inicio, tramos[b].fin)
-      ) {
-        return [a, b]
-      }
-    }
+ * Los turnos quedan pegados borde con borde, que además es lo que arregla el empaquetado: una
+ * Barba de 15 a las 10:00 ahora sí hace arrancar al siguiente 10:15, sin esperar al próximo
+ * múltiplo de la grilla de 20.
+ *
+ * Pura y exportada para poder fijarla con tests. */
+export function horariosDelBloque(
+  horaInicio: string,
+  duracionesMinutos: number[],
+): string[] {
+  let momento = horaDesdeString(horaInicio)
+  const horas: string[] = []
+  for (const duracion of duracionesMinutos) {
+    horas.push(formatearHora(momento))
+    momento = new Date(momento.getTime() + duracion * 60_000)
   }
-
-  return null
+  return horas
 }
 
 /**
@@ -384,14 +381,14 @@ export async function crearTurno(
 }
 
 /**
- * HU-31 — Reservar varios turnos de una sola vez, con un teléfono y una ficha.
+ * HU-31 — Reservar un **bloque** de turnos pegados, con un teléfono y una ficha.
  *
  * Vive al lado de `crearTurno` y **no la reemplaza**: reservar un turno solo sigue pasando
  * por aquella, byte por byte. Es la garantía más fuerte de que el caso normal —el 99% de las
  * reservas— no puede romperse por este código.
  *
- * Es **solo pública**: no toma `origen`. Ariel ya carga los turnos que quiere de a uno y sin
- * ningún tope, así que una versión de grupo para el panel sería construir de más.
+ * Es **solo pública**: no toma `origen`. Ariel carga los turnos que quiere de a uno y sin
+ * ningún tope; tiene la agenda a la vista y no necesita que el sistema le busque el hueco.
  *
  * El orden de los pasos importa, y es el mismo razonamiento que ya está escrito en
  * `crearTurno`: todo lo que puede rechazar va **antes** de `vincularCliente`, porque esa
@@ -402,35 +399,37 @@ export async function crearTurnosEnGrupo(
 ): Promise<TurnoConCliente[]> {
   const ahora = ahoraArgentina()
 
-  // 1. Los servicios. Un `Map` por id porque tres hermanos piden el mismo Corte: sin esto
-  // serían tres consultas idénticas a Neon para traer la misma fila.
-  const servicios = new Map<string, Awaited<ReturnType<typeof obtenerServicioActivo>>>()
+  // 1. Los servicios, en el orden en que se eligieron. Un `Map` por id porque tres hermanos
+  // piden el mismo Corte: sin esto serían tres consultas idénticas a Neon.
+  const cache = new Map<string, Awaited<ReturnType<typeof obtenerServicioActivo>>>()
   for (const t of input.turnos) {
-    if (!servicios.has(t.servicioId)) {
-      servicios.set(t.servicioId, await obtenerServicioActivo(t.servicioId))
+    if (!cache.has(t.servicioId)) {
+      cache.set(t.servicioId, await obtenerServicioActivo(t.servicioId))
     }
   }
+  const servicios = input.turnos.map((t) => cache.get(t.servicioId)!)
 
-  // 2. El horizonte de 90 días, para cada uno.
-  for (const t of input.turnos) {
-    if (!fechaReservablePorCliente(t.fecha, ahora)) throw new FueraDeHorizonteError()
+  // 2. El horizonte de 90 días. Es una sola fecha: el bloque entero es del mismo día.
+  if (!fechaReservablePorCliente(input.fecha, ahora)) {
+    throw new FueraDeHorizonteError()
   }
 
-  // 3. Que el grupo no se pise consigo mismo. Va antes de tocar la base porque es aritmética
-  // pura, y es **imprescindible**: el paso 5 no puede verlo (ninguno de los hermanos existe
-  // todavía) y el EXCLUDE lo diría con el mensaje equivocado.
-  const choque = indiceDelSolapamientoInterno(
-    input.turnos.map((t) => ({
-      fecha: t.fecha,
-      hora: t.hora,
-      duracionMinutos: servicios.get(t.servicioId)!.duracionMinutos,
-    })),
+  // 3. ¿Entra el bloque completo a esa hora?
+  //
+  // ⚠️ Una sola pregunta para los N turnos, y alcanza: el bloque va pegado, así que ocupa
+  // exactamente lo mismo que un turno único de la duración total. De ahí sale gratis que no
+  // pueda cruzar el descanso ni pasarse del cierre — las dos las hace `calcularHorariosDelDia`
+  // desde CU-04, y no hay una segunda cuenta de disponibilidad que pueda contradecir a la
+  // primera.
+  const duracionTotal = servicios.reduce((t, s) => t + s.duracionMinutos, 0)
+  const horariosDelDia = await obtenerHorariosDelDia(
+    { duracionMinutos: duracionTotal },
+    input.fecha,
+    ahora,
+    {},
   )
-  if (choque) {
-    throw new TurnosDelGrupoSeSolapanError([
-      input.turnos[choque[0]].hora,
-      input.turnos[choque[1]].hora,
-    ])
+  if (!horariosDelDia.includes(input.hora)) {
+    throw new HorarioNoDisponibleError()
   }
 
   // 4. La ficha, **una sola** para todo el grupo.
@@ -438,39 +437,23 @@ export async function crearTurnosEnGrupo(
   // ⚠️ `vincularCliente` pisa `clientes.nombre` con el que le pasan, y acá hay varios. Se usa
   // el del primer turno: arbitrario pero determinista, y el apodo que le ponga Ariel manda
   // sobre esto en toda la interfaz (HU-25). Efecto lateral asumido: si la mamá reserva solo
-  // para los hijos, la ficha queda con el nombre de un hijo y el teléfono de ella — que es
-  // lo que ya pasa hoy si los reserva de a uno.
+  // para los hijos, la ficha queda con el nombre de un hijo y el teléfono de ella — que es lo
+  // que ya pasa hoy si los reserva de a uno.
   const clienteId = await vincularCliente(
     input.clienteTelefono,
     input.turnos[0].clienteNombre,
   )
 
-  // 5. El tope de la ventana de 7 días, contando el grupo entero de una.
+  // 5. El tope de la ventana de 7 días, contando el bloque entero de una: son N fechas
+  // iguales, y `excedeLimiteSemanal` las cuenta a todas dentro de la ventana.
   if (clienteId) {
     await validarLimiteSemanal(
       clienteId,
-      input.turnos.map((t) => t.fecha),
+      input.turnos.map(() => input.fecha),
     )
   }
 
-  // 6. Disponibilidad real, turno por turno. Un `Map` por (servicio, día) para no recalcular
-  // el mismo día dos veces cuando los hermanos van seguidos.
-  const horariosPorDia = new Map<string, string[]>()
-  for (const t of input.turnos) {
-    const servicio = servicios.get(t.servicioId)!
-    const clave = `${t.servicioId}|${t.fecha.getTime()}`
-    if (!horariosPorDia.has(clave)) {
-      horariosPorDia.set(
-        clave,
-        await obtenerHorariosDelDia(servicio, t.fecha, ahora, {}),
-      )
-    }
-    if (!horariosPorDia.get(clave)!.includes(t.hora)) {
-      throw new HorarioNoDisponibleError()
-    }
-  }
-
-  // 7. Los inserts, **todos o ninguno**.
+  // 6. Los inserts, **todos o ninguno**.
   //
   // ⚠️ Es el primer `$transaction` del proyecto, y es la variante de array a propósito. La
   // interactiva invitaría a meter las validaciones adentro, y para eso habría que pasarle el
@@ -483,11 +466,16 @@ export async function crearTurnosEnGrupo(
   // ⚠️ `vincularCliente` queda **afuera**, arriba. Si la transacción falla, la ficha queda
   // creada sin turnos: es una ficha vacía, no un dato falso, y es exactamente lo que ya pasa
   // hoy cuando `crearTurno` choca contra el EXCLUDE después de haber vinculado.
+  const horas = horariosDelBloque(
+    input.hora,
+    servicios.map((s) => s.duracionMinutos),
+  )
+
   try {
     return await prisma.$transaction(
-      input.turnos.map((t) => {
-        const servicio = servicios.get(t.servicioId)!
-        const horaInicio = horaDesdeString(t.hora)
+      input.turnos.map((t, i) => {
+        const servicio = servicios[i]
+        const horaInicio = horaDesdeString(horas[i])
         return prisma.turno.create({
           include: INCLUDE_CLIENTE,
           data: {
@@ -498,7 +486,7 @@ export async function crearTurnosEnGrupo(
             servicioId: servicio.id,
             servicioNombreSnapshot: servicio.nombre,
             servicioDuracionSnapshot: servicio.duracionMinutos,
-            fecha: t.fecha,
+            fecha: input.fecha,
             horaInicio,
             horaFin: new Date(
               horaInicio.getTime() + servicio.duracionMinutos * 60_000,

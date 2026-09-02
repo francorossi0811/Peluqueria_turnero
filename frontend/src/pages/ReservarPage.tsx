@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { BotonVolver } from '../components/ui/BotonVolver'
 import { Kicker } from '../components/ui/Kicker'
 import { BTN_OUTLINE, BTN_GHOST } from '../components/ui/estilosBoton'
 import { GrillaHorarios } from '../components/GrillaHorarios'
+import { Chip } from '../components/ui/Chip'
 import { Landing } from '../components/Landing'
 import { obtenerServicios } from '../api/servicios'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
@@ -26,29 +27,53 @@ import {
   MENSAJE_NOMBRE_INVALIDO,
   MENSAJE_TELEFONO_INVALIDO,
 } from '../utils/validaciones'
-import { descontarHorariosDelGrupo } from '../utils/horariosDelGrupo'
 import type { DisponibilidadDia, ErrorApi, Servicio, Turno } from '../types/api'
 // import type { Turno } from '../types/api' // lo usa `PasoConfirmacion`, comentado abajo
 
-type Paso = 'servicio' | 'horario' | 'datos' | 'confirmacion'
+type Paso = 'servicio' | 'cuantos' | 'horario' | 'datos' | 'confirmacion'
 
 const DIAS_A_MOSTRAR = 14
 
-/** HU-31 — Cuántos turnos entran en una pasada. Tiene que ser el mismo número que
+/** HU-31 — Cuántos turnos entran en un bloque. Tiene que ser el mismo número que
  * `MAX_TURNOS_POR_GRUPO` del backend, que es quien lo aplica de verdad: acá solo decide
- * cuándo dejar de ofrecer el botón "Agregar otro turno". */
-const MAX_TURNOS_POR_GRUPO = 3
+ * cuántos botones dibuja el paso "¿cuántos turnos?". */
+const MAX_TURNOS_POR_GRUPO = 6
 
-/** HU-31 — Un turno ya elegido, esperando a que se carguen los datos.
+/** HU-31 — Un turno del bloque. Guarda el `servicio` entero y no solo el id porque hacen
+ * falta las tres cosas: la duración para calcular el bloque, y el nombre y el precio para
+ * el resumen.
  *
- * Guarda el `servicio` entero y no solo el id porque hacen falta las tres cosas: la
- * duración para descontar horarios, y el nombre y el precio para el resumen. */
+ * ⚠️ **No tiene fecha ni hora.** El bloque entero comparte día y arranca a una sola hora;
+ * la de cada turno la deriva el backend encadenando duraciones. Guardarlas acá sería tener
+ * dos fuentes para el mismo dato, y la de la pantalla podría quedar vieja. */
 interface TurnoElegido {
   servicio: Servicio
-  fecha: string
-  hora: string
   /** El de cada hijo. Se completa en el paso de datos, todos juntos. */
   nombre: string
+}
+
+/** Los minutos que dura el bloque completo — lo que se le pide a la disponibilidad. */
+function duracionDelBloque(turnos: TurnoElegido[]): number {
+  return turnos.reduce((total, t) => total + t.servicio.duracionMinutos, 0)
+}
+
+/** "HH:mm" + minutos -> "HH:mm". Para mostrar a qué hora termina el bloque y a qué hora
+ * arranca cada turno adentro. Es el espejo de `horariosDelBloque` del backend, pero solo
+ * para **mostrar**: quien decide las horas de verdad es el backend. */
+function sumarMinutos(hora: string, minutos: number): string {
+  const [h, m] = hora.split(':').map(Number)
+  const total = h * 60 + m + minutos
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** A qué hora arranca cada turno del bloque, para el resumen y los labels. */
+function horariosDelBloque(turnos: TurnoElegido[], inicio: string): string[] {
+  let hora = inicio
+  return turnos.map((t) => {
+    const actual = hora
+    hora = sumarMinutos(hora, t.servicio.duracionMinutos)
+    return actual
+  })
 }
 
 const INPUT_BASE =
@@ -68,14 +93,12 @@ export function ReservarPage() {
   const queryClient = useQueryClient()
 
   const [paso, setPaso] = useState<Paso>('servicio')
-  // HU-31 — El borrador: el turno que se está eligiendo ahora. Son los mismos tres
-  // escalares de siempre, con el mismo nombre, y por eso `PasoHorario` no cambió de forma.
-  const [servicio, setServicio] = useState<Servicio | null>(null)
+  // HU-31 — Los turnos del bloque, en orden. Con uno solo —el caso normal— toda la pantalla
+  // se comporta exactamente como antes.
+  const [turnos, setTurnos] = useState<TurnoElegido[]>([])
+  // El día y la hora de arranque son del **bloque**, no de cada turno.
   const [fecha, setFecha] = useState<string | null>(null)
   const [hora, setHora] = useState<string | null>(null)
-  // HU-31 — Los que ya se eligieron. Vacío mientras se reserva uno solo, que es el caso
-  // normal: con la lista vacía todo el flujo se comporta exactamente como antes.
-  const [turnos, setTurnos] = useState<TurnoElegido[]>([])
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteEmail, setClienteEmail] = useState('')
   // const [turnoCreado, setTurnoCreado] = useState<Turno | null>(null)
@@ -101,43 +124,26 @@ export function ReservarPage() {
     queryFn: obtenerServicios,
   })
 
+  // HU-31 — Se pregunta por **todos** los servicios del bloque: lo que vuelve son los
+  // horarios donde entra el bloque completo, no donde entra el primero.
+  const idsDelBloque = turnos.map((t) => t.servicio.id)
   const disponibilidadQuery = useQuery({
-    queryKey: ['disponibilidad', servicio?.id, desde, hasta],
-    queryFn: () => obtenerDisponibilidad(servicio!.id, desde, hasta),
-    enabled: Boolean(servicio),
+    queryKey: ['disponibilidad', idsDelBloque.join(','), desde, hasta],
+    queryFn: () => obtenerDisponibilidad(idsDelBloque, desde, hasta),
+    enabled: idsDelBloque.length > 0,
   })
-
-  // HU-31 — Los horarios que el propio grupo ya se llevó no se pueden volver a ofrecer: el
-  // primer turno todavía no existe en la base, así que el backend lo sigue dando por libre.
-  //
-  // ⚠️ El filtro vive acá y no dentro de `GrillaHorarios`: ese componente tiene tres
-  // llamadores (esta página, la reprogramación y el panel de Ariel) y el concepto "lo que
-  // este grupo ya tomó" no existe para dos de los tres. `ReservarPage` ya es dueña de la
-  // query y de la lista, así que el filtro es una derivación de lo que ya tiene.
-  const diasDisponibles = useMemo(() => {
-    if (!disponibilidadQuery.data || !servicio) return disponibilidadQuery.data
-    return descontarHorariosDelGrupo(
-      disponibilidadQuery.data,
-      turnos.map((t) => ({
-        fecha: t.fecha,
-        hora: t.hora,
-        duracionMinutos: t.servicio.duracionMinutos,
-      })),
-      servicio.duracionMinutos,
-    )
-  }, [disponibilidadQuery.data, turnos, servicio])
 
   // Preselecciona el primer día con horarios, para no dejar la grilla vacía sin motivo.
   //
   // ⚠️ Mira los días **ya filtrados**: con los del backend podría caer en un día que el
   // grupo dejó sin horarios libres.
   useEffect(() => {
-    if (fecha || !diasDisponibles) return
-    const primerDiaConHorarios = diasDisponibles.find(
+    if (fecha || !disponibilidadQuery.data) return
+    const primerDiaConHorarios = disponibilidadQuery.data.find(
       (d) => d.horarios.length > 0,
     )
     if (primerDiaConHorarios) setFecha(primerDiaConHorarios.fecha)
-  }, [diasDisponibles, fecha])
+  }, [disponibilidadQuery.data, fecha])
 
   // HU-31 — Un turno solo sigue yendo por `crearTurno` y el endpoint de siempre; el grupo
   // va por el suyo. El caso normal no toca una línea de código nueva del backend.
@@ -145,12 +151,11 @@ export function ReservarPage() {
     mutationFn: async (elegidos: TurnoElegido[]): Promise<Turno[]> => {
       const email = clienteEmail.trim() || undefined
       if (elegidos.length === 1) {
-        const uno = elegidos[0]
         const turno = await crearTurno({
-          servicioId: uno.servicio.id,
-          fecha: uno.fecha,
-          hora: uno.hora,
-          clienteNombre: uno.nombre,
+          servicioId: elegidos[0].servicio.id,
+          fecha: fecha!,
+          hora: hora!,
+          clienteNombre: elegidos[0].nombre,
           clienteTelefono,
           // Vacío significa "no dejó mail". Se manda `undefined` y no '' para no guardar
           // un dato falso en la base.
@@ -161,10 +166,10 @@ export function ReservarPage() {
       return crearTurnosEnGrupo({
         clienteTelefono,
         clienteEmail: email,
+        fecha: fecha!,
+        hora: hora!,
         turnos: elegidos.map((t) => ({
           servicioId: t.servicio.id,
-          fecha: t.fecha,
-          hora: t.hora,
           clienteNombre: t.nombre,
         })),
       })
@@ -231,30 +236,11 @@ export function ReservarPage() {
         return
       }
 
-      // HU-31 — Dos del propio grupo que se pisan. También es 409, así que depende de
-      // ramificar por `codigo`. Se queda en el paso de datos igual que los de arriba: la
-      // salida es sacar uno de los dos del resumen, y ese botón está justo ahí.
-      if (datos?.codigo === 'TURNOS_DEL_GRUPO_SE_PISAN') {
-        setErrorReserva(datos.mensaje)
-        return
-      }
-
       if (datos?.codigo === 'HORARIO_NO_DISPONIBLE') {
+        // HU-31 — Con un bloque, lo que se ocupó no es "uno de los turnos": es el rato
+        // entero. Así que vuelve a elegir **un** horario, con el bloque intacto — no hay
+        // nada que rehacer salvo la hora de arranque.
         setErrorHorario('Ese horario se acaba de ocupar. Elegí otro.')
-        // HU-31 — Con un grupo, el que se ocupó vuelve al borrador para volver a elegirle
-        // hora, y **los otros quedan en la lista**: siguen siendo válidos y hacerle rehacer
-        // los tres sería castigarlo por un choque que no es suyo.
-        //
-        // ⚠️ El backend no dice cuál de los N falló, así que se vuelve el último elegido:
-        // es el único que se puede señalar sin adivinar, y es además el más probable.
-        setTurnos((prev) => {
-          const ultimo = prev[prev.length - 1]
-          if (ultimo) {
-            setServicio(ultimo.servicio)
-            setFecha(ultimo.fecha)
-          }
-          return prev.slice(0, -1)
-        })
         setHora(null)
         setPaso('horario')
         queryClient.invalidateQueries({ queryKey: ['disponibilidad'] })
@@ -280,10 +266,13 @@ export function ReservarPage() {
   })
 
   function elegirServicio(elegido: Servicio) {
-    setServicio(elegido)
+    // HU-31 — El servicio de la landing arranca un bloque de uno. El paso siguiente pregunta
+    // cuántos son, que es lo primero que hay que saber: la disponibilidad depende de la
+    // duración del bloque entero.
+    setTurnos([{ servicio: elegido, nombre: '' }])
     setFecha(null)
     setHora(null)
-    setPaso('horario')
+    setPaso('cuantos')
     // La landing es larga y el click sale de la grilla de servicios, allá abajo: sin
     // esto el wizard aparece con la página scrolleada a la mitad.
     window.scrollTo({ top: 0 })
@@ -293,34 +282,37 @@ export function ReservarPage() {
   // Por eso "volver al inicio" no puede ser un <Link to="/"> — navegar a la ruta en la
   // que ya estás no remonta nada y el paso queda donde estaba (el botón no hacía nada).
   // Volver al inicio es resetear el wizard.
-  /** HU-31 — Pasa el borrador a la lista. Lo llaman los dos botones del paso del horario:
-   * "Continuar" (que sigue a los datos) y "Agregar otro turno" (que vuelve al principio). */
-  function agregarAlGrupo(): TurnoElegido[] {
-    if (!servicio || !fecha || !hora) return turnos
-    const siguiente = [...turnos, { servicio, fecha, hora, nombre: '' }]
-    setTurnos(siguiente)
-    return siguiente
-  }
-
-  /** HU-31 — Vuelve al paso 1 **conservando** lo elegido, para sumar otro turno.
+  /** HU-31 — Cuántos turnos va a sacar. Arma la lista repitiendo el servicio que ya eligió
+   * en la landing; después puede cambiarle el servicio a cada uno.
    *
-   * ⚠️ Cambia `paso` y nada más: nada de `navigate` ni de `<Link to="/">`. La landing no es
-   * una ruta, es el paso 1 de esta misma página — y por eso esto **no agrega ni una entrada
-   * al historial**, que es lo que el proyecto viene evitando desde que el botón "atrás"
-   * confundió a Ariel en el login. */
-  function agregarOtroTurno() {
-    agregarAlGrupo()
-    setServicio(null)
-    setFecha(null)
+   * Repetir el primero es el default correcto: el caso que motivó esto es la mamá que trae a
+   * los hijos al mismo corte. Quien necesite otro lo cambia con el selector. */
+  function elegirCantidad(cantidad: number) {
+    const base = turnos[0]
+    if (!base) return
+    setTurnos(
+      Array.from({ length: cantidad }, (_, i) => turnos[i] ?? { ...base, nombre: '' }),
+    )
+    // La hora vieja puede no servir para un bloque más largo: se vuelve a elegir.
     setHora(null)
     setErrorHorario(null)
-    setPaso('servicio')
-    window.scrollTo({ top: 0 })
+    // ⚠️ **No** cambia de paso. Elegir la cantidad es la mitad de este paso; la otra mitad
+    // es decir qué se hace cada uno, y los selectores recién aparecen acá. Saltando al
+    // horario, la mamá que trae dos varones y una nena no tenía dónde pedir el corte de
+    // mujer para la tercera.
+  }
+
+  /** Cambia el servicio de uno de los turnos del bloque. Cambia la duración total, así que
+   * el horario elegido deja de valer. */
+  function cambiarServicio(indice: number, servicio: Servicio) {
+    setTurnos((prev) =>
+      prev.map((t, i) => (i === indice ? { ...t, servicio } : t)),
+    )
+    setHora(null)
   }
 
   function volverAlInicio() {
     setPaso('servicio')
-    setServicio(null)
     setFecha(null)
     setHora(null)
     setTurnos([])
@@ -340,22 +332,25 @@ export function ReservarPage() {
     crearTurnoMutation.mutate(turnos)
   }
 
-  /** HU-31 — Saca uno del grupo desde el resumen del paso de datos.
+  /** HU-31 — Saca uno del bloque desde el resumen del paso de datos.
    *
-   * Sin esto, el único arreglo de "me equivoqué en el segundo" sería empezar los tres de
-   * nuevo — el mismo agujero que taparon `PATCH …/telefono` (HU-25) y `PATCH …/cobro`
-   * (HU-27). El horario que suelta vuelve a ofrecerse solo: el filtro es estado derivado. */
-  function sacarDelGrupo(indice: number) {
+   * Sin esto, el único arreglo de "me equivoqué, somos dos y no tres" sería empezar de cero
+   * — el mismo agujero que taparon `PATCH …/telefono` (HU-25) y `PATCH …/cobro` (HU-27).
+   *
+   * ⚠️ Sacar uno **acorta el bloque**, así que la hora elegida puede ya no ser la mejor (y
+   * el bloque más corto entra en más lugares). Se vuelve a elegir horario en vez de asumir
+   * que la vieja sigue sirviendo. */
+  function sacarDelBloque(indice: number) {
     setErrorReserva(null)
     const quedan = turnos.filter((_, i) => i !== indice)
     setTurnos(quedan)
-    // Si se sacó el último que quedaba, no hay nada que confirmar: vuelve a elegir.
+    setHora(null)
     if (quedan.length === 0) {
-      setServicio(null)
       setFecha(null)
-      setHora(null)
       setPaso('servicio')
       window.scrollTo({ top: 0 })
+    } else {
+      setPaso('horario')
     }
   }
 
@@ -367,23 +362,7 @@ export function ReservarPage() {
 
   if (paso === 'servicio') {
     return (
-      <Landing
-        query={serviciosQuery}
-        onElegir={elegirServicio}
-        // HU-31 — Sin turnos acumulados la prop no se pasa y la landing se dibuja
-        // exactamente como siempre. Es el mismo patrón que la prop `pasado` de
-        // `GrillaHorarios`.
-        turnosElegidos={
-          turnos.length > 0
-            ? turnos.map((t) => ({
-                servicio: t.servicio.nombre,
-                fecha: t.fecha,
-                hora: t.hora,
-              }))
-            : undefined
-        }
-        onIrACargarDatos={() => setPaso('datos')}
-      />
+      <Landing query={serviciosQuery} onElegir={elegirServicio} />
     )
   }
 
@@ -402,25 +381,32 @@ export function ReservarPage() {
           </button>
         </nav>
 
-        {paso === 'horario' && servicio && (
+        {paso === 'cuantos' && turnos.length > 0 && (
+          <PasoCuantos
+            turnos={turnos}
+            servicios={serviciosQuery.data ?? []}
+            onElegirCantidad={elegirCantidad}
+            onCambiarServicio={cambiarServicio}
+            onVolver={() => setPaso('servicio')}
+            onContinuar={() => setPaso('horario')}
+          />
+        )}
+
+        {paso === 'horario' && turnos.length > 0 && (
           <PasoHorario
-            servicio={servicio}
+            turnos={turnos}
             query={disponibilidadQuery}
-            dias={diasDisponibles}
             fecha={fecha}
             hora={hora}
             error={errorHorario}
-            yaElegidos={turnos.length}
             onElegirFecha={(f) => {
               setFecha(f)
               setHora(null)
             }}
             onElegirHora={setHora}
-            onVolver={() => setPaso('servicio')}
-            onAgregarOtro={agregarOtroTurno}
+            onVolver={() => setPaso('cuantos')}
             onContinuar={() => {
               setErrorHorario(null)
-              agregarAlGrupo()
               setPaso('datos')
             }}
           />
@@ -429,13 +415,15 @@ export function ReservarPage() {
         {paso === 'datos' && turnos.length > 0 && (
           <PasoDatos
             turnos={turnos}
+            fecha={fecha!}
+            horaInicio={hora!}
             telefono={clienteTelefono}
             email={clienteEmail}
             enviando={crearTurnoMutation.isPending || redirigiendo}
             errorTelefonoServidor={errorTelefonoServidor}
             errorReserva={errorReserva}
             onNombreChange={cambiarNombre}
-            onSacar={sacarDelGrupo}
+            onSacar={sacarDelBloque}
             onTelefonoChange={(v) => {
               // Tocar el número borra el rechazo del servidor: si no, el error queda
               // pegado mientras la persona ya lo está corrigiendo.
@@ -445,18 +433,9 @@ export function ReservarPage() {
             onEmailChange={setClienteEmail}
             onVolver={() => {
               // Volver a la grilla limpia el cartel: elegir otra fecha es una salida real
-              // para el tope semanal (un día fuera de esos 7) y para el horizonte.
-              //
-              // HU-31 — El último elegido vuelve al borrador, así "Volver" sigue queriendo
-              // decir "cambiame este horario" y no "perdé todo lo que elegiste".
+              // para el tope semanal (un día fuera de esos 7) y para el horizonte. El
+              // bloque queda intacto: lo único que se vuelve a elegir es cuándo empieza.
               setErrorReserva(null)
-              const ultimo = turnos[turnos.length - 1]
-              if (ultimo) {
-                setServicio(ultimo.servicio)
-                setFecha(ultimo.fecha)
-                setHora(ultimo.hora)
-                setTurnos((prev) => prev.slice(0, -1))
-              }
               setPaso('horario')
             }}
             onSubmit={confirmar}
@@ -489,52 +468,159 @@ export function ReservarPage() {
   )
 }
 
-function PasoHorario({
-  servicio,
-  query,
-  dias,
-  fecha,
-  hora,
-  error,
-  yaElegidos,
-  onElegirFecha,
-  onElegirHora,
+/** HU-31 — "¿Cuántos turnos querés sacar?", el paso que abre el bloque.
+ *
+ * Va primero porque es lo que hay que saber antes de poder buscar horario: la disponibilidad
+ * de un bloque depende de su duración total, así que preguntarlo después obligaría a
+ * recalcular todo.
+ *
+ * Con 1 —el caso normal— la pantalla es una fila de botones y "Continuar": un click de más
+ * respecto de antes, y a cambio deja de existir el flujo de ir agregando turnos de a uno. */
+function PasoCuantos({
+  turnos,
+  servicios,
+  onElegirCantidad,
+  onCambiarServicio,
   onVolver,
-  onAgregarOtro,
   onContinuar,
 }: {
-  servicio: Servicio
-  /** Solo para los estados de carga y de error; los días salen de `dias`. */
-  query: ReturnType<typeof useQuery<DisponibilidadDia[]>>
-  /** HU-31 — Los días **ya descontados** de lo que el grupo se llevó. */
-  dias: DisponibilidadDia[] | undefined
-  fecha: string | null
-  hora: string | null
-  error: string | null
-  /** HU-31 — Cuántos lleva elegidos el grupo. Con 0 la pantalla queda idéntica a la de
-   * siempre: sin aviso arriba y con un solo botón abajo. */
-  yaElegidos: number
-  onElegirFecha: (fecha: string) => void
-  onElegirHora: (hora: string) => void
+  turnos: TurnoElegido[]
+  servicios: Servicio[]
+  onElegirCantidad: (cantidad: number) => void
+  onCambiarServicio: (indice: number, servicio: Servicio) => void
   onVolver: () => void
-  onAgregarOtro: () => void
   onContinuar: () => void
 }) {
-  // Agregar este dejaría lugar a por lo menos uno más.
-  const entraOtro = yaElegidos + 1 < MAX_TURNOS_POR_GRUPO
+  const total = duracionDelBloque(turnos)
+  const conPrecio = turnos.every((t) => t.servicio.precio !== null)
+
   return (
     <div>
       <BotonVolver onClick={onVolver} />
-      <Kicker>
-        {yaElegidos > 0 ? `Turno ${yaElegidos + 1}` : 'Reserva de turno'}
-      </Kicker>
+      <Kicker>Reserva de turno</Kicker>
       <h1 className="font-hero text-tinta mb-2 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
-        {servicio.nombre}
+        ¿Cuántos turnos?
       </h1>
       <p className="font-body text-tinta mb-4 opacity-75">
-        Elegí el día y el horario para tu turno · {servicio.duracionMinutos} min
-        {servicio.precio !== null && ` · ${formatearPesos(servicio.precio)}`}
+        Si venís con más gente, sacá todos los turnos de una. Los agendamos
+        seguidos, uno atrás del otro.
       </p>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {Array.from({ length: MAX_TURNOS_POR_GRUPO }, (_, i) => i + 1).map(
+          (n) => (
+            <Chip
+              key={n}
+              selected={turnos.length === n}
+              onClick={() => onElegirCantidad(n)}
+            >
+              {n}
+            </Chip>
+          ),
+        )}
+      </div>
+
+      {/* Con más de uno hay que poder decir qué se hace cada uno: la mamá que trae dos
+          varones y una nena no lleva el mismo servicio para los tres. El primero viene de
+          la landing y se puede cambiar igual. */}
+      <div className="flex flex-col gap-3">
+        {turnos.map((t, i) => (
+          <label key={i} className="flex flex-col gap-1">
+            <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+              {turnos.length > 1 ? `Turno ${i + 1}` : 'Servicio'}
+            </span>
+            <select
+              value={t.servicio.id}
+              onChange={(e) => {
+                const elegido = servicios.find((s) => s.id === e.target.value)
+                if (elegido) onCambiarServicio(i, elegido)
+              }}
+              className={claseInput(false)}
+            >
+              {servicios.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre} · {s.duracionMinutos} min
+                  {s.precio !== null && ` · ${formatearPesos(s.precio)}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+
+      {turnos.length > 1 && (
+        <p className="text-tinta mt-4 text-sm">
+          <span className="font-semibold">En total: {total} minutos</span>
+          {conPrecio &&
+            ` · ${formatearPesos(turnos.reduce((acc, t) => acc + (t.servicio.precio ?? 0), 0))}`}
+        </p>
+      )}
+
+      <button
+        className={`${BTN_OUTLINE} mt-6 w-full`}
+        onClick={onContinuar}
+      >
+        Elegir horario
+      </button>
+    </div>
+  )
+}
+
+function PasoHorario({
+  turnos,
+  query,
+  fecha,
+  hora,
+  error,
+  onElegirFecha,
+  onElegirHora,
+  onVolver,
+  onContinuar,
+}: {
+  /** El bloque entero: hace falta la duración total para el título y el rango. */
+  turnos: TurnoElegido[]
+  query: ReturnType<typeof useQuery<DisponibilidadDia[]>>
+  fecha: string | null
+  hora: string | null
+  error: string | null
+  onElegirFecha: (fecha: string) => void
+  onElegirHora: (hora: string) => void
+  onVolver: () => void
+  onContinuar: () => void
+}) {
+  const varios = turnos.length > 1
+  const total = duracionDelBloque(turnos)
+  const precioTotal = turnos.every((t) => t.servicio.precio !== null)
+    ? turnos.reduce((acc, t) => acc + (t.servicio.precio ?? 0), 0)
+    : null
+
+  // ⚠️ Un bloque grande puede no entrar en NINGÚN lado: seis turnos de 30 minutos son 180, y
+  // la franja de la mañana dura exactamente eso. Sin este cartel, la persona ve una grilla
+  // vacía día tras día y no tiene forma de saber que el problema es el tamaño del bloque y
+  // no la agenda de Ariel.
+  const sinLugarEnTodoElRango =
+    varios && query.data !== undefined && query.data.every((d) => d.horarios.length === 0)
+
+  return (
+    <div>
+      <BotonVolver onClick={onVolver} />
+      <Kicker>Reserva de turno</Kicker>
+      <h1 className="font-hero text-tinta mb-2 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
+        {varios ? `${turnos.length} turnos seguidos` : turnos[0].servicio.nombre}
+      </h1>
+      <p className="font-body text-tinta mb-4 opacity-75">
+        {varios
+          ? `${turnos.map((t) => t.servicio.nombre).join(' + ')} · ${total} min en total`
+          : `Elegí el día y el horario para tu turno · ${total} min`}
+        {precioTotal !== null && ` · ${formatearPesos(precioTotal)}`}
+      </p>
+
+      {varios && (
+        <p className="text-tinta-tenue mb-4 text-sm">
+          Buscamos un hueco donde entren los {turnos.length} seguidos. La hora
+          que elijas es la del primero.
+        </p>
+      )}
 
       {error && (
         <div className="border-vino bg-vino-suave text-vino mb-4 rounded-md border px-3 py-2 text-sm">
@@ -551,9 +637,17 @@ function PasoHorario({
         </p>
       )}
 
-      {dias && (
+      {sinLugarEnTodoElRango && (
+        <div className="border-miel bg-destacado text-tinta mb-4 rounded-md border px-3 py-2 text-sm">
+          No hay ningún hueco donde entren {turnos.length} turnos seguidos
+          ({total} minutos) en estos días. Probá con menos turnos, o escribinos
+          por WhatsApp y lo acomodamos.
+        </div>
+      )}
+
+      {query.data && (
         <GrillaHorarios
-          dias={dias}
+          dias={query.data}
           fecha={fecha}
           hora={hora}
           onElegirFecha={onElegirFecha}
@@ -561,34 +655,30 @@ function PasoHorario({
         />
       )}
 
-      {/* HU-31 — Los dos botones hacen lo mismo con el turno que se acaba de elegir
-          (guardarlo); lo que cambia es a dónde van después. "Agregar otro" solo aparece si
-          todavía entra otro, así que reservando un turno solo esta zona es exactamente el
-          botón único de siempre. */}
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        {entraOtro && (
-          <button
-            className={`${BTN_GHOST} disabled:cursor-not-allowed disabled:opacity-50`}
-            disabled={!fecha || !hora}
-            onClick={onAgregarOtro}
-          >
-            Agregar otro turno
-          </button>
-        )}
-        <button
-          className={`${BTN_OUTLINE} flex-1 disabled:cursor-not-allowed disabled:opacity-50`}
-          disabled={!fecha || !hora}
-          onClick={onContinuar}
-        >
-          Continuar
-        </button>
-      </div>
+      {/* Con un bloque, la hora elegida es la de arranque: decir hasta cuándo va evita que
+          alguien reserve tres turnos creyendo que ocupa solo los primeros 20 minutos. */}
+      {varios && hora && (
+        <p className="text-tinta mt-3 text-sm">
+          Quedan de <span className="font-semibold">{hora}</span> a{' '}
+          <span className="font-semibold">{sumarMinutos(hora, total)}</span>.
+        </p>
+      )}
+
+      <button
+        className={`${BTN_OUTLINE} mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50`}
+        disabled={!fecha || !hora}
+        onClick={onContinuar}
+      >
+        Continuar
+      </button>
     </div>
   )
 }
 
 function PasoDatos({
   turnos,
+  fecha,
+  horaInicio,
   telefono,
   email,
   enviando,
@@ -604,6 +694,10 @@ function PasoDatos({
   /** HU-31 — Los turnos elegidos. Con uno solo esta pantalla es la de siempre: un campo
    * "Nombre y apellido" y un resumen de una línea, sin ✕ ni total. */
   turnos: TurnoElegido[]
+  /** El día y la hora de arranque del bloque. Vienen de arriba y no de cada turno: la hora
+   * de cada uno se deriva encadenando duraciones. */
+  fecha: string
+  horaInicio: string
   telefono: string
   email: string
   enviando: boolean
@@ -622,6 +716,9 @@ function PasoDatos({
   onSubmit: (e: React.FormEvent) => void
 }) {
   const varios = turnos.length > 1
+  // Las horas de cada turno del bloque, derivadas. Es solo para mostrar: quien las decide
+  // de verdad es el backend, con la misma cuenta.
+  const horas = horariosDelBloque(turnos, horaInicio)
   const [errores, setErrores] = useState<{
     /** Un error por turno, por índice: cada mensaje va pegado a **su** campo. */
     nombres?: (string | undefined)[]
@@ -686,27 +783,30 @@ function PasoDatos({
           renglón por turno con su ✕ para sacarlo y el total abajo. */}
       {!varios ? (
         <p className="font-body text-tinta mb-4 opacity-80">
-          {turnos[0].servicio.nombre} · {fechaLegible(turnos[0].fecha)} ·{' '}
-          {turnos[0].hora}
+          {turnos[0].servicio.nombre} · {fechaLegible(fecha)} · {horaInicio}
           {turnos[0].servicio.precio !== null &&
             ` · ${formatearPesos(turnos[0].servicio.precio)}`}
         </p>
       ) : (
         <div className="border-borde mb-4 rounded-md border">
+          {/* El día va una sola vez: los turnos del bloque son todos del mismo. */}
+          <p className="border-borde text-tinta border-b px-3 py-2 text-sm font-semibold">
+            {fechaLegible(fecha)}
+          </p>
           {turnos.map((t, i) => (
             <div
-              key={`${t.fecha}-${t.hora}`}
+              key={i}
               className="border-borde flex items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0"
             >
               <span className="font-body text-tinta text-sm opacity-80">
-                {t.servicio.nombre} · {fechaLegible(t.fecha)} · {t.hora}
+                {t.servicio.nombre} · {horas[i]}
                 {t.servicio.precio !== null &&
                   ` · ${formatearPesos(t.servicio.precio)}`}
               </span>
               <button
                 type="button"
                 onClick={() => onSacar(i)}
-                aria-label={`Sacar el turno de ${t.hora}`}
+                aria-label={`Sacar el turno de ${horas[i]}`}
                 className="text-tinta-tenue hover:text-vino shrink-0 px-1 text-lg leading-none"
               >
                 ×
@@ -729,10 +829,10 @@ function PasoDatos({
 
       <form onSubmit={manejarSubmit} noValidate className="flex flex-col gap-3">
         {turnos.map((t, i) => (
-          <label key={`${t.fecha}-${t.hora}`} className="flex flex-col gap-1">
+          <label key={i} className="flex flex-col gap-1">
             <span className="text-tinta-tenue text-xs tracking-wide uppercase">
               {varios
-                ? `Nombre de quien viene el ${fechaLegible(t.fecha)} a las ${t.hora}`
+                ? `Nombre de quien viene a las ${horas[i]} (${t.servicio.nombre})`
                 : 'Nombre y apellido'}
             </span>
             <input

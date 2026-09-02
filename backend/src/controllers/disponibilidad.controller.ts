@@ -12,15 +12,36 @@ import {
   type OpcionesDisponibilidad,
 } from '../services/disponibilidad.service'
 import { ServicioNoDisponibleError } from '../services/errores'
+import { MAX_TURNOS_POR_GRUPO } from '../services/turnos.service'
 import { ahoraArgentina, fechaDesdeIso, formatearFecha } from '../utils/fechaHora'
 
 const MAX_DIAS_RANGO = 31
 
+/** El tope de servicios que se pueden pedir de una. Es el mismo `MAX_TURNOS_POR_GRUPO` de
+ * la reserva en grupo: preguntar por un bloque más grande del que se puede reservar no
+ * tiene sentido, y sin tope la query es un vector para pedir cálculos enormes. */
+const MAX_SERVICIOS_POR_CONSULTA = MAX_TURNOS_POR_GRUPO
+
+/** HU-31 — `servicioIds` es una lista separada por comas: los servicios del bloque, en
+ * orden. La duración que se busca es la suma.
+ *
+ * ⚠️ `servicioId` (singular) se mantiene y hace exactamente lo de siempre. No es cortesía
+ * con un cliente externo —no hay ninguno—: lo usan la reprogramación y el panel de Ariel,
+ * que piden por **un** servicio y a los que un parámetro en plural no les dice nada. */
 const querySchema = z
   .object({
-    servicioId: z.uuid(),
+    servicioId: z.uuid().optional(),
+    servicioIds: z
+      .string()
+      .optional()
+      .transform((v) => (v ? v.split(',') : undefined))
+      .pipe(z.array(z.uuid()).min(1).max(MAX_SERVICIOS_POR_CONSULTA).optional()),
     desde: esquemaDeFecha('la fecha de inicio'),
     hasta: esquemaDeFecha('la fecha de fin'),
+  })
+  .refine((q) => q.servicioId ?? q.servicioIds, {
+    message: 'Falta el servicio.',
+    path: ['servicioId'],
   })
   .refine((q) => q.hasta >= q.desde, {
     message: FIN_ANTES_QUE_INICIO,
@@ -48,7 +69,7 @@ async function responderDisponibilidad(
     return
   }
 
-  const { servicioId, desde, hasta } = parsed.data
+  const { servicioId, servicioIds, desde, hasta } = parsed.data
   // Piso duro del lado del servidor. Se **recorta** en vez de rechazar a propósito: el
   // frontend no tiene que adivinar dónde está el borde, y un 400 por pedir un día de más
   // dejaría la grilla vacía sin explicar nada. Si el recorte deja el rango dado vuelta
@@ -82,7 +103,7 @@ async function responderDisponibilidad(
 
   try {
     const disponibilidad = await calcularDisponibilidad(
-      servicioId,
+      servicioIds ?? [servicioId!],
       desdeFecha,
       hastaFecha,
       opciones,

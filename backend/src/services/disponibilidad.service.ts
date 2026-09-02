@@ -391,13 +391,39 @@ export interface OpcionesDisponibilidad {
   permitirPasado?: boolean
 }
 
+/**
+ * HU-31 — Recibe una **lista** de servicios y no uno solo.
+ *
+ * ⚠️ Con varios, la duración que se busca es la **suma**: un bloque de turnos pegados uno
+ * atrás del otro ocupa exactamente lo mismo que un único turno de esa duración, así que la
+ * pregunta "¿dónde entra el bloque?" es la misma que este cálculo ya sabía responder. De ahí
+ * que no haya un buscador de huecos aparte — habría sido reimplementar CU-04 al lado de
+ * CU-04.
+ *
+ * Consecuencia buena y buscada: el bloque hereda gratis todo lo que ya valía, incluido que
+ * **no puede cruzar el descanso** (cada franja se evalúa por separado, así que un bloque de
+ * 90 minutos no se ofrece a las 12:30) ni pasarse del cierre.
+ *
+ * Con un solo servicio se comporta igual que siempre — es el caso de la reprogramación y el
+ * del cliente que saca un turno solo.
+ */
 export async function calcularDisponibilidad(
-  servicioId: string,
+  servicioIds: string[],
   desde: Date,
   hasta: Date,
   opciones: OpcionesDisponibilidad = {},
 ): Promise<DisponibilidadDia[]> {
-  const servicio = await obtenerServicioActivo(servicioId)
+  // Un `Map` por id: pedir tres veces el mismo Corte no son tres consultas a Neon.
+  const cache = new Map<string, Servicio>()
+  for (const id of servicioIds) {
+    if (!cache.has(id)) cache.set(id, await obtenerServicioActivo(id))
+  }
+  const servicio = {
+    duracionMinutos: servicioIds.reduce(
+      (total, id) => total + cache.get(id)!.duracionMinutos,
+      0,
+    ),
+  }
   const ahora = ahoraArgentina()
   const resultado: DisponibilidadDia[] = []
 

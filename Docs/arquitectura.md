@@ -45,6 +45,18 @@ Lo que sí sigue fuera de alcance:
 
 ## Decisiones de la v3
 
+- **El bloque de turnos se calcula como un turno único (HU-31).** Un bloque de N turnos
+  pegados ocupa exactamente el mismo rato que un solo turno de la duración total, así que
+  "¿dónde entran los tres seguidos?" se le pregunta a `calcularHorariosDelDia` con la suma de
+  las duraciones. **No hay un buscador de huecos aparte**, que habría sido reimplementar CU-04
+  al lado de CU-04 — con el riesgo clásico de que las dos cuentas se despeguen. De la reutilización
+  salen gratis dos reglas que si no habría que programar y mantener: el bloque no cruza el
+  descanso (cada franja se evalúa por separado) y no se pasa del cierre.
+  - La contracara: el cliente manda **una sola hora**, la del primero, y el backend deriva las
+    demás encadenando duraciones. Un bloque con huecos o superpuesto dejó de ser representable,
+    así que la validación que hacía falta cuando cada turno traía su hora —y el error propio que
+    la explicaba— se borraron en vez de mantenerse.
+
 - **La reserva en grupo es el primer `$transaction` del proyecto (HU-31).** Hasta el 23/8/2026
   no había ninguno: cada escritura era una sola sentencia, y lo que impedía el daño real —dos
   personas sobre el mismo rato— era el `EXCLUDE` de la base, no una transacción. Con 2 o 3

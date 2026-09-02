@@ -4,22 +4,12 @@ import { BTN_OUTLINE, BTN_GHOST } from './ui/estilosBoton'
 import { DIRECCION, TELEFONO_LEGIBLE, WHATSAPP_URL } from '../utils/contacto'
 import { urlDeFoto } from '../api/fotos'
 import { formatearPesos } from '../utils/dinero'
-import { fechaLegible } from '../utils/fecha'
 import type { Servicio } from '../types/api'
 import type { UseQueryResult } from '@tanstack/react-query'
 
 interface LandingProps {
   query: UseQueryResult<Servicio[]>
   onElegir: (servicio: Servicio) => void
-  /** HU-31 — Los turnos que el grupo ya eligió, si volvió acá para sumar otro.
-   *
-   * ⚠️ Es **opcional**, y sin ella la landing se dibuja exactamente como siempre — el mismo
-   * patrón que la prop `pasado` de `GrillaHorarios`. Existe porque quien toca "Agregar otro
-   * turno" vuelve a una pantalla idéntica a la del principio, y sin un aviso no tiene forma
-   * de saber que lo que ya eligió no se perdió. */
-  turnosElegidos?: { servicio: string; fecha: string; hora: string }[]
-  /** La salida para el que ya no quiere sumar más y quiere ir a cargar los datos. */
-  onIrACargarDatos?: () => void
 }
 
 // La dirección, el teléfono y el link de WhatsApp viven en `utils/contacto.ts`: los
@@ -79,12 +69,7 @@ function scrollA(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 }
 
-export function Landing({
-  query,
-  onElegir,
-  turnosElegidos,
-  onIrACargarDatos,
-}: LandingProps) {
+export function Landing({ query, onElegir }: LandingProps) {
   return (
     <div className="bg-fondo">
       <header className="border-borde bg-fondo/95 sticky top-0 z-10 border-b backdrop-blur">
@@ -109,40 +94,6 @@ export function Landing({
           </button>
         </div>
       </header>
-
-      {/* HU-31 — La barra de lo ya elegido. Sin `turnosElegidos` no se renderiza nada y la
-          landing queda igual que siempre. */}
-      {turnosElegidos && turnosElegidos.length > 0 && (
-        <div className="bg-destacado border-miel border-b">
-          <div className="mx-auto flex max-w-[1240px] flex-wrap items-center gap-x-4 gap-y-2 px-[clamp(20px,5vw,72px)] py-3">
-            <div className="font-body text-tinta text-sm">
-              <span className="font-semibold">
-                Ya elegiste {turnosElegidos.length}{' '}
-                {turnosElegidos.length === 1 ? 'turno' : 'turnos'}
-              </span>
-              {turnosElegidos.map((t) => (
-                <span
-                  key={`${t.fecha}-${t.hora}`}
-                  className="text-tinta block opacity-75"
-                >
-                  {t.servicio} · {fechaLegible(t.fecha)} · {t.hora}
-                </span>
-              ))}
-              <span className="text-tinta block opacity-75">
-                Elegí abajo el servicio del que sigue.
-              </span>
-            </div>
-            {onIrACargarDatos && (
-              <button
-                onClick={onIrACargarDatos}
-                className={`${BTN_OUTLINE} ml-auto`}
-              >
-                Ir a cargar los datos
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       <section className="mx-auto grid max-w-[1240px] gap-8 px-[clamp(20px,5vw,72px)] py-14 lg:grid-cols-2 lg:items-center lg:py-24">
         <div>

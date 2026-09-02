@@ -32,15 +32,6 @@ export class TurnoSeSolapaConRealizadoError extends Error {}
 // entera. Las dos son errores del **cliente**: las acciones de Ariel no pasan por acá.
 export class LimiteSemanalError extends Error {}
 export class FueraDeHorizonteError extends Error {}
-// HU-31 — Reservar varios turnos de una. Los dos del grupo que se pisan entre sí: es un
-// error distinto de `HorarioNoDisponibleError` a propósito. Aquel dice "alguien te ganó de
-// mano" y se arregla eligiendo otra hora; este dice "elegiste dos que no pueden convivir" y
-// se arregla sacando uno de los dos, que es una acción distinta y en otra pantalla.
-export class TurnosDelGrupoSeSolapanError extends Error {
-  constructor(readonly horas: [string, string]) {
-    super('Turnos del grupo que se pisan entre sí')
-  }
-}
 // HU-29 — Fotos. Son dos y no uno solo porque mandan a hacer cosas distintas: cambiar el
 // archivo o achicarlo. (Había un tercero, `LimiteDeFotosError`, para el tope de 5 por ficha;
 // se fue el 23/8/2026 junto con el tope.)
