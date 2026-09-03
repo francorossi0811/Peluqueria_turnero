@@ -5,16 +5,19 @@ import { BotonVolver } from '../components/ui/BotonVolver'
 import { Kicker } from '../components/ui/Kicker'
 import { BTN_OUTLINE, BTN_GHOST } from '../components/ui/estilosBoton'
 import { GrillaHorarios } from '../components/GrillaHorarios'
+import { Chip } from '../components/ui/Chip'
 import { Landing } from '../components/Landing'
 import { obtenerServicios } from '../api/servicios'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
-import { crearTurno } from '../api/turnos'
+import { crearTurno, crearTurnosEnGrupo } from '../api/turnos'
 // Los usa `PasoConfirmacion`, que está comentado más abajo — ver la nota de ahí.
 // import { enviarConfirmacion, urlCalendario } from '../api/turnos'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import { formatearPesos } from '../utils/dinero'
 import { WHATSAPP_URL } from '../utils/contacto'
-import { whatsappDeTurno } from '../utils/mensajesWhatsapp'
+// `whatsappDeTurnosConfirmados` cubre los dos casos: con un turno delega en
+// `mensajeDeTurno('confirmado', …)`, que es el mensaje de siempre carácter por carácter.
+import { whatsappDeTurnosConfirmados } from '../utils/mensajesWhatsapp'
 import { WHATSAPP_AUTOMATICO } from '../utils/avisos'
 import {
   esEmailValido,
@@ -24,12 +27,54 @@ import {
   MENSAJE_NOMBRE_INVALIDO,
   MENSAJE_TELEFONO_INVALIDO,
 } from '../utils/validaciones'
-import type { DisponibilidadDia, ErrorApi, Servicio } from '../types/api'
+import type { DisponibilidadDia, ErrorApi, Servicio, Turno } from '../types/api'
 // import type { Turno } from '../types/api' // lo usa `PasoConfirmacion`, comentado abajo
 
-type Paso = 'servicio' | 'horario' | 'datos' | 'confirmacion'
+type Paso = 'servicio' | 'cuantos' | 'horario' | 'datos' | 'confirmacion'
 
 const DIAS_A_MOSTRAR = 14
+
+/** HU-31 — Cuántos turnos entran en un bloque. Tiene que ser el mismo número que
+ * `MAX_TURNOS_POR_GRUPO` del backend, que es quien lo aplica de verdad: acá solo decide
+ * cuántos botones dibuja el paso "¿cuántos turnos?". */
+const MAX_TURNOS_POR_GRUPO = 6
+
+/** HU-31 — Un turno del bloque. Guarda el `servicio` entero y no solo el id porque hacen
+ * falta las tres cosas: la duración para calcular el bloque, y el nombre y el precio para
+ * el resumen.
+ *
+ * ⚠️ **No tiene fecha ni hora.** El bloque entero comparte día y arranca a una sola hora;
+ * la de cada turno la deriva el backend encadenando duraciones. Guardarlas acá sería tener
+ * dos fuentes para el mismo dato, y la de la pantalla podría quedar vieja. */
+interface TurnoElegido {
+  servicio: Servicio
+  /** El de cada hijo. Se completa en el paso de datos, todos juntos. */
+  nombre: string
+}
+
+/** Los minutos que dura el bloque completo — lo que se le pide a la disponibilidad. */
+function duracionDelBloque(turnos: TurnoElegido[]): number {
+  return turnos.reduce((total, t) => total + t.servicio.duracionMinutos, 0)
+}
+
+/** "HH:mm" + minutos -> "HH:mm". Para mostrar a qué hora termina el bloque y a qué hora
+ * arranca cada turno adentro. Es el espejo de `horariosDelBloque` del backend, pero solo
+ * para **mostrar**: quien decide las horas de verdad es el backend. */
+function sumarMinutos(hora: string, minutos: number): string {
+  const [h, m] = hora.split(':').map(Number)
+  const total = h * 60 + m + minutos
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** A qué hora arranca cada turno del bloque, para el resumen y los labels. */
+function horariosDelBloque(turnos: TurnoElegido[], inicio: string): string[] {
+  let hora = inicio
+  return turnos.map((t) => {
+    const actual = hora
+    hora = sumarMinutos(hora, t.servicio.duracionMinutos)
+    return actual
+  })
+}
 
 const INPUT_BASE =
   'rounded-md border px-3 py-2 outline-none bg-superficie text-tinta'
@@ -48,10 +93,12 @@ export function ReservarPage() {
   const queryClient = useQueryClient()
 
   const [paso, setPaso] = useState<Paso>('servicio')
-  const [servicio, setServicio] = useState<Servicio | null>(null)
+  // HU-31 — Los turnos del bloque, en orden. Con uno solo —el caso normal— toda la pantalla
+  // se comporta exactamente como antes.
+  const [turnos, setTurnos] = useState<TurnoElegido[]>([])
+  // El día y la hora de arranque son del **bloque**, no de cada turno.
   const [fecha, setFecha] = useState<string | null>(null)
   const [hora, setHora] = useState<string | null>(null)
-  const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteEmail, setClienteEmail] = useState('')
   // const [turnoCreado, setTurnoCreado] = useState<Turno | null>(null)
@@ -77,13 +124,19 @@ export function ReservarPage() {
     queryFn: obtenerServicios,
   })
 
+  // HU-31 — Se pregunta por **todos** los servicios del bloque: lo que vuelve son los
+  // horarios donde entra el bloque completo, no donde entra el primero.
+  const idsDelBloque = turnos.map((t) => t.servicio.id)
   const disponibilidadQuery = useQuery({
-    queryKey: ['disponibilidad', servicio?.id, desde, hasta],
-    queryFn: () => obtenerDisponibilidad(servicio!.id, desde, hasta),
-    enabled: Boolean(servicio),
+    queryKey: ['disponibilidad', idsDelBloque.join(','), desde, hasta],
+    queryFn: () => obtenerDisponibilidad(idsDelBloque, desde, hasta),
+    enabled: idsDelBloque.length > 0,
   })
 
   // Preselecciona el primer día con horarios, para no dejar la grilla vacía sin motivo.
+  //
+  // ⚠️ Mira los días **ya filtrados**: con los del backend podría caer en un día que el
+  // grupo dejó sin horarios libres.
   useEffect(() => {
     if (fecha || !disponibilidadQuery.data) return
     const primerDiaConHorarios = disponibilidadQuery.data.find(
@@ -92,8 +145,35 @@ export function ReservarPage() {
     if (primerDiaConHorarios) setFecha(primerDiaConHorarios.fecha)
   }, [disponibilidadQuery.data, fecha])
 
+  // HU-31 — Un turno solo sigue yendo por `crearTurno` y el endpoint de siempre; el grupo
+  // va por el suyo. El caso normal no toca una línea de código nueva del backend.
   const crearTurnoMutation = useMutation({
-    mutationFn: crearTurno,
+    mutationFn: async (elegidos: TurnoElegido[]): Promise<Turno[]> => {
+      const email = clienteEmail.trim() || undefined
+      if (elegidos.length === 1) {
+        const turno = await crearTurno({
+          servicioId: elegidos[0].servicio.id,
+          fecha: fecha!,
+          hora: hora!,
+          clienteNombre: elegidos[0].nombre,
+          clienteTelefono,
+          // Vacío significa "no dejó mail". Se manda `undefined` y no '' para no guardar
+          // un dato falso en la base.
+          clienteEmail: email,
+        })
+        return [turno]
+      }
+      return crearTurnosEnGrupo({
+        clienteTelefono,
+        clienteEmail: email,
+        fecha: fecha!,
+        hora: hora!,
+        turnos: elegidos.map((t) => ({
+          servicioId: t.servicio.id,
+          clienteNombre: t.nombre,
+        })),
+      })
+    },
     // El turno YA quedó reservado acá: tiene su fila, su horario tomado y su link. Lo
     // que sigue no es confirmarlo —eso lo hizo el backend— sino avisarle a Ariel por el
     // canal que él usa. Mientras la Cloud API de Meta no esté conectada, el aviso lo
@@ -106,24 +186,31 @@ export function ReservarPage() {
     //
     // Y si la redirección igual no pasara, el turno no se pierde: existe en la agenda de
     // Ariel y su link viaja adentro del mensaje.
-    onSuccess: (turno) => {
+    onSuccess: (creados) => {
       // Con el backend avisando por la Cloud API no hay nada que redirigir: el mensaje ya
       // salió. Se va a la pantalla de gestión del turno, que es donde el cliente puede
       // hacer algo. Ver `utils/avisos.ts`.
+      //
+      // ⚠️ Con varios turnos no hay "la" pantalla: se va a la del primero. Esta rama hoy no
+      // corre en producción (la Cloud API sigue sin credenciales en Render), así que no
+      // vale la pena inventarle una pantalla de grupo hasta que sea real.
       if (WHATSAPP_AUTOMATICO) {
         setRedirigiendo(true)
-        window.location.href = `/turno/${turno.id}`
+        window.location.href = `/turno/${creados[0].id}`
         return
       }
 
       setRedirigiendo(true)
-      window.location.href = whatsappDeTurno('confirmado', {
-        nombre: clienteNombre,
+      const datos = creados.map((turno) => ({
+        nombre: turno.clienteNombre ?? '',
         servicio: turno.servicio.nombre,
         fecha: turno.fecha,
         hora: turno.hora,
         link: `${window.location.origin}/turno/${turno.id}`,
-      })
+      }))
+      // Con uno solo esto devuelve, carácter por carácter, el mismo mensaje que antes
+      // armaba `whatsappDeTurno('confirmado', …)`. Hay un test que lo fija.
+      window.location.href = whatsappDeTurnosConfirmados(datos)
     },
     onError: (err) => {
       setRedirigiendo(false)
@@ -150,6 +237,9 @@ export function ReservarPage() {
       }
 
       if (datos?.codigo === 'HORARIO_NO_DISPONIBLE') {
+        // HU-31 — Con un bloque, lo que se ocupó no es "uno de los turnos": es el rato
+        // entero. Así que vuelve a elegir **un** horario, con el bloque intacto — no hay
+        // nada que rehacer salvo la hora de arranque.
         setErrorHorario('Ese horario se acaba de ocupar. Elegí otro.')
         setHora(null)
         setPaso('horario')
@@ -176,10 +266,13 @@ export function ReservarPage() {
   })
 
   function elegirServicio(elegido: Servicio) {
-    setServicio(elegido)
+    // HU-31 — El servicio de la landing arranca un bloque de uno. El paso siguiente pregunta
+    // cuántos son, que es lo primero que hay que saber: la disponibilidad depende de la
+    // duración del bloque entero.
+    setTurnos([{ servicio: elegido, nombre: '' }])
     setFecha(null)
     setHora(null)
-    setPaso('horario')
+    setPaso('cuantos')
     // La landing es larga y el click sale de la grilla de servicios, allá abajo: sin
     // esto el wizard aparece con la página scrolleada a la mitad.
     window.scrollTo({ top: 0 })
@@ -189,12 +282,40 @@ export function ReservarPage() {
   // Por eso "volver al inicio" no puede ser un <Link to="/"> — navegar a la ruta en la
   // que ya estás no remonta nada y el paso queda donde estaba (el botón no hacía nada).
   // Volver al inicio es resetear el wizard.
+  /** HU-31 — Cuántos turnos va a sacar. Arma la lista repitiendo el servicio que ya eligió
+   * en la landing; después puede cambiarle el servicio a cada uno.
+   *
+   * Repetir el primero es el default correcto: el caso que motivó esto es la mamá que trae a
+   * los hijos al mismo corte. Quien necesite otro lo cambia con el selector. */
+  function elegirCantidad(cantidad: number) {
+    const base = turnos[0]
+    if (!base) return
+    setTurnos(
+      Array.from({ length: cantidad }, (_, i) => turnos[i] ?? { ...base, nombre: '' }),
+    )
+    // La hora vieja puede no servir para un bloque más largo: se vuelve a elegir.
+    setHora(null)
+    setErrorHorario(null)
+    // ⚠️ **No** cambia de paso. Elegir la cantidad es la mitad de este paso; la otra mitad
+    // es decir qué se hace cada uno, y los selectores recién aparecen acá. Saltando al
+    // horario, la mamá que trae dos varones y una nena no tenía dónde pedir el corte de
+    // mujer para la tercera.
+  }
+
+  /** Cambia el servicio de uno de los turnos del bloque. Cambia la duración total, así que
+   * el horario elegido deja de valer. */
+  function cambiarServicio(indice: number, servicio: Servicio) {
+    setTurnos((prev) =>
+      prev.map((t, i) => (i === indice ? { ...t, servicio } : t)),
+    )
+    setHora(null)
+  }
+
   function volverAlInicio() {
     setPaso('servicio')
-    setServicio(null)
     setFecha(null)
     setHora(null)
-    setClienteNombre('')
+    setTurnos([])
     setClienteTelefono('')
     setClienteEmail('')
     // setTurnoCreado(null)
@@ -206,22 +327,43 @@ export function ReservarPage() {
 
   function confirmar(e: React.FormEvent) {
     e.preventDefault()
-    if (!servicio || !fecha || !hora) return
+    if (turnos.length === 0) return
     setErrorReserva(null)
-    crearTurnoMutation.mutate({
-      servicioId: servicio.id,
-      fecha,
-      hora,
-      clienteNombre,
-      clienteTelefono,
-      // Vacío significa "no dejó mail". Se manda `undefined` y no '' para no guardar
-      // un dato falso en la base.
-      clienteEmail: clienteEmail.trim() || undefined,
-    })
+    crearTurnoMutation.mutate(turnos)
+  }
+
+  /** HU-31 — Saca uno del bloque desde el resumen del paso de datos.
+   *
+   * Sin esto, el único arreglo de "me equivoqué, somos dos y no tres" sería empezar de cero
+   * — el mismo agujero que taparon `PATCH …/telefono` (HU-25) y `PATCH …/cobro` (HU-27).
+   *
+   * ⚠️ Sacar uno **acorta el bloque**, así que la hora elegida puede ya no ser la mejor (y
+   * el bloque más corto entra en más lugares). Se vuelve a elegir horario en vez de asumir
+   * que la vieja sigue sirviendo. */
+  function sacarDelBloque(indice: number) {
+    setErrorReserva(null)
+    const quedan = turnos.filter((_, i) => i !== indice)
+    setTurnos(quedan)
+    setHora(null)
+    if (quedan.length === 0) {
+      setFecha(null)
+      setPaso('servicio')
+      window.scrollTo({ top: 0 })
+    } else {
+      setPaso('horario')
+    }
+  }
+
+  function cambiarNombre(indice: number, valor: string) {
+    setTurnos((prev) =>
+      prev.map((t, i) => (i === indice ? { ...t, nombre: valor } : t)),
+    )
   }
 
   if (paso === 'servicio') {
-    return <Landing query={serviciosQuery} onElegir={elegirServicio} />
+    return (
+      <Landing query={serviciosQuery} onElegir={elegirServicio} />
+    )
   }
 
   return (
@@ -239,9 +381,20 @@ export function ReservarPage() {
           </button>
         </nav>
 
-        {paso === 'horario' && servicio && (
+        {paso === 'cuantos' && turnos.length > 0 && (
+          <PasoCuantos
+            turnos={turnos}
+            servicios={serviciosQuery.data ?? []}
+            onElegirCantidad={elegirCantidad}
+            onCambiarServicio={cambiarServicio}
+            onVolver={() => setPaso('servicio')}
+            onContinuar={() => setPaso('horario')}
+          />
+        )}
+
+        {paso === 'horario' && turnos.length > 0 && (
           <PasoHorario
-            servicio={servicio}
+            turnos={turnos}
             query={disponibilidadQuery}
             fecha={fecha}
             hora={hora}
@@ -251,7 +404,7 @@ export function ReservarPage() {
               setHora(null)
             }}
             onElegirHora={setHora}
-            onVolver={() => setPaso('servicio')}
+            onVolver={() => setPaso('cuantos')}
             onContinuar={() => {
               setErrorHorario(null)
               setPaso('datos')
@@ -259,18 +412,18 @@ export function ReservarPage() {
           />
         )}
 
-        {paso === 'datos' && servicio && fecha && hora && (
+        {paso === 'datos' && turnos.length > 0 && (
           <PasoDatos
-            servicio={servicio}
-            fecha={fecha}
-            hora={hora}
-            nombre={clienteNombre}
+            turnos={turnos}
+            fecha={fecha!}
+            horaInicio={hora!}
             telefono={clienteTelefono}
             email={clienteEmail}
             enviando={crearTurnoMutation.isPending || redirigiendo}
             errorTelefonoServidor={errorTelefonoServidor}
             errorReserva={errorReserva}
-            onNombreChange={setClienteNombre}
+            onNombreChange={cambiarNombre}
+            onSacar={sacarDelBloque}
             onTelefonoChange={(v) => {
               // Tocar el número borra el rechazo del servidor: si no, el error queda
               // pegado mientras la persona ya lo está corrigiendo.
@@ -280,7 +433,8 @@ export function ReservarPage() {
             onEmailChange={setClienteEmail}
             onVolver={() => {
               // Volver a la grilla limpia el cartel: elegir otra fecha es una salida real
-              // para el tope semanal (un día fuera de esos 7) y para el horizonte.
+              // para el tope semanal (un día fuera de esos 7) y para el horizonte. El
+              // bloque queda intacto: lo único que se vuelve a elegir es cuándo empieza.
               setErrorReserva(null)
               setPaso('horario')
             }}
@@ -314,8 +468,106 @@ export function ReservarPage() {
   )
 }
 
+/** HU-31 — "¿Cuántos turnos querés sacar?", el paso que abre el bloque.
+ *
+ * Va primero porque es lo que hay que saber antes de poder buscar horario: la disponibilidad
+ * de un bloque depende de su duración total, así que preguntarlo después obligaría a
+ * recalcular todo.
+ *
+ * Con 1 —el caso normal— la pantalla es una fila de botones y "Continuar": un click de más
+ * respecto de antes, y a cambio deja de existir el flujo de ir agregando turnos de a uno. */
+function PasoCuantos({
+  turnos,
+  servicios,
+  onElegirCantidad,
+  onCambiarServicio,
+  onVolver,
+  onContinuar,
+}: {
+  turnos: TurnoElegido[]
+  servicios: Servicio[]
+  onElegirCantidad: (cantidad: number) => void
+  onCambiarServicio: (indice: number, servicio: Servicio) => void
+  onVolver: () => void
+  onContinuar: () => void
+}) {
+  const total = duracionDelBloque(turnos)
+  const conPrecio = turnos.every((t) => t.servicio.precio !== null)
+
+  return (
+    <div>
+      <BotonVolver onClick={onVolver} />
+      <Kicker>Reserva de turno</Kicker>
+      <h1 className="font-hero text-tinta mb-2 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
+        ¿Cuántos turnos?
+      </h1>
+      <p className="font-body text-tinta mb-4 opacity-75">
+        Si venís con más gente, sacá todos los turnos de una. Los agendamos
+        seguidos, uno atrás del otro.
+      </p>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {Array.from({ length: MAX_TURNOS_POR_GRUPO }, (_, i) => i + 1).map(
+          (n) => (
+            <Chip
+              key={n}
+              selected={turnos.length === n}
+              onClick={() => onElegirCantidad(n)}
+            >
+              {n}
+            </Chip>
+          ),
+        )}
+      </div>
+
+      {/* Con más de uno hay que poder decir qué se hace cada uno: la mamá que trae dos
+          varones y una nena no lleva el mismo servicio para los tres. El primero viene de
+          la landing y se puede cambiar igual. */}
+      <div className="flex flex-col gap-3">
+        {turnos.map((t, i) => (
+          <label key={i} className="flex flex-col gap-1">
+            <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+              {turnos.length > 1 ? `Turno ${i + 1}` : 'Servicio'}
+            </span>
+            <select
+              value={t.servicio.id}
+              onChange={(e) => {
+                const elegido = servicios.find((s) => s.id === e.target.value)
+                if (elegido) onCambiarServicio(i, elegido)
+              }}
+              className={claseInput(false)}
+            >
+              {servicios.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre} · {s.duracionMinutos} min
+                  {s.precio !== null && ` · ${formatearPesos(s.precio)}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+
+      {turnos.length > 1 && (
+        <p className="text-tinta mt-4 text-sm">
+          <span className="font-semibold">En total: {total} minutos</span>
+          {conPrecio &&
+            ` · ${formatearPesos(turnos.reduce((acc, t) => acc + (t.servicio.precio ?? 0), 0))}`}
+        </p>
+      )}
+
+      <button
+        className={`${BTN_OUTLINE} mt-6 w-full`}
+        onClick={onContinuar}
+      >
+        Elegir horario
+      </button>
+    </div>
+  )
+}
+
 function PasoHorario({
-  servicio,
+  turnos,
   query,
   fecha,
   hora,
@@ -325,7 +577,8 @@ function PasoHorario({
   onVolver,
   onContinuar,
 }: {
-  servicio: Servicio
+  /** El bloque entero: hace falta la duración total para el título y el rango. */
+  turnos: TurnoElegido[]
   query: ReturnType<typeof useQuery<DisponibilidadDia[]>>
   fecha: string | null
   hora: string | null
@@ -335,17 +588,39 @@ function PasoHorario({
   onVolver: () => void
   onContinuar: () => void
 }) {
+  const varios = turnos.length > 1
+  const total = duracionDelBloque(turnos)
+  const precioTotal = turnos.every((t) => t.servicio.precio !== null)
+    ? turnos.reduce((acc, t) => acc + (t.servicio.precio ?? 0), 0)
+    : null
+
+  // ⚠️ Un bloque grande puede no entrar en NINGÚN lado: seis turnos de 30 minutos son 180, y
+  // la franja de la mañana dura exactamente eso. Sin este cartel, la persona ve una grilla
+  // vacía día tras día y no tiene forma de saber que el problema es el tamaño del bloque y
+  // no la agenda de Ariel.
+  const sinLugarEnTodoElRango =
+    varios && query.data !== undefined && query.data.every((d) => d.horarios.length === 0)
+
   return (
     <div>
       <BotonVolver onClick={onVolver} />
       <Kicker>Reserva de turno</Kicker>
       <h1 className="font-hero text-tinta mb-2 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
-        {servicio.nombre}
+        {varios ? `${turnos.length} turnos seguidos` : turnos[0].servicio.nombre}
       </h1>
       <p className="font-body text-tinta mb-4 opacity-75">
-        Elegí el día y el horario para tu turno · {servicio.duracionMinutos} min
-        {servicio.precio !== null && ` · ${formatearPesos(servicio.precio)}`}
+        {varios
+          ? `${turnos.map((t) => t.servicio.nombre).join(' + ')} · ${total} min en total`
+          : `Elegí el día y el horario para tu turno · ${total} min`}
+        {precioTotal !== null && ` · ${formatearPesos(precioTotal)}`}
       </p>
+
+      {varios && (
+        <p className="text-tinta-tenue mb-4 text-sm">
+          Buscamos un hueco donde entren los {turnos.length} seguidos. La hora
+          que elijas es la del primero.
+        </p>
+      )}
 
       {error && (
         <div className="border-vino bg-vino-suave text-vino mb-4 rounded-md border px-3 py-2 text-sm">
@@ -362,6 +637,14 @@ function PasoHorario({
         </p>
       )}
 
+      {sinLugarEnTodoElRango && (
+        <div className="border-miel bg-destacado text-tinta mb-4 rounded-md border px-3 py-2 text-sm">
+          No hay ningún hueco donde entren {turnos.length} turnos seguidos
+          ({total} minutos) en estos días. Probá con menos turnos, o escribinos
+          por WhatsApp y lo acomodamos.
+        </div>
+      )}
+
       {query.data && (
         <GrillaHorarios
           dias={query.data}
@@ -370,6 +653,15 @@ function PasoHorario({
           onElegirFecha={onElegirFecha}
           onElegirHora={onElegirHora}
         />
+      )}
+
+      {/* Con un bloque, la hora elegida es la de arranque: decir hasta cuándo va evita que
+          alguien reserve tres turnos creyendo que ocupa solo los primeros 20 minutos. */}
+      {varios && hora && (
+        <p className="text-tinta mt-3 text-sm">
+          Quedan de <span className="font-semibold">{hora}</span> a{' '}
+          <span className="font-semibold">{sumarMinutos(hora, total)}</span>.
+        </p>
       )}
 
       <button
@@ -384,25 +676,28 @@ function PasoHorario({
 }
 
 function PasoDatos({
-  servicio,
+  turnos,
   fecha,
-  hora,
-  nombre,
+  horaInicio,
   telefono,
   email,
   enviando,
   errorTelefonoServidor,
   errorReserva,
   onNombreChange,
+  onSacar,
   onTelefonoChange,
   onEmailChange,
   onVolver,
   onSubmit,
 }: {
-  servicio: Servicio
+  /** HU-31 — Los turnos elegidos. Con uno solo esta pantalla es la de siempre: un campo
+   * "Nombre y apellido" y un resumen de una línea, sin ✕ ni total. */
+  turnos: TurnoElegido[]
+  /** El día y la hora de arranque del bloque. Vienen de arriba y no de cada turno: la hora
+   * de cada uno se deriva encadenando duraciones. */
   fecha: string
-  hora: string
-  nombre: string
+  horaInicio: string
   telefono: string
   email: string
   enviando: boolean
@@ -413,14 +708,20 @@ function PasoDatos({
    * que no puede reservar, no el dato que escribió—, así que va en su propio cartel arriba
    * de los botones y no debajo de un input. */
   errorReserva: string | null
-  onNombreChange: (v: string) => void
+  onNombreChange: (indice: number, v: string) => void
+  onSacar: (indice: number) => void
   onTelefonoChange: (v: string) => void
   onEmailChange: (v: string) => void
   onVolver: () => void
   onSubmit: (e: React.FormEvent) => void
 }) {
+  const varios = turnos.length > 1
+  // Las horas de cada turno del bloque, derivadas. Es solo para mostrar: quien las decide
+  // de verdad es el backend, con la misma cuenta.
+  const horas = horariosDelBloque(turnos, horaInicio)
   const [errores, setErrores] = useState<{
-    nombre?: string
+    /** Un error por turno, por índice: cada mensaje va pegado a **su** campo. */
+    nombres?: (string | undefined)[]
     telefono?: string
     email?: string
   }>({})
@@ -435,8 +736,13 @@ function PasoDatos({
     // Dos mensajes distintos a propósito: "no pusiste nada" y "eso no es un nombre" son
     // dos problemas distintos, y decirle "solo letras" a quien dejó el campo vacío no le
     // explica nada.
-    if (!nombre.trim()) nuevos.nombre = 'Poné tu nombre y apellido.'
-    else if (!esNombreValido(nombre)) nuevos.nombre = MENSAJE_NOMBRE_INVALIDO
+    const nombres = turnos.map(({ nombre }) => {
+      if (!nombre.trim())
+        return varios ? 'Poné el nombre.' : 'Poné tu nombre y apellido.'
+      if (!esNombreValido(nombre)) return MENSAJE_NOMBRE_INVALIDO
+      return undefined
+    })
+    if (nombres.some(Boolean)) nuevos.nombres = nombres
     if (!esTelefonoValido(telefono)) nuevos.telefono = MENSAJE_TELEFONO_INVALIDO
     // El email es opcional: solo se valida si escribió algo.
     if (email.trim() && !esEmailValido(email))
@@ -448,8 +754,19 @@ function PasoDatos({
     onSubmit(e)
   }
 
-  function limpiarError(campo: keyof typeof errores) {
+  function limpiarError(campo: 'telefono' | 'email') {
     setErrores((prev) => (prev[campo] ? { ...prev, [campo]: undefined } : prev))
+  }
+
+  function limpiarErrorNombre(indice: number) {
+    setErrores((prev) =>
+      prev.nombres?.[indice]
+        ? {
+            ...prev,
+            nombres: prev.nombres.map((m, i) => (i === indice ? undefined : m)),
+          }
+        : prev,
+    )
   }
 
   // El error local gana sobre el del servidor: si la persona rompió el número después de
@@ -462,27 +779,76 @@ function PasoDatos({
       <h1 className="font-hero text-tinta mb-2 text-[clamp(30px,4.5vw,44px)] leading-[1.15] font-extrabold">
         Tus datos
       </h1>
-      <p className="font-body text-tinta mb-4 opacity-80">
-        {servicio.nombre} · {fechaLegible(fecha)} · {hora}
-        {servicio.precio !== null && ` · ${formatearPesos(servicio.precio)}`}
-      </p>
+      {/* HU-31 — El resumen. Con un turno es la misma línea de siempre; con varios, un
+          renglón por turno con su ✕ para sacarlo y el total abajo. */}
+      {!varios ? (
+        <p className="font-body text-tinta mb-4 opacity-80">
+          {turnos[0].servicio.nombre} · {fechaLegible(fecha)} · {horaInicio}
+          {turnos[0].servicio.precio !== null &&
+            ` · ${formatearPesos(turnos[0].servicio.precio)}`}
+        </p>
+      ) : (
+        <div className="border-borde mb-4 rounded-md border">
+          {/* El día va una sola vez: los turnos del bloque son todos del mismo. */}
+          <p className="border-borde text-tinta border-b px-3 py-2 text-sm font-semibold">
+            {fechaLegible(fecha)}
+          </p>
+          {turnos.map((t, i) => (
+            <div
+              key={i}
+              className="border-borde flex items-center justify-between gap-3 border-b px-3 py-2 last:border-b-0"
+            >
+              <span className="font-body text-tinta text-sm opacity-80">
+                {t.servicio.nombre} · {horas[i]}
+                {t.servicio.precio !== null &&
+                  ` · ${formatearPesos(t.servicio.precio)}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => onSacar(i)}
+                aria-label={`Sacar el turno de ${horas[i]}`}
+                className="text-tinta-tenue hover:text-vino shrink-0 px-1 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {/* Tres turnos sin total obligan a sumar de cabeza, y los precios ya son
+              públicos desde el 14/8/2026. Solo se muestra si están todos cargados: un
+              total al que le falta un servicio sin precio sería un número falso. */}
+          {turnos.every((t) => t.servicio.precio !== null) && (
+            <p className="text-tinta bg-superficie-2 px-3 py-2 text-sm font-semibold">
+              Total:{' '}
+              {formatearPesos(
+                turnos.reduce((acc, t) => acc + (t.servicio.precio ?? 0), 0),
+              )}
+            </p>
+          )}
+        </div>
+      )}
 
       <form onSubmit={manejarSubmit} noValidate className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-            Nombre y apellido
-          </span>
-          <input
-            value={nombre}
-            onChange={(e) => {
-              onNombreChange(e.target.value)
-              limpiarError('nombre')
-            }}
-            placeholder="Ej: Juan Pérez"
-            className={claseInput(Boolean(errores.nombre))}
-          />
-          {errores.nombre && <ErrorCampo>{errores.nombre}</ErrorCampo>}
-        </label>
+        {turnos.map((t, i) => (
+          <label key={i} className="flex flex-col gap-1">
+            <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+              {varios
+                ? `Nombre de quien viene a las ${horas[i]} (${t.servicio.nombre})`
+                : 'Nombre y apellido'}
+            </span>
+            <input
+              value={t.nombre}
+              onChange={(e) => {
+                onNombreChange(i, e.target.value)
+                limpiarErrorNombre(i)
+              }}
+              placeholder="Ej: Juan Pérez"
+              className={claseInput(Boolean(errores.nombres?.[i]))}
+            />
+            {errores.nombres?.[i] && (
+              <ErrorCampo>{errores.nombres[i]}</ErrorCampo>
+            )}
+          </label>
+        ))}
         <label className="flex flex-col gap-1">
           <span className="text-tinta-tenue text-xs tracking-wide uppercase">
             Teléfono
@@ -564,8 +930,9 @@ function PasoDatos({
             Ariel por su canal es lo que él pidió, y el link viaja adentro del mensaje:
             mandarlo es también la forma de que al cliente le quede guardado. */}
         <p className="text-tinta-tenue text-center text-xs">
-          Te abrimos WhatsApp con el mensaje ya escrito para Ariel, con el link
-          de tu turno adentro. Sin cuenta ni contraseña.
+          Te abrimos WhatsApp con el mensaje ya escrito para Ariel, con
+          {varios ? ' los links de tus turnos adentro' : ' el link de tu turno adentro'}.
+          Sin cuenta ni contraseña.
         </p>
       </form>
     </div>

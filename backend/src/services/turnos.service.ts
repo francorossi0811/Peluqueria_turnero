@@ -24,6 +24,7 @@ import {
 import {
   ahoraArgentina,
   combinarFechaHora,
+  formatearHora,
   horaDesdeString,
 } from '../utils/fechaHora'
 import type {
@@ -43,6 +44,27 @@ export interface DatosNuevoTurno {
   clienteTelefono?: string
   clienteEmail?: string // HU-19: opcional, muchos clientes de Ariel no usan mail
   origen?: OrigenTurno // HU-08: admin manda 'presencial'/'llamada'/'whatsapp'; público no manda nada -> 'online'
+}
+
+/** HU-31 — Los datos de una reserva en grupo (la mamá que trae a los hijos).
+ *
+ * ⚠️ El teléfono y el mail están **afuera** del array y no adentro de cada turno. No es
+ * comodidad: es lo que hace estructuralmente imposible mandar tres teléfonos distintos y
+ * terminar con tres fichas. El nombre sí va por turno — son los hijos, y Ariel necesita
+ * saber quién es cada uno en la agenda. */
+export interface DatosGrupoDeTurnos {
+  clienteTelefono: string
+  clienteEmail?: string
+  /** El día del bloque entero: los turnos van pegados uno atrás del otro, así que es uno
+   * solo. */
+  fecha: Date
+  /** A qué hora arranca el **primero**. Las de los demás las calcula el backend
+   * encadenando duraciones — ver `horariosDelBloque`. */
+  hora: string // "HH:mm"
+  turnos: {
+    servicioId: string
+    clienteNombre: string
+  }[]
 }
 
 export interface DatosReprogramacion {
@@ -116,8 +138,30 @@ export function fechaReservablePorCliente(fecha: Date, ahora: Date): boolean {
 }
 
 /** HU-28 — Cuántos turnos puede tener una misma persona en una semana, reservando por la
- * web. Ariel no tiene tope: él carga los que hagan falta. */
-export const MAX_TURNOS_POR_SEMANA = 3
+ * web. Ariel no tiene tope: él carga los que hagan falta.
+ *
+ * ⚠️ Era 3 y pasó a 6 el 23/8/2026, junto con la reserva en grupo (HU-31). El tope existe
+ * contra el que quiere acaparar la agenda, y una mamá que trae a los hijos no es eso: con 3
+ * no le alcanzaba ni para una pasada de tres, y menos para volver ella esa misma semana.
+ *
+ * ⚠️ La consecuencia hay que tenerla escrita porque no se puede evitar: **esto afloja el tope
+ * también para el que reserva de a uno**. Sostener "3 por pasada pero 6 por semana" pediría
+ * una columna de grupo en `turnos`, o sea una migración sobre la tabla del EXCLUDE escrito a
+ * mano, para defender un caso que todavía no ocurrió. */
+export const MAX_TURNOS_POR_SEMANA = 6
+
+/** HU-31 — Cuántos turnos entran en un bloque, o sea en una sola pasada del formulario.
+ *
+ * Es **el mismo número** que `MAX_TURNOS_POR_SEMANA` a propósito: quien pide el bloque más
+ * grande posible gasta de una todo su cupo de la semana, y no hay ninguna razón para que la
+ * pasada corte antes que la ventana. Tener dos números distintos obligaba a explicar dos
+ * reglas en la misma pantalla.
+ *
+ * ⚠️ Un bloque de 6 puede no entrar en ningún lado: 6 turnos de 30 minutos son 180, que es
+ * exactamente lo que dura la franja de la mañana. No es un error — es la agenda diciendo que
+ * no hay lugar—, pero la pantalla tiene que decirlo con esas palabras en vez de mostrar una
+ * grilla vacía. */
+export const MAX_TURNOS_POR_GRUPO = MAX_TURNOS_POR_SEMANA
 
 /** "Semana" es una ventana **móvil** de 7 días, no lunes a domingo. La diferencia no es
  * cosmética: con la semana del calendario se pueden tener 3 turnos viernes/sábado/domingo y
@@ -126,33 +170,41 @@ export const MAX_TURNOS_POR_SEMANA = 3
 const DIAS_VENTANA = 7
 
 /**
- * HU-28 — ¿Agregar un turno el día `nueva` deja algún tramo de 7 días corridos con más de
+ * HU-28 — ¿Agregar los turnos de `nuevas` deja algún tramo de 7 días corridos con más de
  * `MAX_TURNOS_POR_SEMANA` turnos de esa persona?
  *
  * Pura y sin base a propósito: la regla es aritmética de días y así se puede fijar con
  * tests, que es donde viven los casos que importan (los bordes de la ventana).
  *
- * Solo mira las ventanas que **contienen al día nuevo**, y eso es exacto, no una
- * aproximación: el conjunto ya guardado cumple el invariante (se validó al insertar cada
- * uno), así que la única forma de romperlo es por una ventana que incluya al que entra.
- * Son 7 posiciones posibles, desde la que arranca 6 días antes hasta la que arranca ese
- * mismo día.
+ * Solo mira las ventanas que **contienen a alguno de los días nuevos**, y eso es exacto, no
+ * una aproximación: el conjunto ya guardado cumple el invariante (se validó al insertar cada
+ * uno), así que toda ventana que se rompa tiene que contener al menos una fecha nueva.
+ * Anclar en **cada** nueva sus 7 posiciones posibles —desde la que arranca 6 días antes hasta
+ * la que arranca ese mismo día— las cubre todas.
+ *
+ * ⚠️ `nuevas` es una lista y no una fecha sola desde HU-31 (reserva en grupo), y el cambio no
+ * es cosmético: antes se contaban las existentes de la ventana y se sumaba **+1** fijo. Con
+ * un grupo de tres el mismo día ese +1 daría 1 en vez de 3, o sea que el tope no frenaría
+ * nada. Ahora las nuevas se cuentan **dentro de la ventana**, que además es lo correcto
+ * cuando el grupo queda repartido en semanas distintas.
  */
 export function excedeLimiteSemanal(
   fechasExistentes: Date[],
-  nueva: Date,
+  nuevas: Date[],
 ): boolean {
-  const dia = nueva.getTime()
+  for (const nueva of nuevas) {
+    const dia = nueva.getTime()
 
-  for (let i = 0; i < DIAS_VENTANA; i++) {
-    const inicio = dia - i * DIA_MS
-    const fin = inicio + (DIAS_VENTANA - 1) * DIA_MS
+    for (let i = 0; i < DIAS_VENTANA; i++) {
+      const inicio = dia - i * DIA_MS
+      const fin = inicio + (DIAS_VENTANA - 1) * DIA_MS
 
-    const enLaVentana = fechasExistentes.filter(
-      (f) => f.getTime() >= inicio && f.getTime() <= fin,
-    ).length
+      const dentro = (f: Date) => f.getTime() >= inicio && f.getTime() <= fin
+      const total =
+        fechasExistentes.filter(dentro).length + nuevas.filter(dentro).length
 
-    if (enLaVentana + 1 > MAX_TURNOS_POR_SEMANA) return true
+      if (total > MAX_TURNOS_POR_SEMANA) return true
+    }
   }
 
   return false
@@ -168,18 +220,23 @@ export function excedeLimiteSemanal(
  * adelante, no lo que ocupó un horario alguna vez. */
 async function fechasReservadasCerca(
   clienteId: string,
-  fecha: Date,
+  fechas: Date[],
   excluirTurnoId?: string,
 ): Promise<Date[]> {
   const margen = (DIAS_VENTANA - 1) * DIA_MS
+  // Con un grupo repartido en varios días alcanza con **una** consulta de rango ancho: traer
+  // desde 6 días antes del primero hasta 6 después del último cubre todas las ventanas de
+  // todos, y evita N viajes a Neon para juntar listas que después se unen igual.
+  const desde = Math.min(...fechas.map((f) => f.getTime())) - margen
+  const hasta = Math.max(...fechas.map((f) => f.getTime())) + margen
 
   const turnos = await prisma.turno.findMany({
     where: {
       clienteId,
       estado: 'reservado',
       fecha: {
-        gte: new Date(fecha.getTime() - margen),
-        lte: new Date(fecha.getTime() + margen),
+        gte: new Date(desde),
+        lte: new Date(hasta),
       },
       ...(excluirTurnoId ? { id: { not: excluirTurnoId } } : {}),
     },
@@ -199,11 +256,38 @@ async function fechasReservadasCerca(
  * alguien que además tuvo que hacer el esfuerzo de mandar los dos requests juntos. */
 async function validarLimiteSemanal(
   clienteId: string,
-  fecha: Date,
+  fechas: Date[],
   excluirTurnoId?: string,
 ): Promise<void> {
-  const cercanas = await fechasReservadasCerca(clienteId, fecha, excluirTurnoId)
-  if (excedeLimiteSemanal(cercanas, fecha)) throw new LimiteSemanalError()
+  const cercanas = await fechasReservadasCerca(clienteId, fechas, excluirTurnoId)
+  if (excedeLimiteSemanal(cercanas, fechas)) throw new LimiteSemanalError()
+}
+
+/** HU-31 — Las horas de arranque de cada turno del bloque, encadenando duraciones.
+ *
+ * ⚠️ Esto es lo que **elimina** una clase entera de errores en vez de validarla. Antes el
+ * cliente mandaba una hora por turno y había que chequear que no se pisaran entre sí (y
+ * explicar el choque con un mensaje propio, porque la disponibilidad no puede verlo: ninguno
+ * de los hermanos existe todavía en la base). Ahora manda **una sola hora**, la del primero,
+ * y las demás las deriva el backend: un bloque con huecos o superpuesto dejó de ser
+ * representable.
+ *
+ * Los turnos quedan pegados borde con borde, que además es lo que arregla el empaquetado: una
+ * Barba de 15 a las 10:00 ahora sí hace arrancar al siguiente 10:15, sin esperar al próximo
+ * múltiplo de la grilla de 20.
+ *
+ * Pura y exportada para poder fijarla con tests. */
+export function horariosDelBloque(
+  horaInicio: string,
+  duracionesMinutos: number[],
+): string[] {
+  let momento = horaDesdeString(horaInicio)
+  const horas: string[] = []
+  for (const duracion of duracionesMinutos) {
+    horas.push(formatearHora(momento))
+    momento = new Date(momento.getTime() + duracion * 60_000)
+  }
+  return horas
 }
 
 /**
@@ -263,7 +347,7 @@ export async function crearTurno(
   // que `aE164` sepa normalizar (`esTelefonoUtilizable`)— pero se chequea igual: si esa
   // regla se aflojara algún día, el límite se apagaría en silencio en vez de romperse.
   if (!esAdmin && clienteId) {
-    await validarLimiteSemanal(clienteId, input.fecha)
+    await validarLimiteSemanal(clienteId, [input.fecha])
   }
 
   try {
@@ -291,6 +375,129 @@ export async function crearTurno(
     // Flujo alternativo de CU-01: otro cliente reservó ese horario en el medio. La
     // validación de arriba tiene una ventana de carrera de milisegundos — el EXCLUDE
     // constraint de la base es la que realmente lo impide.
+    if (esViolacionDeSolapamiento(err)) throw new HorarioNoDisponibleError()
+    throw err
+  }
+}
+
+/**
+ * HU-31 — Reservar un **bloque** de turnos pegados, con un teléfono y una ficha.
+ *
+ * Vive al lado de `crearTurno` y **no la reemplaza**: reservar un turno solo sigue pasando
+ * por aquella, byte por byte. Es la garantía más fuerte de que el caso normal —el 99% de las
+ * reservas— no puede romperse por este código.
+ *
+ * Es **solo pública**: no toma `origen`. Ariel carga los turnos que quiere de a uno y sin
+ * ningún tope; tiene la agenda a la vista y no necesita que el sistema le busque el hueco.
+ *
+ * El orden de los pasos importa, y es el mismo razonamiento que ya está escrito en
+ * `crearTurno`: todo lo que puede rechazar va **antes** de `vincularCliente`, porque esa
+ * función crea la ficha y le cuelga la etiqueta "Nuevo".
+ */
+export async function crearTurnosEnGrupo(
+  input: DatosGrupoDeTurnos,
+): Promise<TurnoConCliente[]> {
+  const ahora = ahoraArgentina()
+
+  // 1. Los servicios, en el orden en que se eligieron. Un `Map` por id porque tres hermanos
+  // piden el mismo Corte: sin esto serían tres consultas idénticas a Neon.
+  const cache = new Map<string, Awaited<ReturnType<typeof obtenerServicioActivo>>>()
+  for (const t of input.turnos) {
+    if (!cache.has(t.servicioId)) {
+      cache.set(t.servicioId, await obtenerServicioActivo(t.servicioId))
+    }
+  }
+  const servicios = input.turnos.map((t) => cache.get(t.servicioId)!)
+
+  // 2. El horizonte de 90 días. Es una sola fecha: el bloque entero es del mismo día.
+  if (!fechaReservablePorCliente(input.fecha, ahora)) {
+    throw new FueraDeHorizonteError()
+  }
+
+  // 3. ¿Entra el bloque completo a esa hora?
+  //
+  // ⚠️ Una sola pregunta para los N turnos, y alcanza: el bloque va pegado, así que ocupa
+  // exactamente lo mismo que un turno único de la duración total. De ahí sale gratis que no
+  // pueda cruzar el descanso ni pasarse del cierre — las dos las hace `calcularHorariosDelDia`
+  // desde CU-04, y no hay una segunda cuenta de disponibilidad que pueda contradecir a la
+  // primera.
+  const duracionTotal = servicios.reduce((t, s) => t + s.duracionMinutos, 0)
+  const horariosDelDia = await obtenerHorariosDelDia(
+    { duracionMinutos: duracionTotal },
+    input.fecha,
+    ahora,
+    {},
+  )
+  if (!horariosDelDia.includes(input.hora)) {
+    throw new HorarioNoDisponibleError()
+  }
+
+  // 4. La ficha, **una sola** para todo el grupo.
+  //
+  // ⚠️ `vincularCliente` pisa `clientes.nombre` con el que le pasan, y acá hay varios. Se usa
+  // el del primer turno: arbitrario pero determinista, y el apodo que le ponga Ariel manda
+  // sobre esto en toda la interfaz (HU-25). Efecto lateral asumido: si la mamá reserva solo
+  // para los hijos, la ficha queda con el nombre de un hijo y el teléfono de ella — que es lo
+  // que ya pasa hoy si los reserva de a uno.
+  const clienteId = await vincularCliente(
+    input.clienteTelefono,
+    input.turnos[0].clienteNombre,
+  )
+
+  // 5. El tope de la ventana de 7 días, contando el bloque entero de una: son N fechas
+  // iguales, y `excedeLimiteSemanal` las cuenta a todas dentro de la ventana.
+  if (clienteId) {
+    await validarLimiteSemanal(
+      clienteId,
+      input.turnos.map(() => input.fecha),
+    )
+  }
+
+  // 6. Los inserts, **todos o ninguno**.
+  //
+  // ⚠️ Es el primer `$transaction` del proyecto, y es la variante de array a propósito. La
+  // interactiva invitaría a meter las validaciones adentro, y para eso habría que pasarle el
+  // `tx` a `obtenerHorariosDelDia` y a todo lo que cuelga de la capa de disponibilidad, que
+  // hoy usan el `prisma` singleton. Sería refactorizar media capa para perseguir algo que la
+  // aplicación ya decidió no perseguir: la carrera está **aceptada** (ver `validarLimiteSemanal`)
+  // porque el daño real lo impide el EXCLUDE. Esta transacción está acá por la atomicidad
+  // del grupo, no para serializar la validación.
+  //
+  // ⚠️ `vincularCliente` queda **afuera**, arriba. Si la transacción falla, la ficha queda
+  // creada sin turnos: es una ficha vacía, no un dato falso, y es exactamente lo que ya pasa
+  // hoy cuando `crearTurno` choca contra el EXCLUDE después de haber vinculado.
+  const horas = horariosDelBloque(
+    input.hora,
+    servicios.map((s) => s.duracionMinutos),
+  )
+
+  try {
+    return await prisma.$transaction(
+      input.turnos.map((t, i) => {
+        const servicio = servicios[i]
+        const horaInicio = horaDesdeString(horas[i])
+        return prisma.turno.create({
+          include: INCLUDE_CLIENTE,
+          data: {
+            clienteNombre: t.clienteNombre,
+            clienteTelefono: input.clienteTelefono,
+            clienteEmail: input.clienteEmail,
+            clienteId,
+            servicioId: servicio.id,
+            servicioNombreSnapshot: servicio.nombre,
+            servicioDuracionSnapshot: servicio.duracionMinutos,
+            fecha: input.fecha,
+            horaInicio,
+            horaFin: new Date(
+              horaInicio.getTime() + servicio.duracionMinutos * 60_000,
+            ),
+            origen: 'online',
+            vistoPorAdmin: false,
+          },
+        })
+      }),
+    )
+  } catch (err) {
     if (esViolacionDeSolapamiento(err)) throw new HorarioNoDisponibleError()
     throw err
   }
@@ -418,7 +625,7 @@ export async function reprogramarTurno(
   // **dentro** de su propia semana fallaría siempre que esa semana estuviera en el límite,
   // que es justo el caso en el que reprogramar no cambia nada.
   if (original.clienteId) {
-    await validarLimiteSemanal(original.clienteId, input.fecha, original.id)
+    await validarLimiteSemanal(original.clienteId, [input.fecha], original.id)
   }
 
   const horaInicio = horaDesdeString(input.hora)

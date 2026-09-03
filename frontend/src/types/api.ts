@@ -61,6 +61,21 @@ export interface DisponibilidadDia {
   motivo: string | null
 }
 
+/** HU-31 — Reservar 2 o 3 turnos de una (la mamá que trae a los hijos).
+ *
+ * ⚠️ El teléfono y el mail van **afuera** del array: son del grupo, y es lo que hace que la
+ * ficha del cliente siga siendo una sola. El nombre va por turno — son los hijos. */
+export interface NuevoGrupoDeTurnos {
+  clienteTelefono: string
+  clienteEmail?: string
+  /** El día del bloque entero: los turnos van pegados, así que es uno solo. */
+  fecha: string // "YYYY-MM-DD"
+  /** A qué hora arranca el **primero**. Las demás las calcula el backend encadenando
+   * duraciones, así que un bloque con huecos o superpuesto no se puede ni expresar. */
+  hora: string // "HH:mm"
+  turnos: { servicioId: string; clienteNombre: string }[]
+}
+
 export interface NuevoTurno {
   servicioId: string
   fecha: string // "YYYY-MM-DD"

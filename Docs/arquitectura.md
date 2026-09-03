@@ -45,6 +45,38 @@ Lo que sí sigue fuera de alcance:
 
 ## Decisiones de la v3
 
+- **El bloque de turnos se calcula como un turno único (HU-31).** Un bloque de N turnos
+  pegados ocupa exactamente el mismo rato que un solo turno de la duración total, así que
+  "¿dónde entran los tres seguidos?" se le pregunta a `calcularHorariosDelDia` con la suma de
+  las duraciones. **No hay un buscador de huecos aparte**, que habría sido reimplementar CU-04
+  al lado de CU-04 — con el riesgo clásico de que las dos cuentas se despeguen. De la reutilización
+  salen gratis dos reglas que si no habría que programar y mantener: el bloque no cruza el
+  descanso (cada franja se evalúa por separado) y no se pasa del cierre.
+  - La contracara: el cliente manda **una sola hora**, la del primero, y el backend deriva las
+    demás encadenando duraciones. Un bloque con huecos o superpuesto dejó de ser representable,
+    así que la validación que hacía falta cuando cada turno traía su hora —y el error propio que
+    la explicaba— se borraron en vez de mantenerse.
+
+- **La reserva en grupo es el primer `$transaction` del proyecto (HU-31).** Hasta el 23/8/2026
+  no había ninguno: cada escritura era una sola sentencia, y lo que impedía el daño real —dos
+  personas sobre el mismo rato— era el `EXCLUDE` de la base, no una transacción. Con 2 o 3
+  turnos que tienen que entrar juntos eso deja de alcanzar, y `prisma.$transaction([...])`
+  garantiza que si el segundo choca, el primero tampoco queda.
+  - Es la variante de **array** y no la interactiva (`$transaction(async tx => …)`) a propósito.
+    La interactiva invita a meter las validaciones adentro, y para eso habría que pasarle el
+    `tx` a `obtenerHorariosDelDia` y a toda la capa de disponibilidad, que hoy usa el `prisma`
+    singleton importado a nivel de módulo. Sería refactorizar media capa para perseguir algo que
+    el proyecto ya decidió **no** perseguir: la carrera entre validar y escribir está aceptada
+    (está escrito en `validarLimiteSemanal` y en `crearTurno`), porque el daño real lo tapa el
+    `EXCLUDE`. La transacción está para la **atomicidad del grupo**, no para serializar.
+  - ⚠️ `vincularCliente` queda **afuera**, corriendo antes. Si la transacción falla, la ficha
+    queda creada sin turnos: es una ficha vacía, no un dato falso —la persona existe y dejó su
+    teléfono— y es exactamente lo que ya pasaba cuando `crearTurno` chocaba contra el `EXCLUDE`
+    después de haber vinculado. Meterla adentro obligaría a pasar el `tx` a `clientes.service`.
+  - Verificado contra Neon, porque no era obvio: el SQLSTATE `23P01` **sobrevive** anidado
+    dentro del `$transaction` en la misma ruta (`meta.driverAdapterError.cause.code`) que ya
+    leía `esViolacionDeSolapamiento`, así que el choque sigue devolviendo 409 y no 500.
+
 - **El token de "me olvidé la contraseña" no tiene tabla (HU-26).** Es un JWT firmado con
   el secreto global **más el hash actual de la contraseña de esa cuenta**. De ahí sale que
   valga un solo uso: al restablecer, el hash cambia y el token viejo deja de verificar. La

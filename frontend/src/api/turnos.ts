@@ -1,5 +1,10 @@
 import { apiClient } from './client'
-import type { NuevoTurno, Reprogramacion, Turno } from '../types/api'
+import type {
+  NuevoGrupoDeTurnos,
+  NuevoTurno,
+  Reprogramacion,
+  Turno,
+} from '../types/api'
 
 /** HU-19 — URL de descarga del turno como evento de calendario.
  *
@@ -11,6 +16,15 @@ export function urlCalendario(turnoId: string): string {
 
 export async function crearTurno(datos: NuevoTurno): Promise<Turno> {
   const { data } = await apiClient.post<Turno>('/turnos', datos)
+  return data
+}
+
+/** HU-31 — Reservar varios de una. Endpoint aparte del de arriba a propósito: reservar un
+ * turno solo no pasa por una sola línea de código nueva, ni acá ni en el backend. */
+export async function crearTurnosEnGrupo(
+  datos: NuevoGrupoDeTurnos,
+): Promise<Turno[]> {
+  const { data } = await apiClient.post<Turno[]>('/turnos/grupo', datos)
   return data
 }
 

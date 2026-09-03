@@ -7,6 +7,7 @@ import {
   cargarTelefonoDelTurno,
   idsNuevosDespuesDe,
   crearTurno,
+  crearTurnosEnGrupo,
   editarTurno,
   esCobrable,
   estaDentroDeVentanaDeCambio,
@@ -15,6 +16,7 @@ import {
   listarTurnosEnRango,
   marcarTurno,
   marcarTurnosComoVistos,
+  MAX_TURNOS_POR_GRUPO,
   MAX_TURNOS_POR_SEMANA,
   obtenerTurno,
   registrarCobro,
@@ -41,6 +43,7 @@ import {
   enviarAvisoDeCancelacion,
   enviarConfirmacionDeTurno,
   icsDeTurno,
+  notificarNuevosTurnos,
   notificarNuevoTurno,
   notificarTurnoCancelado,
 } from '../services/notificaciones.service'
@@ -95,6 +98,44 @@ const bodySchema = z.object({
     (v) => (v === '' || v === null ? undefined : v),
     z.email('El email no parece válido.').optional(),
   ),
+})
+
+// HU-31 — La reserva en grupo. Reusa los mismos refines del teléfono y del nombre que
+// `bodySchema`: la regla de qué es un teléfono utilizable tiene que ser una sola, y ya se
+// pagó una vez el precio de tener dos (ver la nota de HU-08 en CLAUDE.md).
+//
+// ⚠️ El teléfono y el mail están afuera del array a propósito — ver `DatosGrupoDeTurnos`.
+const grupoSchema = z.object({
+  clienteTelefono: z
+    .string()
+    .trim()
+    .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
+    .refine(esTelefonoUtilizable, MENSAJE_TELEFONO_INEXISTENTE),
+  clienteEmail: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z.email('El email no parece válido.').optional(),
+  ),
+  // ⚠️ La fecha y la hora son del **bloque**, no de cada turno: los turnos van pegados uno
+  // atrás del otro y el backend deriva la hora de cada uno encadenando duraciones. Un bloque
+  // con huecos o superpuesto dejó de ser representable, así que no hay nada que validar.
+  fecha: esquemaDeFecha('la fecha del turno'),
+  hora: esquemaDeHora('la hora del turno'),
+  turnos: z
+    .array(
+      z.object({
+        servicioId: z.uuid(),
+        clienteNombre: z
+          .string()
+          .trim()
+          .min(1, 'Falta el nombre.')
+          .refine(esNombreValido, MENSAJE_NOMBRE_INVALIDO),
+      }),
+    )
+    .min(1, 'Elegí al menos un turno.')
+    .max(
+      MAX_TURNOS_POR_GRUPO,
+      `Se pueden reservar hasta ${MAX_TURNOS_POR_GRUPO} turnos por vez.`,
+    ),
 })
 
 const reprogramarSchema = z.object({
@@ -374,6 +415,57 @@ export async function postTurno(req: Request, res: Response) {
     // y no un flag, la que expresa "esto vino de un cliente".
     void notificarNuevoTurno(turno)
     void enviarConfirmacionDeTurno(turno)
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+/**
+ * HU-31 — Reservar 2 o 3 turnos de una (la mamá que trae a los hijos).
+ *
+ * Endpoint aparte y no un `POST /api/turnos` que acepte array: así el caso de un turno solo
+ * —el normal— no pasa por una sola línea de código nueva. Mismo schema, mismo `crearTurno`,
+ * mismos tests.
+ *
+ * Devuelve un **array** de turnos: cada uno queda con su propio id, que es su token de
+ * gestión. Una vez creados son turnos independientes en todo sentido, y por eso no hay
+ * ninguna columna que los ate (ver `Docs/modelo-datos.md`).
+ */
+export async function postTurnosEnGrupo(req: Request, res: Response) {
+  const parsed = grupoSchema.safeParse(req.body)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const { clienteTelefono, clienteEmail, fecha, hora, turnos } = parsed.data
+
+  try {
+    const creados = await crearTurnosEnGrupo({
+      clienteTelefono,
+      clienteEmail,
+      fecha: fechaDesdeIso(fecha),
+      hora,
+      turnos,
+    })
+    res.status(201).json(creados.map(turnoADto))
+
+    // Igual que en `postTurno`: después de responder y sin `await`.
+    //
+    // ⚠️ El push a Ariel es **uno solo** para todo el grupo (tres avisos seguidos por una
+    // persona reservando es ruido, y él ya tiene problemas con los push). Los mails, en
+    // cambio, van de a uno: cada turno tiene su propio link de gestión y su propio .ics,
+    // así que un solo mail pediría reescribir la plantilla y generar un .ics multi-evento.
+    // Van **secuenciales** y no en paralelo, siguiendo el precedente de la cancelación en
+    // masa: del otro lado hay un rate limit.
+    void notificarNuevosTurnos(creados)
+    void (async () => {
+      for (const turno of creados) await enviarConfirmacionDeTurno(turno)
+    })()
   } catch (err) {
     if (manejarErroresComunes(err, res)) return
     throw err

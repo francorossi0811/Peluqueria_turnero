@@ -78,6 +78,11 @@ const TEXTOS: Record<MotivoWhatsapp, { anuncio: string; cierre: string[] }> = {
 const LINEA_DEL_LINK =
   'El link para reprogramar o cancelar el turno es el siguiente 👇'
 
+/** La variante en plural, para la reserva en grupo. La de arriba queda intacta: cada turno
+ * del grupo tiene **su propio** link, porque el id de cada uno es su token de gestión. */
+const LINEA_DE_LOS_LINKS =
+  'Los links para reprogramar o cancelar cada turno 👇'
+
 /** El mensaje armado, en singular — Ariel es uno solo, igual que en las plantillas. */
 export function mensajeDeTurno(
   motivo: MotivoWhatsapp,
@@ -105,4 +110,40 @@ export function whatsappDeTurno(
   datos: DatosDelTurno,
 ): string {
   return whatsappCon(mensajeDeTurno(motivo, datos))
+}
+
+/** HU-31 — El mensaje de una reserva en grupo (la mamá que trae a los hijos).
+ *
+ * ⚠️ Con **un** turno delega en `mensajeDeTurno('confirmado', …)`, carácter por carácter. Es
+ * lo que hace imposible que el caso normal —la reserva de a uno, el 99%— derive de lo que
+ * Ariel recibe hoy. Hay un test que lo fija con un `toBe`.
+ *
+ * ⚠️ **No se agrega un motivo nuevo a `MotivoWhatsapp`.** Lo que pasó sigue siendo
+ * "confirmado"; lo que cambia es la cardinalidad. Meter "confirmadoVarios" en ese enum
+ * mezclaría dos ejes —qué pasó y cuántos son— que el archivo ya se ocupó de separar cuando
+ * distinguió avisar de pedir.
+ *
+ * El nombre de cada uno va **adelante** del servicio: es lo único que distingue tres
+ * renglones que si no serían casi idénticos, y es lo que le deja a Ariel saber quién es
+ * quién sin abrir un solo link. */
+export function mensajeDeTurnosConfirmados(turnos: DatosDelTurno[]): string {
+  if (turnos.length === 1) return mensajeDeTurno('confirmado', turnos[0])
+
+  const lineas = [
+    `Hola Ariel, soy ${turnos[0].nombre}, reservé ${turnos.length} turnos:`,
+  ]
+  for (const t of turnos) {
+    // Mismo criterio que `mensajeDeTurno`: el renglón en blanco lo pone cada bloque al
+    // entrar, nunca el anterior al salir.
+    lineas.push('', `${t.nombre} · ${t.servicio}`, `${fechaLegible(t.fecha)} · ${t.hora}`)
+  }
+  lineas.push('', '¡Nos vemos!')
+  lineas.push('', LINEA_DE_LOS_LINKS)
+  for (const t of turnos) lineas.push(`${t.nombre}: ${t.link}`)
+  return lineas.join('\n')
+}
+
+/** El link de WhatsApp de una reserva en grupo, listo para un `href`. */
+export function whatsappDeTurnosConfirmados(turnos: DatosDelTurno[]): string {
+  return whatsappCon(mensajeDeTurnosConfirmados(turnos))
 }

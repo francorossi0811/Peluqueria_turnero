@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   construirMailConfirmacion,
   construirMensajeWhatsapp,
+  construirNotificacionTurnoNuevo,
+  construirNotificacionTurnosNuevos,
 } from './notificaciones.service'
 import type { TipoAviso } from './notificaciones.service'
 import type { Turno } from '../../generated/prisma/client.ts'
@@ -137,5 +139,49 @@ describe('construirMailConfirmacion', () => {
     expect(cliente.texto).not.toContain('Perdón')
     expect(negocio.texto).toContain('Perdón')
     expect(negocio.texto).not.toContain('Gracias por avisar')
+  })
+})
+
+// HU-31 — El push de una reserva en grupo.
+describe('construirNotificacionTurnosNuevos', () => {
+  const otro = (id: string, nombre: string, hora: number) =>
+    ({
+      ...TURNO,
+      id,
+      clienteNombre: nombre,
+      horaInicio: new Date(Date.UTC(1970, 0, 1, hora, 0)),
+    }) as Turno
+
+  // ⚠️ El que importa: con un turno, Ariel tiene que ver **exactamente** el aviso de
+  // siempre. Si alguien "mejora" el armador del grupo y se olvida de la delegación, este
+  // test lo agarra.
+  it('con un turno solo devuelve el aviso de siempre, idéntico', () => {
+    expect(construirNotificacionTurnosNuevos([TURNO])).toEqual(
+      construirNotificacionTurnoNuevo(TURNO),
+    )
+  })
+
+  it('con varios manda un solo aviso que los nombra a todos', () => {
+    const aviso = construirNotificacionTurnosNuevos([
+      TURNO,
+      otro('a1b2c3d4-0000-4000-8000-000000000001', 'Toto', 15),
+      otro('a1b2c3d4-0000-4000-8000-000000000002', 'Luca', 16),
+    ])
+
+    expect(aviso.title).toBe('3 turnos nuevos reservados')
+    expect(aviso.body).toContain('Juan Pérez')
+    expect(aviso.body).toContain('Toto')
+    expect(aviso.body).toContain('Luca')
+    expect(aviso.body.split('\n')).toHaveLength(3)
+  })
+
+  // Con el mismo tag que el alta individual, este aviso reemplazaría en pantalla a una
+  // reserva anterior y esa se perdería.
+  it('usa un tag propio, distinto del de un turno suelto', () => {
+    const grupo = construirNotificacionTurnosNuevos([
+      TURNO,
+      otro('a1b2c3d4-0000-4000-8000-000000000001', 'Toto', 15),
+    ])
+    expect(grupo.tag).not.toBe(construirNotificacionTurnoNuevo(TURNO).tag)
   })
 })
