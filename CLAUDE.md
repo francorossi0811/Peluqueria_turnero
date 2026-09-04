@@ -336,10 +336,13 @@ con dos errores reales adentro. Hay que correr **`tsc -b --force`**.
 | `DATABASE_URL` de `backend/.env` | branch **`production`** ⚠️ escribe en la agenda real |
 | Lo que sirve Render | branch **`production`** (default, `ep-wispy-mud-acx20c4v`) |
 
-El proyecto tiene hoy **tres** branches: `production` (primary/default) y dos sobras de
-pruebas que **nadie usa**, `prueba-ajustes-23ago` (23/8) y `demo-video-techprovider`
-(21/8). Se pueden borrar cuando Franco quiera; ocupan ~33 MB cada una del medio giga del
-plan free, que es la misma cuota donde viven las fotos de HU-29.
+El proyecto tiene hoy **una sola** branch: `production` (primary y default). Las dos
+sobras de pruebas —`prueba-ajustes-23ago` (23/8) y `demo-video-techprovider` (21/8)— se
+borraron el 4/9/2026 a pedido de Franco: ocupaban ~33 MB cada una del medio giga del plan
+free, que es la misma cuota donde viven las fotos de HU-29. Antes de borrarlas se confirmó
+por endpoint que Render usa `ep-wispy-mud-acx20c4v`, que cuelga de `production`, y después
+que producción quedó intacta: 36 turnos, 16 clientes, 4 servicios activos, 3 cuentas, las
+19 migraciones aplicadas y `turnos_no_solapamiento` en pie.
 
 ⚠️ **El `.env` local volvió a apuntar a `production` el 4/9/2026**, después de haber estado
 en `prueba-ajustes-23ago` desde el 23/8. Eso quiere decir que **cualquier cosa que escriba
