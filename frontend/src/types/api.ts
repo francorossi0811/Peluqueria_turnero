@@ -222,6 +222,14 @@ export interface NuevoTurnoManual extends Omit<NuevoTurno, 'clienteTelefono'> {
   origen: OrigenManual
 }
 
+/** HU-31 — El bloque que carga Ariel. Espeja `NuevoGrupoDeTurnos` con sus dos diferencias
+ * de siempre: el teléfono es opcional y lleva `origen`. **Sin tope de cantidad**: el panel
+ * no lo limita. */
+export interface NuevoGrupoManual extends Omit<NuevoGrupoDeTurnos, 'clienteTelefono'> {
+  clienteTelefono?: string
+  origen: OrigenManual
+}
+
 export interface EditarTurno {
   fecha: string // "YYYY-MM-DD"
   hora: string // "HH:mm"

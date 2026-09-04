@@ -69,7 +69,7 @@ saldría sola y nada fallaría.
 |---|---|---|
 | GET | `/api/disponibilidad?servicioId=&desde=&hasta=` | Horarios disponibles para ese servicio entre `desde` y `hasta` (fechas), aplicando `horario_laboral`, `bloqueos_horario`, `feriados` y turnos ya reservados (CU-04) |
 | GET | `/api/disponibilidad?servicioIds=a,b,c&desde=&hasta=` | HU-31 — Lo mismo para un **bloque**: devuelve las horas de arranque donde entran los N turnos **seguidos**. La duración que se busca es la **suma** |
-| GET | `/api/admin/disponibilidad?servicioId=&desde=&hasta=&incluirPasado=` | 🔒 Lo mismo, con las reglas de Ariel: sin la antelación mínima de 30 min y, con `incluirPasado=true`, los últimos 7 días (HU-08) |
+| GET | `/api/admin/disponibilidad?servicioId=&desde=&hasta=&incluirPasado=` | 🔒 Lo mismo, con las reglas de Ariel: sin la antelación mínima de 30 min y, con `incluirPasado=true`, los últimos 7 días (HU-08). Acepta `servicioIds` igual que la pública |
 
 ⚠️ **Son dos rutas y no un parámetro de la primera**, por el mismo criterio que
 `POST /api/turnos` vs `POST /api/admin/turnos`: es la ruta la que expresa quién pregunta.
@@ -130,6 +130,7 @@ ninguno el día figura como `completo`.
 |---|---|---|
 | POST | `/api/turnos` | Crea una reserva (CU-01) |
 | POST | `/api/turnos/grupo` | Crea un **bloque** de 1 a 6 turnos seguidos, con un solo teléfono (HU-31) |
+| POST | `/api/admin/turnos/grupo` | 🔒 El mismo bloque, cargado por Ariel: **sin topes**, teléfono opcional y hasta 7 días atrás |
 | GET | `/api/turnos/:id` | Detalle del turno (el link único que recibe el cliente apunta acá) |
 | POST | `/api/turnos/:id/cancelar` | Cancela el turno, valida ventana de 60 min (CU-02) |
 | POST | `/api/turnos/:id/reprogramar` | Reprograma a un nuevo horario, valida ventana de 60 min + disponibilidad (CU-02, HU-04) |
@@ -251,6 +252,22 @@ Errores:
 
 ⚠️ Igual que en la ruta de a uno: los tres últimos son 409, así que hay que ramificar por
 `codigo` y nunca por status.
+
+### `POST /api/admin/turnos/grupo` — HU-31 + HU-08
+
+🔒 El mismo bloque, cargado por Ariel. Mismo body que la ruta pública **más `origen`**
+(`presencial` / `llamada` / `whatsapp`), y con las dos diferencias de siempre del panel: el
+`clienteTelefono` es **opcional** y el `clienteNombre` no tiene la regla de "solo letras"
+(Ariel anota "Señora del 3B"). Responde `201` con un array de turnos en formato admin.
+
+⚠️ **No tiene ninguno de los topes del cliente**: ni el de cantidad por pasada, ni el semanal,
+ni la antelación mínima de 30 minutos. Y puede cargar bloques de hasta `DIAS_PASADOS_ADMIN`
+días para atrás, con el mismo `400` explicativo que `POST /api/admin/turnos` si se pasa.
+
+**Por qué es una ruta aparte y no un `origen` opcional en la pública:** es la ruta, y no un
+campo del body, la que dice quién está creando el turno. Con un flag, cualquiera podría
+mandarlo y saltearse los dos topes. Es el mismo reparto que ya existía entre `POST /api/turnos`
+y `POST /api/admin/turnos`.
 
 **POST `/api/turnos/:id/cancelar`** — sin body. Response `409` si faltan menos de 60
 minutos:

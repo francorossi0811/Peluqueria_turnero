@@ -10,6 +10,7 @@ import {
   postCancelarTurnoAdmin,
   postMarcarVistos,
   postTurnoManual,
+  postTurnosEnGrupoManual,
 } from '../controllers/turnos.controller'
 import {
   getCliente,
@@ -118,6 +119,10 @@ adminRouter.get('/admin/disponibilidad', requireAuth, getDisponibilidadAdmin)
 adminRouter.get('/admin/turnos', requireAuth, getAgenda)
 adminRouter.get('/admin/turnos/buscar', requireAuth, getBuscarTurnos)
 adminRouter.post('/admin/turnos', requireAuth, postTurnoManual)
+// HU-31 — El bloque de turnos seguidos, del lado de Ariel. Ruta aparte de la pública: es la
+// ruta la que dice quién crea el turno, y de ahí cuelgan sus tres asimetrías (sin topes, sin
+// antelación mínima, con los 7 días para atrás).
+adminRouter.post('/admin/turnos/grupo', requireAuth, postTurnosEnGrupoManual)
 adminRouter.patch('/admin/turnos/:id', requireAuth, patchTurno)
 adminRouter.post(
   '/admin/turnos/:id/cancelar',

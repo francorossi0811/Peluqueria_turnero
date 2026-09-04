@@ -6,7 +6,10 @@ import { Button } from '../ui/Button'
 import { GrillaHorarios } from '../GrillaHorarios'
 import { obtenerServicios } from '../../api/servicios'
 import { obtenerDisponibilidadAdmin } from '../../api/disponibilidad'
-import { cargarTurnoManual } from '../../api/agenda'
+import {
+  cargarTurnoManual,
+  cargarTurnosEnGrupoManual,
+} from '../../api/agenda'
 import { elegirContacto, soportaElegirContacto } from '../../lib/contactos'
 import { useMinutosAhora } from '../../lib/useMinutosAhora'
 import {
@@ -33,16 +36,42 @@ interface ModalCargarTurnoProps {
   horaInicial?: string
 }
 
+/** HU-31 — Un turno del bloque que carga Ariel. No tiene fecha ni hora: el bloque entero
+ * comparte día y arranca a una sola hora; la de cada uno la deriva el backend encadenando
+ * duraciones, igual que del lado del cliente. */
+interface TurnoDelBloque {
+  servicio: Servicio
+  nombre: string
+}
+
+/** Los minutos que ocupa el bloque completo — lo que se le pide a la disponibilidad. */
+function duracionDelBloque(turnos: TurnoDelBloque[]): number {
+  return turnos.reduce((total, t) => total + t.servicio.duracionMinutos, 0)
+}
+
+/** A qué hora arranca cada turno del bloque. Solo para mostrar: quien las decide de verdad
+ * es el backend, con la misma cuenta. */
+function horariosDelBloque(turnos: TurnoDelBloque[], inicio: string): string[] {
+  const [h, m] = inicio.split(':').map(Number)
+  let minutos = h * 60 + m
+  return turnos.map((t) => {
+    const actual = minutos
+    minutos += t.servicio.duracionMinutos
+    return `${String(Math.floor(actual / 60)).padStart(2, '0')}:${String(actual % 60).padStart(2, '0')}`
+  })
+}
+
 export function ModalCargarTurno({
   onClose,
   fechaInicial,
   horaInicial,
 }: ModalCargarTurnoProps) {
   const queryClient = useQueryClient()
-  const [servicio, setServicio] = useState<Servicio | null>(null)
+  // HU-31 — Los turnos del bloque, en orden. Vacío hasta que Ariel elige el primer
+  // servicio; con uno solo —el caso de todos los días— la pantalla es la de siempre.
+  const [turnos, setTurnos] = useState<TurnoDelBloque[]>([])
   const [fecha, setFecha] = useState<string | null>(fechaInicial ?? null)
   const [hora, setHora] = useState<string | null>(null)
-  const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteEmail, setClienteEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -75,28 +104,49 @@ export function ModalCargarTurno({
   // ⚠️ Clave distinta a la de la reserva pública (`['disponibilidad', …]`) a propósito: el
   // mismo servicio y el mismo rango devuelven contenidos distintos según la ruta, y
   // compartir cache entre las dos sería el bug más difícil de encontrar de todo esto.
+  // HU-31 — Se pregunta por **todos** los servicios del bloque: lo que vuelve son las horas
+  // de arranque donde entran los N seguidos, no donde entra el primero.
+  const idsDelBloque = turnos.map((t) => t.servicio.id)
   const disponibilidadQuery = useQuery({
-    queryKey: ['disponibilidad-admin', servicio?.id, desde, hasta],
+    queryKey: ['disponibilidad-admin', idsDelBloque.join(','), desde, hasta],
     queryFn: () =>
-      obtenerDisponibilidadAdmin(servicio!.id, desde, hasta, {
+      obtenerDisponibilidadAdmin(idsDelBloque, desde, hasta, {
         incluirPasado: true,
       }),
-    enabled: Boolean(servicio),
+    enabled: idsDelBloque.length > 0,
   })
 
+  // HU-31 — Con un turno sigue yendo por la ruta de siempre; el bloque va por la suya. Así
+  // la carga de a uno —lo que Ariel hace todos los días— no pasa por código nuevo.
   const cargarMutation = useMutation({
-    mutationFn: () =>
-      cargarTurnoManual({
-        servicioId: servicio!.id,
+    mutationFn: () => {
+      // Vacío significa "no me lo sé", no un teléfono en blanco. Mismo criterio que el
+      // email: se manda `undefined` para no guardar un dato falso en la base.
+      const telefono = clienteTelefono.trim() || undefined
+      const email = clienteEmail.trim() || undefined
+      if (turnos.length === 1) {
+        return cargarTurnoManual({
+          servicioId: turnos[0].servicio.id,
+          fecha: fecha!,
+          hora: hora!,
+          clienteNombre: turnos[0].nombre,
+          clienteTelefono: telefono,
+          clienteEmail: email,
+          origen,
+        }).then((t) => [t])
+      }
+      return cargarTurnosEnGrupoManual({
         fecha: fecha!,
         hora: hora!,
-        clienteNombre,
-        // Vacío significa "no me lo sé", no un teléfono en blanco. Mismo criterio que el
-        // email: se manda `undefined` para no guardar un dato falso en la base.
-        clienteTelefono: clienteTelefono.trim() || undefined,
-        clienteEmail: clienteEmail.trim() || undefined,
+        clienteTelefono: telefono,
+        clienteEmail: email,
         origen,
-      }),
+        turnos: turnos.map((t) => ({
+          servicioId: t.servicio.id,
+          clienteNombre: t.nombre,
+        })),
+      })
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agenda'] })
       onClose()
@@ -134,9 +184,17 @@ export function ModalCargarTurno({
       if (!contacto) return
       if (contacto.telefono) setClienteTelefono(contacto.telefono)
       // El nombre solo se completa si Ariel todavía no escribió uno, para no pisarle lo
-      // que ya venía tipeando.
-      if (contacto.nombre && !clienteNombre.trim())
-        setClienteNombre(contacto.nombre)
+      // que ya venía tipeando. Con un bloque cae en el primero que esté vacío, que es el
+      // que va a estar tipeando cuando toca el selector.
+      if (contacto.nombre) {
+        setTurnos((prev) => {
+          const i = prev.findIndex((t) => !t.nombre.trim())
+          if (i === -1) return prev
+          return prev.map((t, j) =>
+            j === i ? { ...t, nombre: contacto.nombre! } : t,
+          )
+        })
+      }
     } catch {
       // Cancelar el selector nativo también entra por acá. No es un error que valga la
       // pena mostrar: el campo se puede tipear igual.
@@ -158,8 +216,11 @@ export function ModalCargarTurno({
   }, [horaInicial, fechaInicial, fecha, hora, disponibilidadQuery.data])
 
   // El teléfono ya no bloquea el alta: Ariel suele cargar el turno con el cliente
-  // enfrente y sin saberse el número.
-  const listo = servicio && fecha && hora && clienteNombre
+  // enfrente y sin saberse el número. Con un bloque, hacen falta **todos** los nombres.
+  const listo =
+    turnos.length > 0 && fecha && hora && turnos.every((t) => t.nombre.trim())
+  const varios = turnos.length > 1
+  const horasDelBloque = hora ? horariosDelBloque(turnos, hora) : []
 
   return (
     <Modal
@@ -167,37 +228,86 @@ export function ModalCargarTurno({
       onClose={onClose}
     >
       <div className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-            Servicio
-          </span>
-          <select
-            value={servicio?.id ?? ''}
-            onChange={(e) => {
-              const s = serviciosQuery.data?.find(
-                (x) => x.id === e.target.value,
-              )
-              setServicio(s ?? null)
-              setFecha(fechaInicial ?? null)
-              setHora(null)
-            }}
-            className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
-          >
-            <option value="" disabled>
-              Elegí un servicio…
-            </option>
-            {serviciosQuery.data?.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre} ({s.duracionMinutos} min)
+        {/* HU-31 — Un selector por turno. Con uno solo dice "Servicio" y se ve igual que
+            siempre; el botón de abajo es lo único nuevo en el caso de todos los días. */}
+        {(turnos.length === 0 ? [null] : turnos).map((t, i) => (
+          <label key={i} className="flex flex-col gap-1">
+            <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+              {varios ? `Servicio del turno ${i + 1}` : 'Servicio'}
+            </span>
+            <select
+              value={t?.servicio.id ?? ''}
+              onChange={(e) => {
+                const elegido = serviciosQuery.data?.find(
+                  (x) => x.id === e.target.value,
+                )
+                if (!elegido) return
+                setTurnos((prev) => {
+                  const copia = [...prev]
+                  if (i < copia.length) copia[i] = { ...copia[i], servicio: elegido }
+                  else copia.push({ servicio: elegido, nombre: '' })
+                  return copia
+                })
+                // Cambiar un servicio cambia la duración del bloque, así que la hora
+                // elegida deja de valer.
+                setFecha(fechaInicial ?? null)
+                setHora(null)
+              }}
+              className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+            >
+              <option value="" disabled>
+                Elegí un servicio…
               </option>
-            ))}
-          </select>
-        </label>
+              {serviciosQuery.data?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre} ({s.duracionMinutos} min)
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
 
-        {servicio && (
+        {/* Sin tope de cantidad: el panel no limita a Ariel (HU-08, HU-28). */}
+        {turnos.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setTurnos((prev) => [
+                  ...prev,
+                  { servicio: prev[prev.length - 1].servicio, nombre: '' },
+                ])
+                setHora(null)
+              }}
+              className="text-miel text-sm font-semibold hover:underline"
+            >
+              + Otro turno seguido
+            </button>
+            {varios && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTurnos((prev) => prev.slice(0, -1))
+                    setHora(null)
+                  }}
+                  className="text-tinta-tenue text-sm hover:underline"
+                >
+                  Sacar el último
+                </button>
+                <span className="text-tinta-tenue text-sm">
+                  {turnos.length} turnos · {duracionDelBloque(turnos)} min en
+                  total
+                </span>
+              </>
+            )}
+          </div>
+        )}
+
+        {turnos.length > 0 && (
           <div>
             <span className="text-tinta-tenue mb-2 block text-xs tracking-wide uppercase">
-              Día y horario
+              {varios ? 'Día y horario de arranque' : 'Día y horario'}
             </span>
             {disponibilidadQuery.isPending && (
               <p className="text-tinta-suave text-sm">
@@ -227,17 +337,27 @@ export function ModalCargarTurno({
 
         {fecha && hora && (
           <>
-            <label className="flex flex-col gap-1">
-              <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-                Nombre y apellido
-              </span>
-              <input
-                required
-                value={clienteNombre}
-                onChange={(e) => setClienteNombre(e.target.value)}
-                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
-              />
-            </label>
+            {turnos.map((t, i) => (
+              <label key={i} className="flex flex-col gap-1">
+                <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+                  {varios
+                    ? `Nombre · ${horasDelBloque[i]} (${t.servicio.nombre})`
+                    : 'Nombre y apellido'}
+                </span>
+                <input
+                  required
+                  value={t.nombre}
+                  onChange={(e) =>
+                    setTurnos((prev) =>
+                      prev.map((x, j) =>
+                        j === i ? { ...x, nombre: e.target.value } : x,
+                      ),
+                    )
+                  }
+                  className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+                />
+              </label>
+            ))}
             <label className="flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-tinta-tenue text-xs tracking-wide uppercase">

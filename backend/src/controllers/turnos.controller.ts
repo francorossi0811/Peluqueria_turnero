@@ -18,6 +18,7 @@ import {
   marcarTurnosComoVistos,
   MAX_TURNOS_POR_GRUPO,
   MAX_TURNOS_POR_SEMANA,
+  TECHO_TECNICO_DE_BLOQUE,
   obtenerTurno,
   registrarCobro,
   reprogramarTurno,
@@ -173,6 +174,40 @@ const bodyManualSchema = bodySchema.extend({
       .refine(esTelefonoUtilizable, MENSAJE_TELEFONO_INEXISTENTE)
       .optional(),
   ),
+})
+
+/** HU-31 + HU-08 — El bloque que carga Ariel. Es a `grupoSchema` lo que `bodyManualSchema`
+ * es a `bodySchema`, y con los mismos dos overrides y por los mismos motivos:
+ *
+ * - **El nombre pierde la regla de "solo letras"**: Ariel anota lo que le sirve para
+ *   reconocer a la persona ("Señora del 3B", "Juan 2"), y esa es su agenda.
+ * - **El teléfono es opcional**: no se sabe los números de memoria. Sin teléfono no hay
+ *   ficha, igual que hoy en la carga de a uno.
+ *
+ * ⚠️ **Sin tope de cantidad**, al revés que el público. Es la misma asimetría de HU-08 y
+ * HU-28: el panel no lo limita, porque él sabe a quién está atendiendo. El único techo es
+ * `TECHO_TECNICO_DE_BLOQUE`, que no es una regla de negocio sino un freno para que nadie
+ * pida un cálculo absurdo. */
+const grupoManualSchema = grupoSchema.extend({
+  origen: z.enum(['presencial', 'llamada', 'whatsapp']),
+  clienteTelefono: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z
+      .string()
+      .trim()
+      .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
+      .refine(esTelefonoUtilizable, MENSAJE_TELEFONO_INEXISTENTE)
+      .optional(),
+  ),
+  turnos: z
+    .array(
+      z.object({
+        servicioId: z.uuid(),
+        clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
+      }),
+    )
+    .min(1, 'Elegí al menos un turno.')
+    .max(TECHO_TECNICO_DE_BLOQUE, 'Son demasiados turnos de una vez.'),
 })
 
 // HU-09: mismos fecha/hora que reprogramar, pero sin servicioId (no cambia el servicio).
@@ -463,6 +498,60 @@ export async function postTurnosEnGrupo(req: Request, res: Response) {
     // Van **secuenciales** y no en paralelo, siguiendo el precedente de la cancelación en
     // masa: del otro lado hay un rate limit.
     void notificarNuevosTurnos(creados)
+    void (async () => {
+      for (const turno of creados) await enviarConfirmacionDeTurno(turno)
+    })()
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+/**
+ * HU-31 + HU-08 — El bloque que carga Ariel desde el panel.
+ *
+ * Ruta aparte de la pública por el mismo motivo que `postTurnoManual` lo es de `postTurno`:
+ * **es la ruta, y no un flag del body, la que dice quién está creando el turno**. Si el
+ * `origen` viniera del cliente, cualquiera podría mandarlo y saltearse los dos topes.
+ */
+export async function postTurnosEnGrupoManual(req: Request, res: Response) {
+  const parsed = grupoManualSchema.safeParse(req.body)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const { clienteTelefono, clienteEmail, fecha, hora, turnos, origen } =
+    parsed.data
+
+  // HU-08 — Igual que en `postTurnoManual`: se valida acá para poder explicarlo. El service
+  // lo vuelve a chequear, pero desde adentro solo sabe tirar `HorarioNoDisponibleError`, y
+  // "ese horario se acaba de ocupar" sería mentira.
+  if (!fechaCargableComoAdmin(fechaDesdeIso(fecha), ahoraArgentina())) {
+    respondErrorParametrosInvalidos(
+      res,
+      `No se pueden cargar turnos de más de ${DIAS_PASADOS_ADMIN} días atrás.`,
+    )
+    return
+  }
+
+  try {
+    const creados = await crearTurnosEnGrupo({
+      clienteTelefono,
+      clienteEmail,
+      fecha: fechaDesdeIso(fecha),
+      hora,
+      turnos,
+      origen,
+    })
+    res.status(201).json(creados.map(turnoAdminDto))
+
+    // Sin push: no tiene sentido avisarle a Ariel de turnos que acaba de tipear él. El mail
+    // sí va, uno por turno y secuencial, si el cliente le dictó su dirección — merece su
+    // link igual que si hubiera reservado por la web.
     void (async () => {
       for (const turno of creados) await enviarConfirmacionDeTurno(turno)
     })()

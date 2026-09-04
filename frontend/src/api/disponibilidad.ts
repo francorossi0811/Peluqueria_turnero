@@ -31,7 +31,7 @@ export async function obtenerDisponibilidad(
  * Es una función aparte y no un parámetro de `obtenerDisponibilidad` porque son dos rutas
  * distintas: la pública no cambia. */
 export async function obtenerDisponibilidadAdmin(
-  servicioId: string,
+  servicioIds: string[],
   desde: string,
   hasta: string,
   opciones: { incluirPasado?: boolean } = {},
@@ -40,7 +40,11 @@ export async function obtenerDisponibilidadAdmin(
     '/admin/disponibilidad',
     {
       params: {
-        servicioId,
+        // HU-31 — Igual que la pública: con uno solo va `servicioId` y se comporta como
+        // siempre; con varios, la duración que se busca es la suma del bloque.
+        ...(servicioIds.length === 1
+          ? { servicioId: servicioIds[0] }
+          : { servicioIds: servicioIds.join(',') }),
         desde,
         hasta,
         ...(opciones.incluirPasado ? { incluirPasado: 'true' } : {}),

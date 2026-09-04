@@ -12,15 +12,17 @@ import {
   type OpcionesDisponibilidad,
 } from '../services/disponibilidad.service'
 import { ServicioNoDisponibleError } from '../services/errores'
-import { MAX_TURNOS_POR_GRUPO } from '../services/turnos.service'
+import { TECHO_TECNICO_DE_BLOQUE } from '../services/turnos.service'
 import { ahoraArgentina, fechaDesdeIso, formatearFecha } from '../utils/fechaHora'
 
 const MAX_DIAS_RANGO = 31
 
-/** El tope de servicios que se pueden pedir de una. Es el mismo `MAX_TURNOS_POR_GRUPO` de
- * la reserva en grupo: preguntar por un bloque más grande del que se puede reservar no
- * tiene sentido, y sin tope la query es un vector para pedir cálculos enormes. */
-const MAX_SERVICIOS_POR_CONSULTA = MAX_TURNOS_POR_GRUPO
+/** Cuántos servicios se pueden pedir en una consulta.
+ *
+ * ⚠️ Es el techo **técnico** y no el de negocio: el tope del cliente (`MAX_TURNOS_POR_GRUPO`)
+ * lo aplica el endpoint que crea los turnos, y **Ariel no tiene ninguno**, así que esta
+ * misma ruta le sirve a los dos. Acá solo se frena el pedido absurdo. */
+const MAX_SERVICIOS_POR_CONSULTA = TECHO_TECNICO_DE_BLOQUE
 
 /** HU-31 — `servicioIds` es una lista separada por comas: los servicios del bloque, en
  * orden. La duración que se busca es la suma.

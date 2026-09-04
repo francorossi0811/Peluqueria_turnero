@@ -53,7 +53,10 @@ export interface DatosNuevoTurno {
  * terminar con tres fichas. El nombre sí va por turno — son los hijos, y Ariel necesita
  * saber quién es cada uno en la agenda. */
 export interface DatosGrupoDeTurnos {
-  clienteTelefono: string
+  // HU-08: opcional solo en la carga manual — el flujo público lo sigue exigiendo, y eso lo
+  // garantiza el schema de cada endpoint, no este tipo. Sin teléfono no hay ficha, así que
+  // un bloque cargado sin número queda sin cliente asociado, igual que un turno suelto.
+  clienteTelefono?: string
   clienteEmail?: string
   /** El día del bloque entero: los turnos van pegados uno atrás del otro, así que es uno
    * solo. */
@@ -65,6 +68,11 @@ export interface DatosGrupoDeTurnos {
     servicioId: string
     clienteNombre: string
   }[]
+  /** HU-08 + HU-31 — Lo manda Ariel desde el panel ('presencial' / 'llamada' / 'whatsapp');
+   * el público no lo manda nunca. Es el **mismo** discriminador que usa `crearTurno`, y de
+   * él cuelgan las tres asimetrías de siempre: sin topes, sin antelación mínima y con los
+   * 7 días para atrás. */
+  origen?: OrigenTurno
 }
 
 export interface DatosReprogramacion {
@@ -162,6 +170,16 @@ export const MAX_TURNOS_POR_SEMANA = 6
  * no hay lugar—, pero la pantalla tiene que decirlo con esas palabras en vez de mostrar una
  * grilla vacía. */
 export const MAX_TURNOS_POR_GRUPO = MAX_TURNOS_POR_SEMANA
+
+/** El techo **técnico** de un bloque: cuántos turnos se pueden pedir de una en una consulta
+ * o una carga.
+ *
+ * ⚠️ **No es una regla de negocio y no hay que leerlo como una.** La regla del cliente es
+ * `MAX_TURNOS_POR_GRUPO`; Ariel **no tiene ninguna** (HU-08, HU-28: el panel no lo limita,
+ * porque él sabe a quién atiende). Esto existe solo para que nadie —ni por error ni a
+ * propósito— pida calcular la disponibilidad de un bloque de mil turnos. Veinte turnos
+ * seguidos son más de diez horas: está holgadamente arriba de cualquier uso real. */
+export const TECHO_TECNICO_DE_BLOQUE = 20
 
 /** "Semana" es una ventana **móvil** de 7 días, no lunes a domingo. La diferencia no es
  * cosmética: con la semana del calendario se pueden tener 3 turnos viernes/sábado/domingo y
@@ -387,8 +405,10 @@ export async function crearTurno(
  * por aquella, byte por byte. Es la garantía más fuerte de que el caso normal —el 99% de las
  * reservas— no puede romperse por este código.
  *
- * Es **solo pública**: no toma `origen`. Ariel carga los turnos que quiere de a uno y sin
- * ningún tope; tiene la agenda a la vista y no necesita que el sistema le busque el hueco.
+ * La usan **las dos puertas**: la reserva pública y la carga manual de Ariel, que se
+ * distinguen por `origen` exactamente como en `crearTurno`. Lo que cambia para él es lo de
+ * siempre —sin topes, sin antelación mínima, con los 7 días para atrás— y **no** cómo se
+ * arma el bloque, que es la parte que tiene que ser idéntica en los dos lados.
  *
  * El orden de los pasos importa, y es el mismo razonamiento que ya está escrito en
  * `crearTurno`: todo lo que puede rechazar va **antes** de `vincularCliente`, porque esa
@@ -398,6 +418,9 @@ export async function crearTurnosEnGrupo(
   input: DatosGrupoDeTurnos,
 ): Promise<TurnoConCliente[]> {
   const ahora = ahoraArgentina()
+  // El mismo discriminador de `crearTurno`, con las mismas consecuencias: Ariel no tiene
+  // topes, no espera 30 minutos de antelación y puede cargar hasta 7 días para atrás.
+  const esAdmin = Boolean(input.origen)
 
   // 1. Los servicios, en el orden en que se eligieron. Un `Map` por id porque tres hermanos
   // piden el mismo Corte: sin esto serían tres consultas idénticas a Neon.
@@ -409,8 +432,16 @@ export async function crearTurnosEnGrupo(
   }
   const servicios = input.turnos.map((t) => cache.get(t.servicioId)!)
 
-  // 2. El horizonte de 90 días. Es una sola fecha: el bloque entero es del mismo día.
-  if (!fechaReservablePorCliente(input.fecha, ahora)) {
+  // 2. Los topes de fecha. El del cliente mira hacia adelante (90 días); el de Ariel hacia
+  // atrás (7 días, HU-08). Es una sola fecha: el bloque entero es del mismo día.
+  //
+  // Red del controller, que ya rechaza el pasado de Ariel con un 400 explicativo; acá el
+  // error correcto es el mismo que para cualquier horario que no existe para quien pregunta.
+  if (esAdmin) {
+    if (!fechaCargableComoAdmin(input.fecha, ahora)) {
+      throw new HorarioNoDisponibleError()
+    }
+  } else if (!fechaReservablePorCliente(input.fecha, ahora)) {
     throw new FueraDeHorizonteError()
   }
 
@@ -426,7 +457,7 @@ export async function crearTurnosEnGrupo(
     { duracionMinutos: duracionTotal },
     input.fecha,
     ahora,
-    {},
+    { margenMinutos: esAdmin ? 0 : undefined, permitirPasado: esAdmin },
   )
   if (!horariosDelDia.includes(input.hora)) {
     throw new HorarioNoDisponibleError()
@@ -446,7 +477,10 @@ export async function crearTurnosEnGrupo(
 
   // 5. El tope de la ventana de 7 días, contando el bloque entero de una: son N fechas
   // iguales, y `excedeLimiteSemanal` las cuenta a todas dentro de la ventana.
-  if (clienteId) {
+  //
+  // Solo para quien reserva por la web: los turnos que carga Ariel no tienen tope, igual que
+  // en `crearTurno`. Es la misma asimetría de HU-08 y HU-28.
+  if (!esAdmin && clienteId) {
     await validarLimiteSemanal(
       clienteId,
       input.turnos.map(() => input.fecha),
@@ -491,8 +525,10 @@ export async function crearTurnosEnGrupo(
             horaFin: new Date(
               horaInicio.getTime() + servicio.duracionMinutos * 60_000,
             ),
-            origen: 'online',
-            vistoPorAdmin: false,
+            origen: input.origen ?? 'online',
+            // HU-17 — Los que carga Ariel nacen vistos: no tiene sentido resaltarle como
+            // "nuevo" un turno que acaba de tipear él mismo.
+            vistoPorAdmin: esAdmin,
           },
         })
       }),

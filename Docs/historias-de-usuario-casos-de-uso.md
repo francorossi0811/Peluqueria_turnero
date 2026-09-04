@@ -442,6 +442,8 @@ Como clienta que viene con los hijos, quiero sacar los turnos de todos de una so
 - Se confirman **todos o ninguno**: no me puede quedar el primero reservado y el resto no.
 - Cada turno queda con **su propio link** para reprogramarlo o cancelarlo por separado, y el mensaje de WhatsApp que le mando a Ariel los lleva a todos.
 
+- **Ariel también puede cargarlos así desde el panel**, con las reglas de siempre del panel: sin tope de cantidad, sin tope semanal, con el teléfono opcional y pudiendo registrar bloques de hasta 7 días para atrás (HU-08). Él sabe a quién está atendiendo, así que el sistema no lo limita.
+
 *Por qué el bloque va pegado y no son horarios sueltos:* es lo que la persona quiere de verdad —venir una vez y salir con todos atendidos— y además es lo que hace que el cálculo sea exacto. Un bloque de turnos consecutivos ocupa lo mismo que un único turno de la duración total, así que la pregunta "¿dónde entran los tres?" la responde el mismo cálculo de disponibilidad de siempre (CU-04), sin una segunda cuenta que pueda contradecir a la primera. De ahí salen gratis dos cosas: el bloque **no puede cruzar el descanso** ni pasarse del cierre.
 
 *Por qué el cliente manda una sola hora y no una por turno:* las demás las calcula el sistema encadenando duraciones. Un bloque con huecos o superpuesto **dejó de ser representable**, así que no hay nada que validar ahí. Y arregla el empaquetado: una Barba de 15 a las 10:00 hace arrancar al siguiente 10:15, sin esperar al próximo múltiplo de la grilla de 20 minutos.

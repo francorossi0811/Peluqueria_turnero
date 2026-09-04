@@ -32,7 +32,7 @@ export function ModalEditarTurno({ turno, onClose }: ModalEditarTurnoProps) {
   // endpoint del cliente, así que le sobraban los 30 minutos de antelación.
   const disponibilidadQuery = useQuery({
     queryKey: ['disponibilidad-admin', turno.servicio.id, desde, hasta],
-    queryFn: () => obtenerDisponibilidadAdmin(turno.servicio.id, desde, hasta),
+    queryFn: () => obtenerDisponibilidadAdmin([turno.servicio.id], desde, hasta),
   })
 
   const editarMutation = useMutation({

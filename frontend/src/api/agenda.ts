@@ -2,6 +2,7 @@ import { apiClient } from './client'
 import type {
   DatosCobro,
   EditarTurno,
+  NuevoGrupoManual,
   NuevoTurnoManual,
   TurnoAdmin,
 } from '../types/api'
@@ -33,6 +34,15 @@ export async function cargarTurnoManual(
   datos: NuevoTurnoManual,
 ): Promise<TurnoAdmin> {
   const { data } = await apiClient.post<TurnoAdmin>('/admin/turnos', datos)
+  return data
+}
+
+/** HU-31 — El bloque de turnos seguidos, del lado de Ariel. Ruta aparte de la pública: es
+ * la ruta la que dice quién crea el turno. */
+export async function cargarTurnosEnGrupoManual(
+  datos: NuevoGrupoManual,
+): Promise<TurnoAdmin[]> {
+  const { data } = await apiClient.post<TurnoAdmin[]>('/admin/turnos/grupo', datos)
   return data
 }
 
