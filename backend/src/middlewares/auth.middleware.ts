@@ -32,6 +32,25 @@ export async function requireAuth(
   res: Response,
   next: NextFunction,
 ) {
+  // ⚠️ **Ninguna respuesta autenticada se puede guardar en la caché del navegador**, y no
+  // es una optimización al revés: es lo que evita un bug que se comió una tarde entera el
+  // 4/9/2026. Express pone un `ETag` en cada `res.json()` y no pone ningún `Cache-Control`,
+  // así que el navegador guardaba estas respuestas en disco —con el `X-Token-Renovado`
+  // adentro, que es una credencial— y sin `Vary: Authorization` esa copia no quedaba atada
+  // a la sesión. Al revalidar, el `304` no reenvía el header, y por las reglas de HTTP el
+  // navegador conserva el de la copia vieja: al panel le llegaba un `X-Token-Renovado` de
+  // hacía 16 días, de otra cuenta y ya vencido, que pisaba el token recién emitido. El
+  // síntoma era "entro con cualquier cuenta y al tocar algo me echa", en una sola máquina.
+  //
+  // `no-store` (y no `no-cache`) porque lo que hace falta es que **no se guarde**, no que
+  // se revalide: revalidar es justamente el paso que resucitaba el header viejo. Va antes
+  // de cualquier `return` para que también cubra las respuestas 401.
+  //
+  // De paso tapa un agujero de privacidad que estaba al lado: la agenda cacheada de una
+  // cuenta se le podía servir a otra en el mismo navegador, porque la entrada de caché se
+  // indexa por URL y no por quién la pidió.
+  res.setHeader('Cache-Control', 'no-store')
+
   const header = req.headers.authorization
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null
 

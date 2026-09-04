@@ -28,6 +28,19 @@
   guardado. Así la sesión se extiende sola mientras Ariel use el panel, sin endpoint de
   refresh ni cookies. El header está declarado en `Access-Control-Expose-Headers`, sin lo
   cual el browser no podría leerlo cuando el frontend está en otro dominio.
+  - ⚠️ **El cliente NO debe reemplazarlo a ciegas.** Solo si el token que viene se puede
+    leer, no está vencido, es de la misma cuenta (`sub`) y su `iat` es **estrictamente
+    mayor** que el del token guardado. El "debe" de arriba, tomado literal, causó un bug
+    de producción el 4/9/2026: un `X-Token-Renovado` de 16 días atrás, replayed desde la
+    caché HTTP del navegador, pisaba el token recién emitido y deslogueaba en loop.
+- **Ninguna respuesta de `/api/admin/*` se puede cachear.** Todas salen con
+  `Cache-Control: no-store`, incluidos los `401`. No es una optimización al revés: son
+  respuestas que llevan datos personales y, cuando renuevan, una **credencial** en un
+  header. Express pone un `ETag` y ningún `Cache-Control`, así que sin esto el navegador
+  las guardaba en disco; y como la entrada de caché se indexa por URL y no por quién la
+  pidió (no hay `Vary: Authorization`), la agenda de una cuenta se le podía servir a otra
+  en el mismo navegador. Al revalidar, el `304` no reenvía los headers, y el navegador
+  conserva los de la copia vieja — de ahí salía el token replayed de la viñeta anterior.
 - **Invalidación por cambio de contraseña (HU-16):** un token emitido antes del último
   cambio de contraseña se rechaza con `401 TOKEN_INVALIDO`, aunque todavía no haya
   vencido.

@@ -5,6 +5,7 @@ import {
   marcarSesionVencida,
   setToken,
 } from '../lib/authStorage'
+import { estaVencido, leerPayload } from '../lib/jwt'
 
 /**
  * ¿Este 401 tiene que cerrar la sesión?
@@ -27,6 +28,66 @@ export function debeCerrarSesion(
   return tokenEnviado === tokenActual
 }
 
+/**
+ * ¿Este `X-Token-Renovado` se puede guardar? (HU-15, renovación deslizante.)
+ *
+ * ⚠️ **El header no alcanza como prueba de que la renovación es de ahora.** Se descubrió
+ * en producción el 4/9/2026, y el síntoma era "entro con cualquier cuenta, toco cualquier
+ * cosa y me echa" — pero solo en una computadora, nunca en incógnito ni en el celular. El
+ * rastro, capturado en el navegador, fue este: el login guardaba un token válido y 7
+ * segundos después **otro `setToken` lo pisaba con un token de otra cuenta emitido 16 días
+ * antes y vencido hacía 9**. `RequireAuth` leía ese y mandaba al login.
+ *
+ * El header venía de la **caché HTTP del navegador**, no del servidor:
+ *
+ * 1. Las respuestas del panel viajaban con `ETag` y sin `Cache-Control`, así que el
+ *    navegador las guardaba en disco — con el `X-Token-Renovado` adentro, que es una
+ *    credencial.
+ * 2. Sin `Vary: Authorization`, esa entrada no estaba atada a la sesión: la misma URL con
+ *    otra cuenta la reusaba.
+ * 3. Al revalidar, el backend contestaba `304` sin el header, y por las reglas de HTTP el
+ *    navegador entrega la respuesta guardada fusionándole los headers del `304`: los que
+ *    el `304` no trae **se conservan de la copia vieja**.
+ *
+ * La causa raíz se tapó en el backend (`Cache-Control: no-store` en `requireAuth`), pero
+ * esta guarda se queda igual, por dos motivos: las copias ya cacheadas siguen vivas en los
+ * navegadores hasta que caduquen, y **un token es lo único que decide quién sos** — no
+ * puede depender de que ningún intermediario se porte bien.
+ *
+ * Las cuatro condiciones, y por qué cada una:
+ *
+ * - El request salió con el token que hoy está guardado. Es la guarda original: una
+ *   respuesta en vuelo de una sesión ya cerrada no puede revivirla pisando la nueva.
+ * - El token renovado se puede leer y **no está vencido**. Cambiar un token bueno por uno
+ *   vencido es exactamente el bug de arriba.
+ * - Es de la **misma cuenta** (`sub`). Sin esto, una respuesta cacheada de la sesión de
+ *   Ariel te cambia de identidad en silencio mientras estás logueado como Franco.
+ * - Su `iat` es **estrictamente mayor**. Una renovación de verdad siempre es más nueva;
+ *   una copia vieja replayed desde la caché nunca lo es. Es la condición que ataja el caso
+ *   feo que las otras dejan pasar: un token viejo que todavía **no** venció, que se vería
+ *   sano y solo acortaría la sesión sin que nada lo delate.
+ *
+ * Ante la duda no se guarda nada: el peor caso es que la sesión no se extienda en este
+ * request, y el siguiente la renueva bien.
+ */
+export function debeGuardarRenovacion(
+  renovado: unknown,
+  tokenEnviado: string,
+  tokenActual: string | null,
+): boolean {
+  if (typeof renovado !== 'string' || !renovado) return false
+  if (!tokenActual) return false
+  if (tokenEnviado !== tokenActual) return false
+
+  const nuevo = leerPayload(renovado)
+  const actual = leerPayload(tokenActual)
+  if (!nuevo?.iat || !actual?.iat) return false
+  if (!nuevo.sub || nuevo.sub !== actual.sub) return false
+  if (estaVencido(renovado)) return false
+
+  return nuevo.iat > actual.iat
+}
+
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
 })
@@ -39,6 +100,13 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+/** El token con el que salió el request, tal como lo dejó el interceptor de arriba. */
+function tokenDelRequest(headers: unknown): string {
+  const autorizacion = (headers as { Authorization?: unknown } | undefined)
+    ?.Authorization
+  return String(autorizacion ?? '').replace(/^Bearer /, '')
+}
+
 // Sesión vencida o token inválido: lo borramos y mandamos a Ariel a loguearse de nuevo.
 apiClient.interceptors.response.use(
   (response) => {
@@ -46,19 +114,17 @@ apiClient.interceptors.response.use(
     // backend manda uno nuevo en este header y acá lo guardamos. Mientras Ariel use el
     // panel, la sesión no vence nunca — sin timers ni requests extra.
     //
-    // ⚠️ Solo se acepta la renovación si el request salió con el token que HOY está
-    // guardado. Sin esta comparación, una respuesta que quedó en vuelo de una sesión ya
-    // cerrada revive esa sesión pisando la nueva: pasó en producción al cambiar de
-    // cuenta: el token viejo (pasada la mitad de su vida, así que el backend lo renovaba
-    // en cada respuesta) volvía a escribirse encima del recién emitido, y el panel
-    // quedaba pegado a la cuenta anterior sin que nada lo delatara.
-    const renovado = response.headers['x-token-renovado']
-    const enviado = String(response.config.headers?.Authorization ?? '').replace(
-      /^Bearer /,
-      '',
-    )
-    if (typeof renovado === 'string' && renovado && enviado === getToken()) {
-      setToken(renovado)
+    // ⚠️ Quién decide si se guarda es `debeGuardarRenovacion`, no este `if`: el header
+    // solo, sin mirar qué trae adentro, alcanzó para deslogear a Franco en un loop. Ver
+    // el comentario largo de esa función.
+    if (
+      debeGuardarRenovacion(
+        response.headers['x-token-renovado'],
+        tokenDelRequest(response.config.headers),
+        getToken(),
+      )
+    ) {
+      setToken(response.headers['x-token-renovado'] as string)
     }
     return response
   },
@@ -82,11 +148,13 @@ apiClient.interceptors.response.use(
     // El arreglo del camino de éxito se hizo en su momento sin mirar este, que es su
     // espejo exacto: los dos deciden sobre la sesión a partir de una respuesta que puede
     // venir de otra.
-    const enviado = String(error.config?.headers?.Authorization ?? '').replace(
-      /^Bearer /,
-      '',
-    )
-    if (!debeCerrarSesion(error.response?.status, enviado, getToken())) {
+    if (
+      !debeCerrarSesion(
+        error.response?.status,
+        tokenDelRequest(error.config?.headers),
+        getToken(),
+      )
+    ) {
       return Promise.reject(error)
     }
 
