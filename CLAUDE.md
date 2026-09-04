@@ -822,6 +822,87 @@ notificaciones que ya llegaron, no. Lo mismo con WhatsApp: el backend local tien
 `WHATSAPP_TOKEN` cargado e intentó los tres avisos por la Cloud API, que rebotaron con
 `(#131030) Recipient phone number not in allowed list` — el número de prueba de Meta.
 
+### Editar etiquetas, y el lado del cliente en mayúscula (4/9/2026) ✅
+
+Tres pedidos de Franco antes de que la app salga al mercado. El primero era un bug real y
+los otros dos son de presentación.
+
+**1. "No puedo cambiar el color de una etiqueta, o no queda guardado."**
+
+⚠️ **La causa, medida en el navegador y no deducida: el selector de color mandaba un PATCH
+por cada movimiento del cursor.** El `<input type="color">` de cada fila estaba atado
+directo al servidor (`value={etiqueta.color}`) y guardaba en el `onChange`, que en un
+selector de color **corre continuo mientras arrastrás**, no al soltar. Un solo cambio de
+color disparó **31 PATCH y 31 GET**, más los preflight de CORS: unos 90 requests. De ahí
+salían los dos síntomas a la vez:
+
+- *"no puedo cambiarlo"* — cada respuesta que volvía reseteaba el input, que está atado al
+  valor del servidor, con el selector todavía abierto; y
+- *"no queda guardado"* — los PATCH viajan en paralelo, así que **el último que elegís no
+  es necesariamente el último que llega**. Contra localhost gana casi siempre; contra
+  Render, con latencia de verdad, gana cualquiera.
+
+El arreglo no es un debounce: es que **el color deje de ser estado del servidor mientras se
+lo elige**. La fila tiene ahora un modo edición explícito (Editar → nombre y color en
+estado local, con la insignia de verdad como vista previa → Guardar / Cancelar) y **un solo
+PATCH con los dos campos**. Verificado: 31 movimientos de color más un renombre = **1
+PATCH**, y en la base quedó exactamente el color elegido al final.
+
+**2. "Si las borro no se eliminan."** ⚠️ **El backend siempre borró bien** —verificado por
+API y contra la base—; lo que fallaba era el gesto. La confirmación aparecía **como dos
+botones en el lugar donde acababa de estar "Borrar"**, así que tocar "Borrar" y seguir se
+comía el segundo paso sin que nada lo delatara: la etiqueta seguía ahí, y desde afuera eso
+se ve idéntico a un borrado que no funciona. Ahora es una banda propia que además dice qué
+se lleva puesto ("Se la vas a sacar a 3 clientes"), y para eso `GET /admin/etiquetas`
+devuelve un contador — ver `Docs/especificacion-api.md`.
+
+⚠️ **Y de paso apareció un defecto que nadie había reportado**: borrar la etiqueta que
+estaba puesta como **filtro** en Clientes dejaba el filtro apuntando a un id inexistente.
+La lista quedaba vacía **y el chip para desactivarlo había desaparecido junto con la
+etiqueta**, así que no había forma de volver salvo recargar. Lo suelta `onBorrada` en
+`ClientesPage`.
+
+**Cada fila tiene sus propias mutaciones** en vez de compartir las del modal. Eso da gratis
+lo que antes se reconstruía comparando `variables`: el "Guardando…" y **el error caen en la
+fila que falló**. El cartel de error del modal vive arriba de todo, así que un error sobre
+la última etiqueta de una lista larga quedaba fuera de la vista — otra vez, indistinguible
+de que no pasara nada.
+
+**3. El lado del cliente en mayúscula, y el CTA en rojo.**
+
+⚠️ **El panel ya estaba entero en mayúscula** y eso no estaba escrito acá: Ariel lo pidió
+por su vista, y se resuelve con `:root[data-panel='admin']` en `index.css` (más un piso de
+16 px), con el atributo puesto por `useTemaAdmin` según la ruta. El lado del cliente hablaba
+con otra voz. Ahora **los botones** (`BTN_OUTLINE`, `BTN_SOLIDO`, `BTN_ROJO`, `BTN_GHOST`)
+y **el nombre del servicio en la tarjeta de la landing** van en mayúscula.
+
+- Va en las constantes de botón y **no** con una regla global sobre `button` como en el
+  panel, porque del lado del cliente **no** va todo en mayúscula: van los botones y los
+  servicios, no los párrafos. Los links de texto ("Servicios", "Contacto", "Volver al
+  inicio") quedan como están: son navegación, no acciones.
+- Es `text-transform`, o sea **el dato no se toca**: en "Horarios y servicios" Ariel sigue
+  viendo y editando el nombre tal como lo escribió. Mismo criterio que los campos que se
+  tipean en el panel, donde la regla explícitamente deja los `input` en minúscula.
+- ⚠️ `whitespace-nowrap` va junto con la mayúscula y no es decoración: el mismo texto ocupa
+  más ancho en mayúscula y con `tracking-wide`, y a 375 px "Reservar turno" pasó a partirse
+  en **dos renglones** en el encabezado. Un botón de dos líneas se lee como algo roto. Se
+  vio midiendo, no compilando.
+- **El CTA rojo**: token `--color-rojo` (#c0392b) y `BTN_ROJO`, en los **tres** botones
+  "Reservar turno" de la landing. Es el mismo valor que `ahora` y `ausente` y **se declara
+  aparte igual**, por la razón de siempre en esta paleta: comparten el rojo pero no el
+  significado, y cambiarle el tono al CTA no tiene por qué tocarle la línea de la hora
+  actual a Ariel. Contra blanco da 5.9:1, o sea que pasa WCAG AA.
+
+**Verificado en el navegador y contra la base**, sobre la branch descartable
+`prueba-etiquetas-4sep` (borrada al terminar): el bug del color reproducido **antes** del
+arreglo (31 PATCH) y medido **después** (1 PATCH); el nombre y el color guardados juntos; la
+confirmación mostrando el contador correcto (3, cruzado con un `count` en SQL); el filtro
+soltándose solo al borrar su etiqueta; el 409 de nombre duplicado saliendo **en la fila** y
+sin perder lo tipeado; 375 px sin scroll horizontal en el modal y en la landing; los tres
+CTA midiendo `rgb(192,57,43)` sobre blanco y en una sola línea (186 px); y los cuatro
+servicios con `text-transform: uppercase` pero el texto intacto en el DOM. Cero errores de
+consola. 202 tests del backend y 20 del frontend en verde.
+
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 
 Seña por Mercado Pago al reservar. **No lo pidió Ariel**; queda anotado porque es la continuación natural. Traería cuenta de MP, webhooks de pago, reembolsos al cancelar y qué hacer con un pago pendiente — o sea, trámites externos como los de WhatsApp. También quedaron afuera los pagos parciales, el historial de precios y la facturación.

@@ -109,6 +109,17 @@ export interface Etiqueta {
   clave?: string | null
 }
 
+/** La etiqueta con el dato que solo hace falta para administrarla: a cuántas fichas está
+ * puesta. Lo devuelve `/admin/etiquetas`, y lo usa la confirmación de borrado para decir
+ * qué se lleva puesto.
+ *
+ * Va aparte de `Etiqueta` y no como campo opcional a propósito: las insignias que vienen
+ * dentro de un cliente o de un turno **no** traen el contador, y un opcional dejaría que
+ * cualquier pantalla lo leyera como `undefined` sin que nada falle. */
+export interface EtiquetaConUso extends Etiqueta {
+  clientes: number
+}
+
 /** HU-25 — La ficha, tal como viaja dentro de un turno. Lo justo para dibujar el apodo y
  * las insignias sin tener que pedir nada más. */
 export interface ClienteDeTurno {

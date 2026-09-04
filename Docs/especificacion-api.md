@@ -598,9 +598,9 @@ y **no crea nada** — sin ese chequeo sería un alta abierta de suscripciones a
 | GET | `/api/admin/clientes?buscar=&etiquetaId=` | Las fichas, con visitas, última visita y próximo turno |
 | GET | `/api/admin/clientes/:id` | La ficha más su historial completo de turnos |
 | PATCH | `/api/admin/clientes/:id` | `{ "apodo", "notas", "etiquetaIds": [...] }`, los tres opcionales |
-| GET | `/api/admin/etiquetas` | Las etiquetas configuradas |
+| GET | `/api/admin/etiquetas` | Las etiquetas configuradas, con `clientes` (a cuántas fichas está puesta cada una) |
 | POST | `/api/admin/etiquetas` | `{ "nombre", "color": "#rrggbb" }` |
-| PATCH | `/api/admin/etiquetas/:id` | Renombrar o recolorear |
+| PATCH | `/api/admin/etiquetas/:id` | Renombrar o recolorear (los dos campos opcionales, pero al menos uno) |
 | DELETE | `/api/admin/etiquetas/:id` | Borra la etiqueta y sus asignaciones (`204`) |
 
 **El `buscar` pega contra apodo, nombre y teléfono a la vez**, porque Ariel no piensa en
@@ -612,6 +612,15 @@ buscar "351 459" no encontraría nada.
 horario laboral, y por el mismo motivo — evita exponer un alta y una baja por separado
 para algo que la interfaz siempre manda completo. Un id que no existe responde
 `404 ETIQUETA_NO_ENCONTRADA` y no aplica ningún cambio.
+
+⚠️ **Las tres puertas de etiquetas devuelven la misma forma** —`{ id, nombre, clave,
+color, clientes }`— y no la fila cruda de la base. `clientes` es el contador de fichas que
+la tienen puesta, y existe para una sola pantalla y un solo momento: la confirmación de
+borrado. Borrar una insignia es lo único de esa pantalla que se lleva algo puesto (las
+asignaciones se van por el `ON DELETE CASCADE`), y hasta el 4/9/2026 la confirmación
+preguntaba a ciegas. Que las tres respuestas compartan forma no es prolijidad: si `POST` o
+`PATCH` devolvieran la fila sin el contador, la pantalla lo leería como `undefined` justo
+ahí.
 
 Un nombre de etiqueta repetido responde `409 ETIQUETA_DUPLICADA`, y un color que no sea
 un hexadecimal de seis dígitos, `400 PARAMETROS_INVALIDOS`. El color lo elige Ariel

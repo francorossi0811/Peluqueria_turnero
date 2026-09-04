@@ -133,7 +133,16 @@ export function ClientesPage() {
         </Modal>
       )}
       {modalEtiquetas && (
-        <ModalEtiquetas onClose={() => setModalEtiquetas(false)} />
+        <ModalEtiquetas
+          onClose={() => setModalEtiquetas(false)}
+          // ⚠️ Si el filtro apuntaba a la etiqueta que se acaba de borrar, hay que
+          // soltarlo acá: el chip para desactivarlo se dibuja a partir de la lista de
+          // etiquetas, así que desaparece junto con ella y deja la lista filtrada por un
+          // id que ya no existe —vacía— y sin ningún control para volver atrás.
+          onBorrada={(id) =>
+            setEtiquetaId((actual) => (actual === id ? null : actual))
+          }
+        />
       )}
     </div>
   )

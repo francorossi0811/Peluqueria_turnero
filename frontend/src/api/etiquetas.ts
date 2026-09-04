@@ -1,8 +1,8 @@
 import { apiClient } from './client'
-import type { Etiqueta } from '../types/api'
+import type { EtiquetaConUso } from '../types/api'
 
-export async function obtenerEtiquetas(): Promise<Etiqueta[]> {
-  const { data } = await apiClient.get<{ etiquetas: Etiqueta[] }>(
+export async function obtenerEtiquetas(): Promise<EtiquetaConUso[]> {
+  const { data } = await apiClient.get<{ etiquetas: EtiquetaConUso[] }>(
     '/admin/etiquetas',
   )
   return data.etiquetas
@@ -11,16 +11,16 @@ export async function obtenerEtiquetas(): Promise<Etiqueta[]> {
 export async function crearEtiqueta(datos: {
   nombre: string
   color: string
-}): Promise<Etiqueta> {
-  const { data } = await apiClient.post<Etiqueta>('/admin/etiquetas', datos)
+}): Promise<EtiquetaConUso> {
+  const { data } = await apiClient.post<EtiquetaConUso>('/admin/etiquetas', datos)
   return data
 }
 
 export async function actualizarEtiqueta(
   id: string,
   datos: { nombre?: string; color?: string },
-): Promise<Etiqueta> {
-  const { data } = await apiClient.patch<Etiqueta>(
+): Promise<EtiquetaConUso> {
+  const { data } = await apiClient.patch<EtiquetaConUso>(
     `/admin/etiquetas/${id}`,
     datos,
   )

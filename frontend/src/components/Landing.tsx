@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Kicker } from './ui/Kicker'
-import { BTN_OUTLINE, BTN_GHOST } from './ui/estilosBoton'
+import { BTN_OUTLINE, BTN_ROJO } from './ui/estilosBoton'
 import { DIRECCION, TELEFONO_LEGIBLE, WHATSAPP_URL } from '../utils/contacto'
 import { urlDeFoto } from '../api/fotos'
 import { formatearPesos } from '../utils/dinero'
@@ -89,7 +89,7 @@ export function Landing({ query, onElegir }: LandingProps) {
           >
             Contacto
           </button>
-          <button onClick={() => scrollA('servicios')} className={BTN_OUTLINE}>
+          <button onClick={() => scrollA('servicios')} className={BTN_ROJO}>
             Reservar turno
           </button>
         </div>
@@ -110,10 +110,7 @@ export function Landing({ query, onElegir }: LandingProps) {
           {/* Un solo CTA: el "Ver servicios" que había al lado hacía exactamente lo
               mismo (scroll a #servicios), así que eran dos botones idénticos pegados. */}
           <div className="mt-6">
-            <button
-              onClick={() => scrollA('servicios')}
-              className={BTN_OUTLINE}
-            >
+            <button onClick={() => scrollA('servicios')} className={BTN_ROJO}>
               Reservar turno
             </button>
           </div>
@@ -204,7 +201,7 @@ export function Landing({ query, onElegir }: LandingProps) {
             >
               WhatsApp
             </a>
-            <button onClick={() => scrollA('servicios')} className={BTN_GHOST}>
+            <button onClick={() => scrollA('servicios')} className={BTN_ROJO}>
               Reservar turno
             </button>
           </div>
@@ -270,7 +267,12 @@ function ServicioCard({
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 p-4">
-        <h3 className="font-display text-xl text-[#f3f2f2]">
+        {/* ⚠️ En mayúscula por CSS, no en el dato (pedido de Franco, 4/9/2026, para que
+            el lado del cliente hable igual que el panel). `text-transform` no cambia lo
+            que hay en la base: en "Horarios y servicios" Ariel sigue viendo y editando el
+            nombre tal como lo escribió, que es justo lo que el proyecto ya decidió para
+            los campos que se tipean en el panel. */}
+        <h3 className="font-display text-xl tracking-wide text-[#f3f2f2] uppercase">
           {servicio.nombre}
         </h3>
         {/* El precio va en el mismo renglón que la duración y no en uno propio: la tarjeta

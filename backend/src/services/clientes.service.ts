@@ -301,8 +301,48 @@ export async function historialDeCliente(id: string) {
 
 // --- Etiquetas ---------------------------------------------------------------------
 
-export async function listarEtiquetas() {
-  return prisma.etiqueta.findMany({ orderBy: { nombre: 'asc' } })
+/** Una etiqueta tal como la ve el panel: la fila más **a cuántas fichas se la puso
+ * Ariel**.
+ *
+ * El contador existe para una sola pantalla y para un solo momento: la confirmación de
+ * borrado. Borrar una insignia es la única acción de esta pantalla que se lleva algo
+ * puesto —las asignaciones se van por el `onDelete: Cascade`— y hasta ahora la
+ * confirmación preguntaba a ciegas. "Se la vas a sacar a 3 clientes" es la diferencia
+ * entre confirmar y adivinar. */
+export interface EtiquetaConUso {
+  id: string
+  nombre: string
+  clave: string | null
+  color: string
+  clientes: number
+}
+
+type FilaConUso = Prisma.EtiquetaGetPayload<{
+  include: { _count: { select: { clientes: true } } }
+}>
+
+/** Lo que hay que pedirle a Prisma para poder armar el DTO de arriba. Está en una
+ * constante para que las tres puertas (listar, crear, editar) devuelvan la misma forma:
+ * si una se olvidara del contador, el frontend recibiría `undefined` justo en la
+ * confirmación de borrado. */
+const INCLUDE_USO = { _count: { select: { clientes: true } } } as const
+
+function etiquetaDto(fila: FilaConUso): EtiquetaConUso {
+  return {
+    id: fila.id,
+    nombre: fila.nombre,
+    clave: fila.clave,
+    color: fila.color,
+    clientes: fila._count.clientes,
+  }
+}
+
+export async function listarEtiquetas(): Promise<EtiquetaConUso[]> {
+  const filas = await prisma.etiqueta.findMany({
+    orderBy: { nombre: 'asc' },
+    include: INCLUDE_USO,
+  })
+  return filas.map(etiquetaDto)
 }
 
 /** Código de Prisma para violación de constraint único — acá, dos insignias con el mismo
@@ -314,9 +354,14 @@ function esNombreDuplicado(err: unknown): boolean {
   return (err as { code?: string })?.code === PRISMA_UNIQUE_VIOLATION
 }
 
-export async function crearEtiqueta(datos: { nombre: string; color: string }) {
+export async function crearEtiqueta(datos: {
+  nombre: string
+  color: string
+}): Promise<EtiquetaConUso> {
   try {
-    return await prisma.etiqueta.create({ data: datos })
+    return etiquetaDto(
+      await prisma.etiqueta.create({ data: datos, include: INCLUDE_USO }),
+    )
   } catch (err) {
     if (esNombreDuplicado(err)) throw new EtiquetaDuplicadaError()
     throw err
@@ -326,12 +371,18 @@ export async function crearEtiqueta(datos: { nombre: string; color: string }) {
 export async function actualizarEtiqueta(
   id: string,
   datos: { nombre?: string; color?: string },
-) {
+): Promise<EtiquetaConUso> {
   const etiqueta = await prisma.etiqueta.findUnique({ where: { id } })
   if (!etiqueta) throw new EtiquetaNoEncontradaError()
 
   try {
-    return await prisma.etiqueta.update({ where: { id }, data: datos })
+    return etiquetaDto(
+      await prisma.etiqueta.update({
+        where: { id },
+        data: datos,
+        include: INCLUDE_USO,
+      }),
+    )
   } catch (err) {
     if (esNombreDuplicado(err)) throw new EtiquetaDuplicadaError()
     throw err

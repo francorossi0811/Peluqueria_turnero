@@ -64,6 +64,16 @@
      tema, y este necesita aclararse sobre el fondo oscuro para no apagarse. */
   --color-ahora: #c0392b;
 
+  /* El rojo del botón "Reservar turno" de la landing (4/9/2026, pedido de Franco antes de
+     salir al mercado): es el único CTA del sitio y tenía el mismo peso visual que el resto
+     de los botones ámbar, así que no se distinguía de "WhatsApp" o "Servicios".
+
+     Vale lo mismo que `ahora` y `ausente` y se declara aparte igual, por el motivo de
+     siempre en esta paleta: comparten el rojo pero no el significado, y cambiarle el tono
+     al CTA no tiene por qué cambiarle la línea de la hora actual a Ariel. Contra el
+     blanco da 5.9:1, o sea que el texto pasa WCAG AA. */
+  --color-rojo: #c0392b;
+
   /* Estado "ausente" (HU-12): rojo. Es el mismo rojo que `ahora` a propósito y no por
      descuido — no hay dos rojos en la paleta. No se confunden porque aparecen en formas
      distintas: `ahora` es una línea de 2 px y una hora del margen, `ausente` es un bloque
