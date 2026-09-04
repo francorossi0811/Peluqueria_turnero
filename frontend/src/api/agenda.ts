@@ -97,6 +97,23 @@ export async function registrarCobroTurno(
   return data
 }
 
+/** Corrige el nombre de un turno ya cargado (4/9/2026).
+ *
+ * Es la contracara de que el bloque del panel pida **un solo nombre**: sin esto, cargar
+ * cuatro turnos seguidos dejaría cuatro veces el mismo nombre y ninguna forma de
+ * arreglarlo. No toca la ficha del cliente — la identidad es el teléfono, y para renombrar
+ * a la persona está el apodo. */
+export async function cambiarNombreDeTurno(
+  id: string,
+  clienteNombre: string,
+): Promise<TurnoAdmin> {
+  const { data } = await apiClient.patch<TurnoAdmin>(
+    `/admin/turnos/${id}/nombre`,
+    { clienteNombre },
+  )
+  return data
+}
+
 /** HU-25 — Le carga el teléfono a un turno que se guardó sin él (HU-08).
  *
  * Al guardarlo, el backend lo engancha con su ficha: es lo que hace que los turnos que

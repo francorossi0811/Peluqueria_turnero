@@ -932,6 +932,39 @@ export async function registrarCobro(
  * Sin filtro por estado: un turno ya realizado es justamente donde más ganas hay de
  * completar el número, porque la persona ya vino y Ariel la quiere en su lista.
  */
+/**
+ * Cambiarle el nombre a un turno ya cargado (4/9/2026).
+ *
+ * Existe por lo mismo que `cargarTelefonoDelTurno` (HU-25) y `registrarCobro` (HU-27): un
+ * dato que se puede guardar incompleto necesita una puerta para completarlo después, o el
+ * turno queda mal para siempre. Acá el que lo deja incompleto es el bloque del panel, que
+ * desde hoy pide **un solo nombre** para los N turnos — sin esta función, Ariel se quedaba
+ * con cuatro turnos que dicen lo mismo y ninguna forma de corregirlos sin entrar a la base.
+ *
+ * Endpoint propio y no dentro de `editarTurno`, con el mismo criterio que el teléfono:
+ * aquel mueve el turno en el tiempo y tiene que revalidar disponibilidad; esto solo corrige
+ * una etiqueta y no le puede pisar el horario a nadie.
+ *
+ * ⚠️ **No toca la ficha del cliente.** La identidad es el teléfono normalizado (HU-25), no
+ * el nombre, y el apodo de la ficha es lo que manda en la interfaz. Cambiar acá el nombre
+ * del turno es corregir *ese* turno, no renombrar a la persona — para eso está el apodo.
+ *
+ * Sin filtro por estado, igual que el teléfono: un turno ya realizado es justamente donde
+ * más ganas hay de dejar bien anotado quién vino.
+ */
+export async function cambiarNombreDelTurno(
+  id: string,
+  clienteNombre: string,
+): Promise<TurnoConCliente> {
+  await obtenerTurno(id)
+
+  return prisma.turno.update({
+    where: { id },
+    include: INCLUDE_CLIENTE,
+    data: { clienteNombre },
+  })
+}
+
 export async function cargarTelefonoDelTurno(
   id: string,
   telefono: string,

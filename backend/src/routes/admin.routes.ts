@@ -5,6 +5,7 @@ import {
   getBuscarTurnos,
   patchCobroTurno,
   patchEstadoTurno,
+  patchNombreTurno,
   patchTelefonoTurno,
   patchTurno,
   postCancelarTurnoAdmin,
@@ -130,6 +131,7 @@ adminRouter.post(
   postCancelarTurnoAdmin,
 )
 adminRouter.patch('/admin/turnos/:id/estado', requireAuth, patchEstadoTurno)
+adminRouter.patch('/admin/turnos/:id/nombre', requireAuth, patchNombreTurno)
 adminRouter.patch('/admin/turnos/:id/telefono', requireAuth, patchTelefonoTurno)
 // HU-27 — Le carga o le corrige el cobro a un turno ya realizado. El cobro del momento
 // va dentro del PATCH de estado de arriba, que es cuando Ariel lo hace de verdad.

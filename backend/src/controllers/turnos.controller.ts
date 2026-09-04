@@ -4,6 +4,7 @@ import {
   buscarTurnos,
   cancelarTurno,
   cancelarTurnoAdmin,
+  cambiarNombreDelTurno,
   cargarTelefonoDelTurno,
   idsNuevosDespuesDe,
   crearTurno,
@@ -125,8 +126,11 @@ const grupoSchema = z.object({
     .array(
       z.object({
         servicioId: z.uuid(),
+        // El mensaje del `z.string()` no es decorativo: sin él, un turno del bloque sin
+        // nombre respondía "Invalid input: expected string, received undefined" —crudo de
+        // zod y en inglés—, que es exactamente lo que se corrigió en `esquemasFecha.ts`.
         clienteNombre: z
-          .string()
+          .string({ error: 'Falta el nombre de uno de los turnos.' })
           .trim()
           .min(1, 'Falta el nombre.')
           .refine(esNombreValido, MENSAJE_NOMBRE_INVALIDO),
@@ -190,6 +194,20 @@ const bodyManualSchema = bodySchema.extend({
  * pida un cálculo absurdo. */
 const grupoManualSchema = grupoSchema.extend({
   origen: z.enum(['presencial', 'llamada', 'whatsapp']),
+  // ⚠️ **Un solo nombre para todo el bloque** (4/9/2026, pedido de Franco). Es la tercera
+  // asimetría panel/cliente de este endpoint, y va por lo mismo que las otras dos: Ariel
+  // carga el bloque con la persona enfrente. Tipear cuatro nombres con las manos ocupadas
+  // es lento, y mientras tanto el rato del medio se lo puede llevar alguien que reserva por
+  // la web — el bloque entra entero o no entra (es una transacción), así que cada segundo
+  // de tipeo es ventana de choque. Con un nombre la ventana baja de ~40 segundos a ~10.
+  //
+  // El flujo **público no cambia**: ahí el bloque es una familia anotándose junta, son
+  // personas distintas y cada una pone la suya.
+  //
+  // ⚠️ Esto solo tiene sentido junto con `PATCH /admin/turnos/:id/nombre`: sin poder
+  // renombrar después, guardar cuatro turnos que dicen lo mismo sería una puerta de una
+  // sola dirección.
+  clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
   clienteTelefono: z.preprocess(
     (v) => (v === '' || v === null ? undefined : v),
     z
@@ -203,7 +221,13 @@ const grupoManualSchema = grupoSchema.extend({
     .array(
       z.object({
         servicioId: z.uuid(),
-        clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
+        // Opcional: si viene, gana sobre el nombre del bloque. Así el endpoint sigue
+        // aceptando un nombre por turno para quien lo quiera mandar, sin que la pantalla
+        // tenga que pedirlo.
+        clienteNombre: z.preprocess(
+          (v) => (v === '' || v === null ? undefined : v),
+          z.string().trim().min(1, 'Falta el nombre.').optional(),
+        ),
       }),
     )
     .min(1, 'Elegí al menos un turno.')
@@ -524,8 +548,23 @@ export async function postTurnosEnGrupoManual(req: Request, res: Response) {
     return
   }
 
-  const { clienteTelefono, clienteEmail, fecha, hora, turnos, origen } =
-    parsed.data
+  const {
+    clienteTelefono,
+    clienteEmail,
+    clienteNombre,
+    fecha,
+    hora,
+    turnos,
+    origen,
+  } = parsed.data
+
+  // El nombre del bloque se reparte acá y no en el service: abajo de esta línea los dos
+  // grupos —el público y el de Ariel— vuelven a ser exactamente la misma forma de datos, y
+  // `crearTurnosEnGrupo` no tiene que saber que existe esta diferencia.
+  const turnosConNombre = turnos.map((t) => ({
+    servicioId: t.servicioId,
+    clienteNombre: t.clienteNombre ?? clienteNombre,
+  }))
 
   // HU-08 — Igual que en `postTurnoManual`: se valida acá para poder explicarlo. El service
   // lo vuelve a chequear, pero desde adentro solo sabe tirar `HorarioNoDisponibleError`, y
@@ -544,7 +583,7 @@ export async function postTurnosEnGrupoManual(req: Request, res: Response) {
       clienteEmail,
       fecha: fechaDesdeIso(fecha),
       hora,
-      turnos,
+      turnos: turnosConNombre,
       origen,
     })
     res.status(201).json(creados.map(turnoAdminDto))
@@ -877,6 +916,41 @@ export async function postCancelarTurnoAdmin(req: Request, res: Response) {
 // un número que pasaba la regla laxa entraba en la reserva, se guardaba sin ficha porque
 // `vincularCliente` no lo podía normalizar, y cuando Ariel lo quería completar a mano este
 // endpoint le decía "inválido" sobre un número que el sistema ya había aceptado.
+// El nombre que corrige Ariel desde la agenda. **Sin la regla de "solo letras"**, por el
+// mismo motivo que en `bodyManualSchema`: acá anota lo que le sirve para reconocer a la
+// persona ("Señora del 3B", "Juan 2"), y esa es su agenda, no un formulario.
+const nombreSchema = z.object({
+  clienteNombre: z.string().trim().min(1, 'Falta el nombre.'),
+})
+
+export async function patchNombreTurno(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = nombreSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  try {
+    const turno = await cambiarNombreDelTurno(
+      idParsed.data.id,
+      bodyParsed.data.clienteNombre,
+    )
+    res.json(turnoAdminDto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
 const telefonoSchema = z.object({
   clienteTelefono: z
     .string()

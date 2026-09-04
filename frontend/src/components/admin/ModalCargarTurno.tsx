@@ -6,10 +6,7 @@ import { Button } from '../ui/Button'
 import { GrillaHorarios } from '../GrillaHorarios'
 import { obtenerServicios } from '../../api/servicios'
 import { obtenerDisponibilidadAdmin } from '../../api/disponibilidad'
-import {
-  cargarTurnoManual,
-  cargarTurnosEnGrupoManual,
-} from '../../api/agenda'
+import { cargarTurnoManual, cargarTurnosEnGrupoManual } from '../../api/agenda'
 import { elegirContacto, soportaElegirContacto } from '../../lib/contactos'
 import { useMinutosAhora } from '../../lib/useMinutosAhora'
 import {
@@ -41,7 +38,6 @@ interface ModalCargarTurnoProps {
  * duraciones, igual que del lado del cliente. */
 interface TurnoDelBloque {
   servicio: Servicio
-  nombre: string
 }
 
 /** Los minutos que ocupa el bloque completo — lo que se le pide a la disponibilidad. */
@@ -72,6 +68,12 @@ export function ModalCargarTurno({
   const [turnos, setTurnos] = useState<TurnoDelBloque[]>([])
   const [fecha, setFecha] = useState<string | null>(fechaInicial ?? null)
   const [hora, setHora] = useState<string | null>(null)
+  // ⚠️ **Uno solo para todo el bloque** (4/9/2026). Antes vivía dentro de cada
+  // `TurnoDelBloque` y había que tipear N. Ariel carga esto con la persona enfrente, y
+  // mientras tipea, un cliente de la web le puede tomar un rato del medio — el bloque entra
+  // entero o no entra, así que cada segundo de tipeo es ventana de choque. Lo que anote se
+  // corrige turno por turno desde la agenda (`cambiarNombreDeTurno`).
+  const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
   const [clienteEmail, setClienteEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +131,7 @@ export function ModalCargarTurno({
           servicioId: turnos[0].servicio.id,
           fecha: fecha!,
           hora: hora!,
-          clienteNombre: turnos[0].nombre,
+          clienteNombre: clienteNombre.trim(),
           clienteTelefono: telefono,
           clienteEmail: email,
           origen,
@@ -138,13 +140,11 @@ export function ModalCargarTurno({
       return cargarTurnosEnGrupoManual({
         fecha: fecha!,
         hora: hora!,
+        clienteNombre: clienteNombre.trim(),
         clienteTelefono: telefono,
         clienteEmail: email,
         origen,
-        turnos: turnos.map((t) => ({
-          servicioId: t.servicio.id,
-          clienteNombre: t.nombre,
-        })),
+        turnos: turnos.map((t) => ({ servicioId: t.servicio.id })),
       })
     },
     onSuccess: () => {
@@ -158,7 +158,9 @@ export function ModalCargarTurno({
       if (datos?.codigo === 'HORARIO_NO_DISPONIBLE') {
         setError('Ese horario se acaba de ocupar. Elegí otro.')
         setHora(null)
-        void queryClient.invalidateQueries({ queryKey: ['disponibilidad-admin'] })
+        void queryClient.invalidateQueries({
+          queryKey: ['disponibilidad-admin'],
+        })
         return
       }
       // El backend valida el teléfono y el mail (backend/src/utils/validaciones.ts).
@@ -184,16 +186,9 @@ export function ModalCargarTurno({
       if (!contacto) return
       if (contacto.telefono) setClienteTelefono(contacto.telefono)
       // El nombre solo se completa si Ariel todavía no escribió uno, para no pisarle lo
-      // que ya venía tipeando. Con un bloque cae en el primero que esté vacío, que es el
-      // que va a estar tipeando cuando toca el selector.
-      if (contacto.nombre) {
-        setTurnos((prev) => {
-          const i = prev.findIndex((t) => !t.nombre.trim())
-          if (i === -1) return prev
-          return prev.map((t, j) =>
-            j === i ? { ...t, nombre: contacto.nombre! } : t,
-          )
-        })
+      // que ya venía tipeando.
+      if (contacto.nombre && !clienteNombre.trim()) {
+        setClienteNombre(contacto.nombre)
       }
     } catch {
       // Cancelar el selector nativo también entra por acá. No es un error que valga la
@@ -216,9 +211,9 @@ export function ModalCargarTurno({
   }, [horaInicial, fechaInicial, fecha, hora, disponibilidadQuery.data])
 
   // El teléfono ya no bloquea el alta: Ariel suele cargar el turno con el cliente
-  // enfrente y sin saberse el número. Con un bloque, hacen falta **todos** los nombres.
+  // enfrente y sin saberse el número. El nombre es **uno** aunque el bloque tenga seis.
   const listo =
-    turnos.length > 0 && fecha && hora && turnos.every((t) => t.nombre.trim())
+    turnos.length > 0 && fecha && hora && Boolean(clienteNombre.trim())
   const varios = turnos.length > 1
   const horasDelBloque = hora ? horariosDelBloque(turnos, hora) : []
 
@@ -244,8 +239,9 @@ export function ModalCargarTurno({
                 if (!elegido) return
                 setTurnos((prev) => {
                   const copia = [...prev]
-                  if (i < copia.length) copia[i] = { ...copia[i], servicio: elegido }
-                  else copia.push({ servicio: elegido, nombre: '' })
+                  if (i < copia.length)
+                    copia[i] = { ...copia[i], servicio: elegido }
+                  else copia.push({ servicio: elegido })
                   return copia
                 })
                 // Cambiar un servicio cambia la duración del bloque, así que la hora
@@ -275,7 +271,7 @@ export function ModalCargarTurno({
               onClick={() => {
                 setTurnos((prev) => [
                   ...prev,
-                  { servicio: prev[prev.length - 1].servicio, nombre: '' },
+                  { servicio: prev[prev.length - 1].servicio },
                 ])
                 setHora(null)
               }}
@@ -337,27 +333,31 @@ export function ModalCargarTurno({
 
         {fecha && hora && (
           <>
-            {turnos.map((t, i) => (
-              <label key={i} className="flex flex-col gap-1">
-                <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-                  {varios
-                    ? `Nombre · ${horasDelBloque[i]} (${t.servicio.nombre})`
-                    : 'Nombre y apellido'}
+            {/* Un campo, tenga el bloque un turno o seis. Con varios el label lo dice y
+                debajo van los horarios, para que se vea que el nombre es de todos. */}
+            <label className="flex flex-col gap-1">
+              <span className="text-tinta-tenue text-xs tracking-wide uppercase">
+                {varios
+                  ? `Nombre (para los ${turnos.length} turnos)`
+                  : 'Nombre y apellido'}
+              </span>
+              <input
+                required
+                autoFocus
+                value={clienteNombre}
+                onChange={(e) => setClienteNombre(e.target.value)}
+                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
+              />
+              {varios && (
+                <span className="text-tinta-tenue text-xs">
+                  {turnos
+                    .map((t, i) => `${horasDelBloque[i]} ${t.servicio.nombre}`)
+                    .join(' · ')}
+                  . Después podés cambiarle el nombre a cada uno desde la
+                  agenda.
                 </span>
-                <input
-                  required
-                  value={t.nombre}
-                  onChange={(e) =>
-                    setTurnos((prev) =>
-                      prev.map((x, j) =>
-                        j === i ? { ...x, nombre: e.target.value } : x,
-                      ),
-                    )
-                  }
-                  className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
-                />
-              </label>
-            ))}
+              )}
+            </label>
             <label className="flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-tinta-tenue text-xs tracking-wide uppercase">

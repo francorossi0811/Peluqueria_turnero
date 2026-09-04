@@ -79,6 +79,26 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
   - ⚠️ **`excedeLimiteSemanal` toma una LISTA de fechas nuevas, y ya no suma un `+1` fijo.** Con un bloque de tres el mismo día, aquel `+1` contaba 1 en vez de 3 y el tope no frenaba nada. Ahora las nuevas se cuentan dentro de la ventana, y el bucle se ancla en **cada** una. Hay dos tests que se caen si alguien deshace cualquiera de las dos cosas.
   - **`GET /api/disponibilidad` acepta `servicioIds` (lista) además de `servicioId`.** El singular se queda porque lo usan la reprogramación y el panel, que preguntan por un servicio.
   - ⚠️ **Ariel también carga bloques desde el panel** (3/9/2026), por `POST /api/admin/turnos/grupo`. Es `crearTurnosEnGrupo` con el **mismo** `origen` que ya discriminaba a `crearTurno`, así que hereda sus tres asimetrías de siempre y **ninguna** de las reglas del cliente: sin tope de cantidad, sin tope semanal, sin antelación mínima y con los 7 días hacia atrás de HU-08. Además su nombre no pasa la regla de "solo letras" ("Señora del 3B") y el teléfono es opcional — sin teléfono el bloque queda sin ficha, igual que un turno suelto. Ruta aparte de la pública **porque es la ruta y no un flag del body la que dice quién crea el turno**: si `origen` viniera del cliente, cualquiera se saltearía los dos topes.
+  - ⚠️ **Cuando el bloque lo carga Ariel, el nombre es UNO SOLO para los N turnos**
+    (4/9/2026). Es la cuarta asimetría panel/cliente de este endpoint, y el motivo es el
+    reloj: Ariel lo carga con la persona enfrente, y **el bloque entra entero o no entra**,
+    así que cada segundo tipeando es ventana para que un cliente de la web le tome un rato
+    del medio y el `POST` falle con 409. Con cuatro nombres eso eran ~40 segundos; con uno,
+    ~10. **El flujo público no cambia**: ahí el bloque es una familia anotándose junta, son
+    personas distintas y cada una pone la suya. Los nombres por turno siguen aceptándose en
+    el body del endpoint manual (si van, ganan) — lo que dejó de pedirlos es la pantalla.
+    ⚠️ **No cierra la carrera, la acorta**: el que llega segundo sigue viendo "ese horario
+    se acaba de ocupar". Lo que sí estaba mal y no era: el modal **nunca** borró lo tipeado
+    en ese caso, así que la colisión no le hacía rehacer nada, solo reelegir la hora.
+  - ⚠️ **De ahí sale `PATCH /admin/turnos/:id/nombre`, y los dos van juntos.** Sin poder
+    renombrar después, guardar cuatro turnos que dicen lo mismo sería una puerta de una
+    sola dirección — no había **ninguna** forma de cambiar el nombre de un turno desde la
+    app (los `PATCH` que existían eran fecha/hora, estado, teléfono y cobro). Es el mismo
+    patrón que `…/telefono` (HU-25) y `…/cobro` (HU-27): un dato que se puede guardar
+    incompleto necesita una puerta para completarlo después. En la pantalla es un botón
+    chiquito dentro del detalle del turno, cerrado por defecto. ⚠️ **No toca la ficha del
+    cliente**: la identidad es el teléfono normalizado y en la interfaz manda el apodo, así
+    que si la ficha tiene apodo el modal avisa que en la agenda va a seguir viéndose ese.
   - ⚠️ **`TECHO_TECNICO_DE_BLOQUE` (20) NO es una regla de negocio** y no hay que leerlo como una. La del cliente es `MAX_TURNOS_POR_GRUPO`; Ariel no tiene ninguna. Ese número solo evita que alguien pida calcular la disponibilidad de un bloque de mil turnos.
   - ⚠️ **Se perdió poder reservar en días distintos en una pasada.** El flujo anterior ("Agregar otro turno") lo permitía; el bloque es por definición un solo día y seguido. Fue una decisión de Franco.
   - El push a Ariel es **uno solo** con tag propio (`turnos-grupo-<id>`); los mails al cliente son **N, secuenciales**, cada uno con su link y su `.ics`. `construirNotificacionTurnosNuevos` y `mensajeDeTurnosConfirmados` **delegan** en la versión de a uno cuando hay uno, con tests de igualdad que lo fijan.

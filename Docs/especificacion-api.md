@@ -477,6 +477,7 @@ Sobre `PATCH /api/admin/password`:
 | POST | `/api/admin/turnos/:id/cancelar` | Cancela sin límite de 60 min (HU-10) |
 | PATCH | `/api/admin/turnos/:id/estado` | `{ "estado": "realizado" \| "ausente" }`, más un `cobro` opcional (HU-12, HU-27) |
 | POST | `/api/admin/turnos/marcar-vistos` | `{ "ids": ["<uuid>", …] }` → `{ "marcados": n }`. Apaga la marca "Nuevo" (HU-17) |
+| PATCH | `/api/admin/turnos/:id/nombre` | `{ "clienteNombre": "Nico" }` — corrige el nombre de un turno ya cargado. Es la contracara de que el bloque del panel pida **un solo nombre** para los N turnos (4/9/2026). Sin la regla de "solo letras", igual que la carga manual. **No toca la ficha**: la identidad es el teléfono y en la interfaz manda el apodo |
 | PATCH | `/api/admin/turnos/:id/telefono` | `{ "clienteTelefono": "351 459 3325" }` — le carga el teléfono a un turno que se guardó sin él (HU-08) y lo engancha con su ficha (HU-25) |
 | PATCH | `/api/admin/turnos/:id/cobro` | `{ "medioPago": "efectivo", "montoCobrado": 9500 }` — le carga o le corrige el cobro a un turno **ya realizado** (HU-27) |
 

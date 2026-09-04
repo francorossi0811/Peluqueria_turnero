@@ -4,8 +4,15 @@ import { isAxiosError } from 'axios'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { FichaCliente } from './FichaCliente'
-import { cancelarTurnoAdmin, cargarTelefonoTurno } from '../../api/agenda'
-import { esTelefonoValido, MENSAJE_TELEFONO_INVALIDO } from '../../utils/validaciones'
+import {
+  cambiarNombreDeTurno,
+  cancelarTurnoAdmin,
+  cargarTelefonoTurno,
+} from '../../api/agenda'
+import {
+  esTelefonoValido,
+  MENSAJE_TELEFONO_INVALIDO,
+} from '../../utils/validaciones'
 import { fechaLegible } from '../../utils/fecha'
 import { ETIQUETA_MEDIO_PAGO, formatearPesos } from '../../utils/dinero'
 import { ESTILO_ESTADO, ETIQUETA_ESTADO } from '../../utils/estadoTurno'
@@ -85,6 +92,7 @@ export function ModalTurno({
             <p className="text-tinta-tenue text-xs">
               {ETIQUETA_ORIGEN[turno.origen]}
             </p>
+            <NombreEditable turno={turno} />
           </div>
           <span
             className={`inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase ${ESTILO_ESTADO[turno.estado]}`}
@@ -170,7 +178,10 @@ export function ModalTurno({
             <Button variant="ghost" onClick={onReprogramar}>
               Reprogramar
             </Button>
-            <Button variant="ghost" onClick={() => setConfirmandoCancelar(true)}>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmandoCancelar(true)}
+            >
               Cancelar turno
             </Button>
           </div>
@@ -274,5 +285,97 @@ function SinFicha({ turno }: { turno: TurnoAdmin }) {
         </Button>
       </form>
     </div>
+  )
+}
+
+/**
+ * Corregir el nombre de este turno (4/9/2026).
+ *
+ * Es la contracara de que el bloque del panel pida **un solo nombre** para los N turnos: sin
+ * esto, cargar cuatro turnos seguidos dejaba cuatro veces el mismo nombre y ninguna forma de
+ * arreglarlo desde la app. Mismo patrón que el teléfono de HU-25 y el cobro de HU-27 — un
+ * dato que se puede guardar incompleto necesita una puerta para completarlo después.
+ *
+ * Arranca cerrado, detrás de un botón chiquito: corregir un nombre es raro, y un campo de
+ * texto siempre abierto en el detalle del turno invita a tocarlo sin querer.
+ */
+function NombreEditable({ turno }: { turno: TurnoAdmin }) {
+  const queryClient = useQueryClient()
+  const [editando, setEditando] = useState(false)
+  const [nombre, setNombre] = useState(turno.clienteNombre)
+  const [error, setError] = useState<string | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: () => cambiarNombreDeTurno(turno.id, nombre.trim()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      setError(null)
+      setEditando(false)
+    },
+    onError: (err) => {
+      const datos = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error
+        : null
+      setError(
+        datos?.mensaje ?? 'No pudimos guardar el nombre. Probá de nuevo.',
+      )
+    },
+  })
+
+  if (!editando) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setNombre(turno.clienteNombre)
+          setEditando(true)
+        }}
+        className="text-tinta-tenue hover:text-tinta text-xs underline"
+      >
+        Cambiar el nombre
+      </button>
+    )
+  }
+
+  return (
+    <form
+      className="mt-1 flex flex-col gap-1"
+      onSubmit={(e) => {
+        e.preventDefault()
+        mutation.mutate()
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          autoFocus
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          className="border-borde bg-superficie text-tinta min-w-[9rem] flex-1 rounded-md border px-2 py-1.5 text-sm"
+        />
+        <Button
+          type="submit"
+          variant="outline"
+          disabled={!nombre.trim() || mutation.isPending}
+        >
+          {mutation.isPending ? 'Guardando…' : 'Guardar'}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setEditando(false)}
+        >
+          Cancelar
+        </Button>
+      </div>
+      {/* ⚠️ Si la ficha tiene apodo, el apodo es el que se ve en toda la interfaz (HU-25).
+          Sin este aviso, Ariel cambia el nombre acá y en la agenda no pasa nada. */}
+      {turno.cliente?.apodo && (
+        <span className="text-tinta-tenue text-xs">
+          En la agenda se sigue viendo «{turno.cliente.apodo}», que es el apodo
+          de la ficha. Para cambiar eso, editá la ficha.
+        </span>
+      )}
+      {error && <span className="text-vino text-xs">{error}</span>}
+    </form>
   )
 }

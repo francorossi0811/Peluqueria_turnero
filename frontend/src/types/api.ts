@@ -222,11 +222,20 @@ export interface NuevoTurnoManual extends Omit<NuevoTurno, 'clienteTelefono'> {
   origen: OrigenManual
 }
 
-/** HU-31 — El bloque que carga Ariel. Espeja `NuevoGrupoDeTurnos` con sus dos diferencias
- * de siempre: el teléfono es opcional y lleva `origen`. **Sin tope de cantidad**: el panel
- * no lo limita. */
-export interface NuevoGrupoManual extends Omit<NuevoGrupoDeTurnos, 'clienteTelefono'> {
+/** HU-31 — El bloque que carga Ariel. Espeja `NuevoGrupoDeTurnos` con sus diferencias de
+ * siempre: el teléfono es opcional y lleva `origen`. **Sin tope de cantidad**: el panel no
+ * lo limita.
+ *
+ * ⚠️ Y desde el 4/9/2026 una tercera: **un solo `clienteNombre` para todo el bloque**. Los
+ * nombres por turno quedan opcionales (si van, ganan), pero la pantalla ya no los pide:
+ * Ariel carga el bloque con la persona enfrente, y cada segundo tipeando es ventana para
+ * que alguien le tome por la web un rato del medio — y el bloque entra entero o no entra.
+ * Lo que anotó se corrige después con `cambiarNombreDeTurno`. */
+export interface NuevoGrupoManual
+  extends Omit<NuevoGrupoDeTurnos, 'clienteTelefono' | 'turnos'> {
   clienteTelefono?: string
+  clienteNombre: string
+  turnos: { servicioId: string; clienteNombre?: string }[]
   origen: OrigenManual
 }
 
