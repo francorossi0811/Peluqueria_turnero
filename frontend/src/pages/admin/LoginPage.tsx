@@ -7,7 +7,12 @@ import {
   olvidePassword,
   recuperacionDisponible,
 } from '../../api/auth'
-import { getTokenValido, setToken } from '../../lib/authStorage'
+import {
+  getTokenValido,
+  haySesionVencida,
+  limpiarSesionVencida,
+  setToken,
+} from '../../lib/authStorage'
 import { Button } from '../../components/ui/Button'
 
 // Antes mostrábamos "Usuario o contraseña incorrectos." ante cualquier fallo, lo que
@@ -33,6 +38,12 @@ export function LoginPage() {
   // sin esto Ariel veía el formulario de ingreso y daba por hecho que lo había echado.
   const yaLogueado = Boolean(getTokenValido())
 
+  // Por qué está viendo esta pantalla. Se lee **una sola vez** (`tomar…` lo consume) y en
+  // un `useState` inicial para que no se borre en el primer re-render. Sin este cartel, una
+  // sesión vencida deja a Ariel frente al formulario sin explicación y parece que la app se
+  // rompió — el mismo malentendido que ya había causado la flechita de atrás de Chrome.
+  const [sesionVencida] = useState(haySesionVencida)
+
   // HU-26 — El botón de recuperación solo existe si el servidor puede mandar mails de
   // verdad. Sin cuenta de Brevo el mail se imprime en el log del servidor: el botón le
   // prometería a Ariel algo que no va a pasar, y encima justo cuando ya no puede entrar.
@@ -48,6 +59,14 @@ export function LoginPage() {
     mutationFn: () => login(email, password),
     onSuccess: (token) => {
       setToken(token)
+      // El aviso de sesión vencida ya cumplió: se limpia **al entrar**, no al leerlo.
+      //
+      // ⚠️ Consumirlo al leerlo (en el inicializador de `useState`, o en un `useEffect` de
+      // montaje) hace que no se vea nunca: con `StrictMode` React monta, desmonta y vuelve
+      // a montar, así que el primer montaje se llevaba el flag y el segundo —el que queda
+      // en pantalla— ya lo encontraba vacío. Que el cartel siga ahí si Ariel recarga el
+      // login es correcto: su sesión venció igual.
+      limpiarSesionVencida()
       // ⚠️ Entrar es cambiar de identidad, y la caché de queries no sabe de identidades:
       // sin esto, `['me']` (y la agenda, y los clientes) siguen mostrando los datos de la
       // cuenta anterior hasta que cada query se refresque sola. Al cambiar de cuenta se
@@ -86,6 +105,13 @@ export function LoginPage() {
         <h1 className="font-hero text-tinta mb-6 text-center text-[clamp(26px,3.5vw,34px)] font-extrabold">
           Panel de Ariel
         </h1>
+
+        {sesionVencida && (
+          <div className="border-miel bg-destacado text-tinta mb-4 rounded-md border px-3 py-2 text-sm">
+            Pasaron unos días sin usar el panel y la sesión se cerró sola. Entrá
+            de nuevo y seguís donde estabas.
+          </div>
+        )}
 
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">

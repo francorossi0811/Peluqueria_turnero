@@ -10,6 +10,11 @@
          extra sino un requisito para que funcionen las notificaciones push (HU-18). -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#f7efe3" />
+    <!-- Las dos van juntas: `mobile-web-app-capable` es la estándar y la que piden los
+         navegadores nuevos; la de `apple-` se queda porque las versiones de iOS que Ariel
+         y sus clientes tienen instaladas siguen leyendo solo esa. Sacarla arregla un
+         warning de consola y rompe el "agregar a la pantalla de inicio" en iPhone. -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Panel de Ariel" />
     <!-- Fuentes del sitio (Playfair Display, Cormorant Garamond, Lora) — ver el @theme en index.css -->
