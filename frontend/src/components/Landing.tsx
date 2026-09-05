@@ -15,7 +15,7 @@ interface LandingProps {
 // La dirección, el teléfono y el link de WhatsApp viven en `utils/contacto.ts`: los
 // comparte con la pantalla de gestión del turno.
 const TELEFONO = `Tel / WhatsApp: ${TELEFONO_LEGIBLE}`
-const HORARIO = 'Martes a sábado, 10 - 13hs y 17 - 20:30hs'
+const HORARIO = 'Martes a sábado, 10 - 13hs y 17 - 20:00hs'
 const MAPA_URL =
   'https://maps.google.com/maps?q=Pastor%20Taboada%2010%2C%20C%C3%B3rdoba%2C%20Argentina&z=16&output=embed'
 
