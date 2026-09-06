@@ -8,31 +8,82 @@ Turnero web para "La Peluquería de Ariel Enrique" — peluquería unisex, un so
 
 Es un proyecto de portfolio de un estudiante de Ingeniería en Sistemas (4to año). Prioridad: buenas prácticas por sobre velocidad. Nunca generar código sin antes proponer un plan y que sea validado.
 
-## ⚠️ Ariel está usando la app AHORA MISMO
+## ⚠️ REGLA: nada que se esté desarrollando toca producción (6/9/2026)
 
-La v1 está deployada y Ariel la está probando de verdad, contra la base de **producción**. Eso manda sobre todo lo demás:
+Ariel usa la app **en el negocio, con clientes reales enfrente**. El sábado 5/9/2026 cargó
+su primera jornada de verdad: 14 turnos, 11 realizados, $160.000 cobrados. Desde ese día
+la agenda dejó de ser un entorno de prueba y pasó a ser el registro de su facturación.
 
-- **Trabajar siempre en la rama `v3-ajustes-de-ariel`**, nunca commitear en `main`. Mergear a `main` le cambia la app que está usando, así que **solo se mergea cuando Franco lo pide**. ⚠️ El 16/8/2026 lo pidió y **la v3 entera está mergeada y desplegada**: lo que Ariel tiene enfrente ya no es la v1.
-- **No pushear ni mergear sin que Franco lo pida explícitamente.**
-- Render sirve **producción** y Vercel le apunta ahí. `frontend/.env` tiene que decir `http://localhost:3000/api`.
-- ⚠️ **Las suscripciones push viven en la base a la que apuntaba el backend cuando se tocó "Activar".** Cambiar `DATABASE_URL` en Render deja huérfanos todos los dispositivos registrados hasta ese momento: el envío sale, pero a una lista vacía o vieja. Ya pasó — ver la nota del final de la Etapa 1.
+Franco pidió el 6/9/2026 que **todo cambio, en las cuatro capas, viva en una branch
+separada de producción**. Es la regla que manda sobre cualquier otra de este documento:
 
-### ⚠️ Ya no hay base de desarrollo (13/8/2026)
+| Capa | Producción | Dónde se trabaja |
+|---|---|---|
+| **Git / GitHub** | `main` | rama **`desarrollo`** (o una rama por tarea que salga de ella) |
+| **Base (Neon)** | `production` — `br-icy-dust-acborrsz`, compute `ep-wispy-mud-acx20c4v` | branch **`desarrollo`** — `br-late-fire-ac345m68`, compute `ep-winter-credit-ac7on5st` |
+| **Backend (Render)** | sirve `main` contra `production` | `npm run dev` local contra la branch `desarrollo` |
+| **Frontend (Vercel)** | sirve `main` | `npm run dev` local, con `frontend/.env` en `http://localhost:3000/api` |
 
-Hasta esta fecha este documento decía "**todo contra la base de desarrollo**, verificá que `DATABASE_URL` sea `ep-cool-field-acf4s3g8`". **Esa regla ya no se puede cumplir: esa branch de Neon no existe más.** El proyecto `Peluqueria Ariel` (`misty-flower-34174000`) tiene hoy **una sola** branch:
+- ⚠️ **`backend/.env` apunta SIEMPRE a la branch `desarrollo`.** Nunca más a `production`.
+  Hasta el 6/9/2026 apuntaba a producción "porque el negocio estaba cerrado", y esa
+  excepción ya no existe: no hay forma de distinguir después un turno de prueba de uno de
+  verdad, y limpiarlo a mano requiere borrar filas de la agenda de alguien que factura.
+- **Para LEER producción se usa la MCP de Neon** (`run_sql` sobre `br-icy-dust-acborrsz`),
+  no el backend local: es solo lectura y no puede escribir por accidente.
+- **A `main` se mergea solo cuando Franco lo pide**, y mergear **es** desplegar: Vercel y
+  Render publican desde ahí solos. No pushear a `main` sin que lo pida explícitamente.
+- ⚠️ **Una migración hay que aplicarla en las DOS branches.** `migrate deploy` a secas toca
+  solo la del `.env`, o sea `desarrollo`. Producción necesita un paso aparte, con su
+  connection string pasada por `DATABASE_URL` — y con el ritual completo: leer el SQL,
+  borrar cualquier línea que toque `turnos_no_solapamiento`, aplicar, y confirmar contra
+  `pg_constraint` que el `EXCLUDE` sigue en pie. Si se olvida, el código sale desplegado
+  buscando una tabla que ahí no existe y revienta con 500.
+- ⚠️ **Hueco conocido, y conviene tenerlo presente:** un *preview* de Vercel (los que crea
+  solo al pushear una rama) usa la `VITE_API_URL` del proyecto, que apunta a Render, o sea
+  **a la base real**. Mientras eso siga así, probar desde un preview escribe en la agenda de
+  Ariel. La salida sería un segundo servicio free en Render corriendo `desarrollo` contra la
+  branch `desarrollo`; se evaluó el 6/9/2026 y Franco eligió no armarlo por ahora. Hasta
+  entonces: **se prueba en local, no en un preview**.
+- ⚠️ **Las suscripciones push viven en la base a la que apuntaba el backend cuando se tocó
+  "Activar".** Cambiar `DATABASE_URL` en Render deja huérfanos todos los dispositivos
+  registrados hasta ese momento: el envío sale, pero a una lista vacía o vieja. Ya pasó —
+  ver la nota del final de la Etapa 1. Y al revés: una branch de Neon se copia con la tabla
+  `push_suscripciones` adentro, así que **probar contra una copia le hace sonar el celular a
+  Ariel de verdad**. Si el flujo que se prueba manda push, vaciar esa tabla en la branch.
 
-| | |
-|---|---|
-| Branch | `production` (`br-icy-dust-acborrsz`), primary y default |
-| Compute | `ep-wispy-mud-acx20c4v` (read-write, `sa-east-1`) |
+⚠️ **Las credenciales del `.env` se vencen.** El 13/8/2026 los connection strings guardados
+daban `password authentication failed`. No es el formato —se descartó probando variantes de
+`sslmode` y `channel_binding`—, es la contraseña. Cuando pase, se saca una nueva con
+`get_connection_string` de la MCP de Neon (estuvo bloqueado por permisos un tiempo; desde el
+15/8/2026 funciona) o de la consola.
 
-O sea que **el entorno local pega contra producción**, porque no hay otra cosa contra la cual pegar. Franco lo autorizó explícitamente el 13/8/2026 **porque el negocio está cerrado** y no hay turnos entrando.
-
-⚠️ **Eso es una condición temporal, no la nueva normalidad.** Cuando la peluquería vuelva a abrir, cada escritura local cae en la agenda real de Ariel. Antes de correr cualquier cosa que escriba (reservar un turno de prueba, un script, una migración), preguntarle a Franco si el negocio sigue cerrado. Para **leer** el estado de producción conviene la MCP de Neon (`run_sql` sobre el proyecto y branch de arriba) antes que levantar el backend: es solo lectura y no puede escribir por accidente.
-
-⚠️ **Las credenciales del `.env` se vencen.** El 13/8/2026 los dos connection strings guardados (el de producción y el de la desaparecida desarrollo) daban `password authentication failed`. No es el formato —se descartó probando variantes de `sslmode` y `channel_binding`—, es la contraseña. Cuando pase, hay que sacar una nueva de la consola de Neon; **la MCP de Neon tiene bloqueado `get_connection_string` por permisos**, así que ese camino no sirve y la tiene que pegar Franco.
+⚠️ **La rama `v3-ajustes-de-ariel` quedó vieja** y este documento pedía trabajar ahí. Ya no:
+la v3 está mergeada y desplegada desde el 16/8/2026, y esa rama quedó atrás de `main`. La
+rama de trabajo es `desarrollo`.
 
 ### Estado real de producción (verificado el 13/8/2026)
+
+⚠️ **Limpieza del 6/9/2026 — la base quedó con un solo día.** Franco pidió borrar todo lo
+que era de prueba y dejar únicamente la jornada real de Ariel. Quedaron **14 turnos** (los
+del sábado 5/9), **3 fichas de cliente** y **0 bloqueos**; se fueron 51 turnos, 19 fichas y
+la única foto subida, que era de una ficha de prueba y se fue en cascada. **No se tocó nada
+de configuración**: los 4 servicios con sus precios y fotos, las 10 franjas de
+`horario_laboral`, los 32 feriados, las 3 etiquetas, las cuentas y las 5 suscripciones push
+siguen igual, y el `EXCLUDE turnos_no_solapamiento` sigue en pie. Hay un snapshot de Neon
+previo, `antes-de-limpiar-6sep` (`snap-square-math-ackzum9j`), por si algo hubiera que
+recuperar.
+
+⚠️ **De los 10 clientes del sábado, solo 3 tienen ficha** (Mariano Rossi, Esteban Solares y
+Santiago Gastaldi). Los otros 7 —Gregorio, Mónica, Toto, Joni, Felix Gil, Rori y Juan
+fletes— Ariel los cargó **sin teléfono**, y sin teléfono no hay ficha: la identidad de un
+cliente *es* el número normalizado (HU-25). Sus nombres viven en `turnos.cliente_nombre` y
+no se perdieron, pero no aparecen en la sección Clientes. Si se los quiere fichados, hay que
+cargarles el teléfono con `PATCH /admin/turnos/:id/telefono`.
+
+⚠️ **Lo de abajo es de agosto y quedó desactualizado por la limpieza** (los conteos de
+turnos y de fichas, y el backfill pendiente, que ya no aplica). Lo de configuración sigue
+valiendo.
+
 
 La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi toda hecha**. Verificado con `run_sql`, no leído:
 
@@ -349,34 +400,43 @@ bundle; `npm audit` no sumó ningún aviso nuevo (sigue solo el `nanoid` de siem
 ⚠️ **`tsc --noEmit` a secas NO chequea este frontend** (hay project references): pasaba en verde
 con dos errores reales adentro. Hay que correr **`tsc -b --force`**.
 
-### ⚠️ Las branches de Neon y a cuál apunta cada cosa (4/9/2026)
+### ⚠️ Las branches de Neon y a cuál apunta cada cosa (6/9/2026)
 
 | | |
 |---|---|
-| `DATABASE_URL` de `backend/.env` | branch **`production`** ⚠️ escribe en la agenda real |
-| Lo que sirve Render | branch **`production`** (default, `ep-wispy-mud-acx20c4v`) |
+| `DATABASE_URL` de `backend/.env` | branch **`desarrollo`** — `br-late-fire-ac345m68`, compute `ep-winter-credit-ac7on5st` |
+| Lo que sirve Render | branch **`production`** — `br-icy-dust-acborrsz`, default, compute `ep-wispy-mud-acx20c4v` |
 
-El proyecto tiene hoy **una sola** branch: `production` (primary y default). Las dos
-sobras de pruebas —`prueba-ajustes-23ago` (23/8) y `demo-video-techprovider` (21/8)— se
-borraron el 4/9/2026 a pedido de Franco: ocupaban ~33 MB cada una del medio giga del plan
-free, que es la misma cuota donde viven las fotos de HU-29. Antes de borrarlas se confirmó
-por endpoint que Render usa `ep-wispy-mud-acx20c4v`, que cuelga de `production`, y después
-que producción quedó intacta: 36 turnos, 16 clientes, 4 servicios activos, 3 cuentas, las
-19 migraciones aplicadas y `turnos_no_solapamiento` en pie.
+`desarrollo` se creó el 6/9/2026 **después** de limpiar producción, así que arranca con la
+misma foto: los 14 turnos del sábado real y la configuración entera. Ver la regla de arriba
+de todo — el `.env` no vuelve a apuntar a `production` nunca más.
 
-⚠️ **El `.env` local volvió a apuntar a `production` el 4/9/2026**, después de haber estado
-en `prueba-ajustes-23ago` desde el 23/8. Eso quiere decir que **cualquier cosa que escriba
-corriendo en local cae en la agenda real de Ariel**. La receta para probar algo que escriba
-sigue siendo la misma que estrenó HU-28: crear una branch descartable en Neon, apuntar el
-`.env` ahí, probar, borrarla y **volver a producción al terminar** — hay una línea comentada
-en el `.env` justo para eso.
+⚠️ **A `desarrollo` se le vació `push_suscripciones` a propósito.** Una branch de Neon se
+copia con esa tabla adentro, así que un flujo que manda push desde local **le hace sonar el
+celular a Ariel de verdad** — ya pasó el 21/8/2026 probando los links de WhatsApp
+(`web.push.apple.com → 201` a dispositivos reales). Vacía, el envío sale a una lista vacía y
+no molesta a nadie. Si hay que probar el push de punta a punta, se activa un dispositivo
+propio desde "Mi cuenta" con el backend apuntando acá. En `production` las 5 suscripciones
+siguen intactas.
+
+⚠️ **Esto reemplaza a la receta anterior**, que era crear una branch descartable por cada
+prueba y "volver a producción al terminar". Funcionaba, pero dependía de acordarse de dos
+pasos y de que el del medio no fallara; y entre el 23/8 y el 4/9/2026 el `.env` estuvo
+apuntando a producción con el negocio ya abierto. Una branch fija de desarrollo no depende
+de que nadie se acuerde de nada. Las descartables siguen sirviendo para lo que de verdad
+son —probar algo destructivo sin ensuciar `desarrollo`—, pero ya no son el mecanismo por
+defecto.
+
+**Hay un snapshot de la base previa a la limpieza**: `antes-de-limpiar-6sep`
+(`snap-square-math-ackzum9j`), tomado el 6/9/2026 sobre `production`. Es de donde salen los
+51 turnos y las 19 fichas de prueba que se borraron, si alguna vez hicieran falta.
 
 **Toda migración futura necesita un paso explícito contra `production`**, porque
-`migrate deploy` a secas la aplica solo a la branch del `.env`. Si se olvida, el código sale
-desplegado buscando una tabla que ahí no existe y revienta con 500. La forma que funcionó:
-sacar la connection string de production con la MCP de Neon y pasarla por `DATABASE_URL` en
-el `migrate diff` y en el `migrate deploy`, y después confirmar contra `pg_constraint` que
-`turnos_no_solapamiento` sigue en pie.
+`migrate deploy` a secas la aplica solo a la branch del `.env` —que ahora es `desarrollo`—.
+Si se olvida, el código sale desplegado buscando una tabla que ahí no existe y revienta con
+500. La forma que funcionó: sacar la connection string de production con la MCP de Neon y
+pasarla por `DATABASE_URL` en el `migrate diff` y en el `migrate deploy`, y después
+confirmar contra `pg_constraint` que `turnos_no_solapamiento` sigue en pie.
 
 ⚠️ **Enmienda (22/8/2026): el webhook ya no está enteramente fuera de alcance.** Existe `GET`/`POST /api/webhooks/whatsapp` porque Meta lo exige para dar de alta la suscripción — ver `Docs/especificacion-api.md`. **Pero solo cumple el contrato mínimo**: el `GET` hace el handshake y el `POST` responde 200 y loguea. Lo que sigue sin estar es **procesar los eventos**: validar `X-Hub-Signature-256` y leer los `statuses`. O sea que la advertencia de abajo sigue valiendo igual.
 
@@ -911,10 +971,12 @@ Seña por Mercado Pago al reservar. **No lo pidió Ariel**; queda anotado porque
 
 Avanzar etapa por etapa. Cada etapa se valida con Franco antes de pasar a la siguiente. No generar grandes cantidades de código de una — proponer el plan primero.
 
+⚠️ **Y todo eso pasa en la rama `desarrollo` y contra la branch `desarrollo` de Neon**, nunca en `main` ni contra la base que sirve Render. Ver la regla del principio del documento.
+
 Además, para este proyecto:
 
 - **Verificar de verdad, no solo compilar.** Los dos servidores locales y el navegador están a mano: medir los colores calculados, probar los endpoints con datos reales, mirar la pantalla. Varias cosas de la v3 se encontraron así y no con `tsc`.
-- **Ritual de migraciones:** siempre `--create-only`, leer el SQL generado y **borrar cualquier línea que toque `turnos_no_solapamiento`** (el `EXCLUDE USING gist` está escrito a mano en la migración inicial y no vive en `schema.prisma`, así que Prisma puede emitir un `DROP CONSTRAINT` al diffear). Después `migrate deploy` y confirmar contra `pg_constraint` que sigue existiendo. ⚠️ **Ahora ese ritual corre contra producción**, porque no hay otra base — ver la sección de arriba. El paso de leer el SQL antes de aplicar dejó de ser una buena práctica y pasó a ser lo único que separa un diff mal generado de la agenda real de Ariel.
+- **Ritual de migraciones:** siempre `--create-only`, leer el SQL generado y **borrar cualquier línea que toque `turnos_no_solapamiento`** (el `EXCLUDE USING gist` está escrito a mano en la migración inicial y no vive en `schema.prisma`, así que Prisma puede emitir un `DROP CONSTRAINT` al diffear). Después `migrate deploy` y confirmar contra `pg_constraint` que sigue existiendo. ⚠️ **El ritual corre dos veces: primero contra `desarrollo` (la del `.env`) y después contra `production`**, pasándole su connection string por `DATABASE_URL` — ver la sección de branches. Aplicar solo en una deja el código desplegado buscando una tabla que del otro lado no existe.
 - Si se toca `schema.prisma`, correr `npx prisma generate` — si no, `tsc` falla con tipos viejos. ⚠️ El cliente se genera en `backend/generated/` (gitignoreado) y **puede no estar** en un clon nuevo o después de limpiar: el síntoma es `Cannot find module '.prisma/client/default'` o un `PrismaClient` que pide un driver adapter. Se arregla con `npx prisma generate`, no tocando el código.
 - **Para un script suelto contra la base, reusar `src/config/prisma.ts`.** El proyecto usa el driver adapter de Prisma 7 (`PrismaPg`), así que un `new PrismaClient()` pelado tira `instantiated without any options`. Y el script tiene que empezar con `import 'dotenv/config'` y envolver todo en una `async function main()`: `tsx` compila a CJS y rechaza el `await` de nivel superior.
 - **El repo es público.** Los secretos van solo en `backend/.env` (gitignoreado), nunca en `.env.example`. Revisar el diff staged antes de commitear. Las variables `VITE_*` se compilan dentro del bundle público: nunca pueden ser secretas.
