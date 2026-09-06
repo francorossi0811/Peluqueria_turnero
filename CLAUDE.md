@@ -38,12 +38,27 @@ separada de producción**. Es la regla que manda sobre cualquier otra de este do
   borrar cualquier línea que toque `turnos_no_solapamiento`, aplicar, y confirmar contra
   `pg_constraint` que el `EXCLUDE` sigue en pie. Si se olvida, el código sale desplegado
   buscando una tabla que ahí no existe y revienta con 500.
-- ⚠️ **Hueco conocido, y conviene tenerlo presente:** un *preview* de Vercel (los que crea
-  solo al pushear una rama) usa la `VITE_API_URL` del proyecto, que apunta a Render, o sea
-  **a la base real**. Mientras eso siga así, probar desde un preview escribe en la agenda de
-  Ariel. La salida sería un segundo servicio free en Render corriendo `desarrollo` contra la
-  branch `desarrollo`; se evaluó el 6/9/2026 y Franco eligió no armarlo por ahora. Hasta
-  entonces: **se prueba en local, no en un preview**.
+- ⚠️ **Los previews de Vercel están APAGADOS, y no es una preferencia de estilo.** Un
+  preview (los que Vercel crea solo al pushear cualquier rama) se construye con la
+  `VITE_API_URL` del proyecto, que apunta a Render, **o sea a la base real**: cualquiera que
+  abriera esa URL —o el propio que la usa para probar— le escribía turnos en la agenda a
+  Ariel, desde una rama que ni siquiera está desplegada. Se apagan en
+  `frontend/vercel.json`:
+
+  ```json
+  "git": { "deploymentEnabled": { "main": true, "*": false } }
+  ```
+
+  El `*: false` es lo que importa y por eso no dice `"desarrollo": false`: la regla es que
+  **toda** rama que no sea `main` no despliega, incluidas las que todavía no existen. `main`
+  se nombra aparte porque cuando una rama matchea dos patrones, Vercel despliega si alguno
+  da `true` — así producción sigue saliendo. ⚠️ Vercel lee este archivo **de la rama que
+  está por construir**, así que el bloque tiene que estar en las dos ramas; si alguien crea
+  una rama desde un commit anterior a esto, esa rama sí va a generar preview.
+
+  La alternativa era un segundo servicio free en Render corriendo `desarrollo` contra la
+  branch `desarrollo`, para tener staging de verdad. Se evaluó el 6/9/2026 y Franco eligió
+  apagar los previews en vez de armarlo. **Se prueba en local.**
 - ⚠️ **Las suscripciones push viven en la base a la que apuntaba el backend cuando se tocó
   "Activar".** Cambiar `DATABASE_URL` en Render deja huérfanos todos los dispositivos
   registrados hasta ese momento: el envío sale, pero a una lista vacía o vieja. Ya pasó —
