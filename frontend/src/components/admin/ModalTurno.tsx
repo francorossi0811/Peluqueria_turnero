@@ -182,7 +182,7 @@ export function ModalTurno({
         {turno.estado === 'ausente' && (
           <div className="border-borde flex flex-wrap items-center gap-2 border-t pt-4">
             <p className="text-tinta-suave mr-auto text-sm">
-              ¿Lo marcaste ausente por error?
+              ¿Sacar ausente?
             </p>
             <Button
               variant="outline"

@@ -357,9 +357,15 @@ function RenglonNotas({ dias }: { dias: string[] }) {
   })
 
   return (
+    // ⚠️ El alto es `ALTO_PASO_PX`, el mismo de un renglón de 20 minutos (pedido de Franco,
+    // 13/9/2026): con el alto natural del input quedaba en 46 px y se leía como una franja
+    // aparte, no como un renglón más de la agenda. Si se toca esa constante, esto la sigue.
     <div
       className="border-agenda-linea grid border-t-4"
-      style={{ gridTemplateColumns: `4.5rem repeat(${dias.length}, 1fr)` }}
+      style={{
+        gridTemplateColumns: `4.5rem repeat(${dias.length}, 1fr)`,
+        height: ALTO_PASO_PX,
+      }}
     >
       <div className="bg-agenda-fondo border-agenda-linea text-agenda-tinta sticky left-0 z-10 flex items-center justify-center border-r-2 px-1 font-bold">
         Nota
@@ -430,7 +436,7 @@ function CeldaNota({
   }
 
   return (
-    <div className="bg-agenda-fondo border-agenda-linea border-r-2 p-1 last:border-r-0">
+    <div className="bg-agenda-fondo border-agenda-linea h-full border-r-2 p-1 last:border-r-0">
       <input
         value={texto}
         maxLength={MAX_LARGO_NOTA}
@@ -450,7 +456,7 @@ function CeldaNota({
         title={
           fallo ? 'No se pudo guardar la nota. Tocá y probá de nuevo.' : texto
         }
-        className={`bg-turno-hoy text-agenda-tinta placeholder:text-agenda-tinta/40 w-full rounded border px-2 py-1 ${
+        className={`bg-turno-hoy text-agenda-tinta placeholder:text-agenda-tinta/40 h-full w-full rounded border px-2 ${
           fallo ? 'border-ausente-fuerte border-2' : 'border-agenda-linea/40'
         } ${mutation.isPending ? 'opacity-60' : ''}`}
       />

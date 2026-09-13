@@ -1009,9 +1009,12 @@ de desplegar, o la agenda semanal va a pedir una tabla que no existe. El SQL es 
   efecto: cuando la nota cambia en el servidor se vuelve a montar con el valor nuevo. No pisa
   lo tipeado porque la nota solo cambia al guardar, y guardar pasa al salir.
 - Una sola consulta por semana, no una por casilla.
+- ⚠️ **El renglón mide `ALTO_PASO_PX`, lo mismo que un renglón de 20 minutos** (72 px,
+  pedido de Franco). Con el alto natural del input quedaba en 46 px y se leía como una
+  franja aparte, no como un renglón más. Toma la constante, así que la sigue si cambia.
 
 **3. Sacarle el Ausente** — ver la regla en "Reglas de negocio clave". En la vista Día y en
-el detalle de la grilla aparecen "Pasar a reservado" y "Realizado"; Realizado abre el cobro
+el detalle de la grilla aparece "¿Sacar ausente?" con "Pasar a reservado" y "Realizado"; Realizado abre el cobro
 (`ModalCobro` trata un `ausente` igual que un `reservado`: marca y cobra en el mismo PATCH).
 ⚠️ La mutación de marcar de `AgendaPage` **no tenía `onError`**: un fallo no se veía en
 ningún lado. Con este cambio el fallo dejó de ser teórico y el error ahora cae en la fila.

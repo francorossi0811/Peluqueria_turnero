@@ -141,7 +141,7 @@ export function FilaTurno({
       {turno.estado === 'ausente' && (
         <div className="border-borde mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
           <p className="text-tinta-suave mr-auto text-sm">
-            ¿Lo marcaste ausente por error?
+            ¿Sacar ausente?
           </p>
           <Button
             variant="outline"
