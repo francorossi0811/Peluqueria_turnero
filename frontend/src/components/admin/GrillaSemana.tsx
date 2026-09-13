@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Insignia } from './Insignia'
 import {
@@ -357,14 +357,16 @@ function RenglonNotas({ dias }: { dias: string[] }) {
   })
 
   return (
-    // ⚠️ El alto es `ALTO_PASO_PX`, el mismo de un renglón de 20 minutos (pedido de Franco,
-    // 13/9/2026): con el alto natural del input quedaba en 46 px y se leía como una franja
-    // aparte, no como un renglón más de la agenda. Si se toca esa constante, esto la sigue.
+    // ⚠️ El alto MÍNIMO es `ALTO_PASO_PX`, el de un renglón de 20 minutos (pedido de Franco,
+    // 13/9/2026), así una semana sin notas se ve como un renglón más de la agenda. Pero es
+    // un mínimo y no un alto fijo: **la nota se tiene que leer entera siempre**, así que si
+    // una casilla necesita más líneas el renglón crece hasta que entre, y las casillas
+    // vecinas se estiran con él para que el renglón siga siendo parejo.
     <div
       className="border-agenda-linea grid border-t-4"
       style={{
         gridTemplateColumns: `4.5rem repeat(${dias.length}, 1fr)`,
-        height: ALTO_PASO_PX,
+        minHeight: ALTO_PASO_PX,
       }}
     >
       <div className="bg-agenda-fondo border-agenda-linea text-agenda-tinta sticky left-0 z-10 flex items-center justify-center border-r-2 px-1 font-bold">
@@ -398,6 +400,12 @@ function RenglonNotas({ dias }: { dias: string[] }) {
  * necesariamente el último que se escribió. Acá sería perder el final de la nota.
  *
  * Escape descarta lo tipeado y vuelve a lo guardado.
+ *
+ * ⚠️ **Es un `<textarea>` y no un `<input>`, y crece con el texto** (pedido de Franco,
+ * 13/9/2026: "se tiene que ver completa siempre"). Un input es de una sola línea: con la
+ * casilla de ~160 px una nota de tres palabras ya se cortaba. Acá el texto baja solo al
+ * renglón siguiente cuando llega al borde. Enter **no** agrega un salto: sigue guardando,
+ * porque la nota es un texto corrido y el corte de línea lo pone el ancho de la casilla.
  */
 function CeldaNota({
   dia,
@@ -414,6 +422,26 @@ function CeldaNota({
   // Escape tiene que descartar, pero salir de la casilla es lo que guarda: sin esta marca,
   // el `blur` que dispara el propio Escape guardaría justo lo que se quería tirar.
   const descartar = useRef(false)
+  const caja = useRef<HTMLTextAreaElement>(null)
+
+  // Alto a la medida del texto. Se vuelve a `auto` antes de medir porque `scrollHeight`
+  // nunca baja de la altura actual: sin eso, borrar líneas no achicaría la casilla. Va en
+  // un layout effect y no en uno común para que el cambio de alto no se vea un cuadro tarde.
+  //
+  // El piso lo pone `min-h-full` (el renglón de 20 minutos), así que una casilla vacía o
+  // corta queda del alto del renglón y la más larga es la que lo empuja.
+  //
+  // ⚠️ Se le suma el borde: `scrollHeight` mide contenido + padding, pero la caja es
+  // `border-box` y el `height` que se le pone incluye el borde. Sin sumarlo, la nota larga
+  // crecía y **igual quedaba cortada por 2 px** — la última línea asomaba a medias. Se vio
+  // midiendo `scrollHeight > clientHeight`, no mirando.
+  useLayoutEffect(() => {
+    const el = caja.current
+    if (!el) return
+    el.style.height = 'auto'
+    const borde = el.offsetHeight - el.clientHeight
+    el.style.height = `${el.scrollHeight + borde}px`
+  }, [texto])
 
   const mutation = useMutation({
     mutationFn: (limpio: string) => guardarNotaDelDia(dia, limpio),
@@ -436,15 +464,20 @@ function CeldaNota({
   }
 
   return (
-    <div className="bg-agenda-fondo border-agenda-linea h-full border-r-2 p-1 last:border-r-0">
-      <input
+    <div className="bg-agenda-fondo border-agenda-linea border-r-2 p-1 last:border-r-0">
+      <textarea
+        ref={caja}
+        rows={1}
         value={texto}
         maxLength={MAX_LARGO_NOTA}
         disabled={cargando}
         onChange={(e) => setTexto(e.target.value)}
         onBlur={alSalir}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
           if (e.key === 'Escape') {
             descartar.current = true
             e.currentTarget.blur()
@@ -452,11 +485,10 @@ function CeldaNota({
         }}
         placeholder="Nota"
         aria-label={`Nota del ${dia}`}
-        // El texto entero en el globito: la casilla es angosta y una nota larga se corta.
         title={
-          fallo ? 'No se pudo guardar la nota. Tocá y probá de nuevo.' : texto
+          fallo ? 'No se pudo guardar la nota. Tocá y probá de nuevo.' : undefined
         }
-        className={`bg-turno-hoy text-agenda-tinta placeholder:text-agenda-tinta/40 h-full w-full rounded border px-2 ${
+        className={`bg-turno-hoy text-agenda-tinta placeholder:text-agenda-tinta/40 block min-h-full w-full resize-none overflow-hidden rounded border px-2 py-1 leading-snug break-words ${
           fallo ? 'border-ausente-fuerte border-2' : 'border-agenda-linea/40'
         } ${mutation.isPending ? 'opacity-60' : ''}`}
       />

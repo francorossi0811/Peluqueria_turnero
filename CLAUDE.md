@@ -1009,9 +1009,15 @@ de desplegar, o la agenda semanal va a pedir una tabla que no existe. El SQL es 
   efecto: cuando la nota cambia en el servidor se vuelve a montar con el valor nuevo. No pisa
   lo tipeado porque la nota solo cambia al guardar, y guardar pasa al salir.
 - Una sola consulta por semana, no una por casilla.
-- ⚠️ **El renglón mide `ALTO_PASO_PX`, lo mismo que un renglón de 20 minutos** (72 px,
-  pedido de Franco). Con el alto natural del input quedaba en 46 px y se leía como una
-  franja aparte, no como un renglón más. Toma la constante, así que la sigue si cambia.
+- ⚠️ **La nota se lee entera siempre**: es un `<textarea>` que baja de renglón solo al
+  llegar al borde y **crece con el texto** (pedido de Franco). El renglón mide como
+  **mínimo** `ALTO_PASO_PX` (72 px, lo de un renglón de 20 minutos) y la casilla más larga
+  lo empuja; las vecinas se estiran con él (`min-h-full`) para que siga parejo. Enter no
+  mete un salto de línea: sigue guardando, porque la nota es texto corrido.
+- ⚠️ **Al alto calculado hay que sumarle el borde.** `scrollHeight` mide contenido +
+  padding, pero la caja es `border-box`: sin sumarlo la nota crecía y **igual quedaba
+  cortada por 2 px**. Se encontró midiendo `scrollHeight > clientHeight`, no mirando.
+  Verificado con una nota de 116 letras: 7 renglones, sin corte, en escritorio y a 375 px.
 
 **3. Sacarle el Ausente** — ver la regla en "Reglas de negocio clave". En la vista Día y en
 el detalle de la grilla aparece "¿Sacar ausente?" con "Pasar a reservado" y "Realizado"; Realizado abre el cobro
