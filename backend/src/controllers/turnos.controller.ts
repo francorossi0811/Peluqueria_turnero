@@ -36,6 +36,7 @@ import {
   TurnoNoModificableError,
   TurnoSeSolapaConRealizadoError,
   TurnoYaTieneEmailError,
+  HorarioYaOcupadoError,
 } from '../services/errores'
 import {
   DIAS_FUTURO_PUBLICO,
@@ -69,7 +70,6 @@ import {
   FIN_ANTES_QUE_INICIO,
   periodoDemasiadoLargo,
 } from '../utils/esquemasFecha'
-
 
 const bodySchema = z.object({
   servicioId: z.uuid(),
@@ -265,11 +265,12 @@ const cobroSchema = z.object({
 // negaría igual.
 export const estadoSchema = z
   .object({
-    estado: z.enum(['realizado', 'ausente']),
+    // `reservado` es solo para sacarle el Ausente a un turno (ver `puedePasarA`).
+    estado: z.enum(['realizado', 'ausente', 'reservado']),
     cobro: cobroSchema.optional(),
   })
   .refine((d) => !d.cobro || esCobrable(d.estado), {
-    message: 'Un turno ausente no se cobra.',
+    message: 'Solo se cobra un turno realizado.',
   })
 
 const idSchema = z.object({ id: z.uuid() })
@@ -421,6 +422,17 @@ function manejarErroresComunes(err: unknown, res: Response): boolean {
         codigo: 'TURNO_SE_SOLAPA_CON_REALIZADO',
         mensaje:
           'Ese rato ya lo ocupa otro turno realizado. Marcá Ausente al que no atendiste.',
+      },
+    })
+    return true
+  }
+  // 13/9/2026 — Sacarle el Ausente a un turno cuyo rato ya se le dio a otro.
+  if (err instanceof HorarioYaOcupadoError) {
+    res.status(409).json({
+      error: {
+        codigo: 'HORARIO_YA_OCUPADO',
+        mensaje:
+          'Ese horario ya se lo diste a otro turno. Si hay que corregirlo, primero movés o cancelás el otro.',
       },
     })
     return true

@@ -8,6 +8,7 @@ import {
   cambiarNombreDeTurno,
   cancelarTurnoAdmin,
   cargarTelefonoTurno,
+  marcarEstadoTurno,
 } from '../../api/agenda'
 import {
   esTelefonoValido,
@@ -72,6 +73,24 @@ export function ModalTurno({
         ? err.response?.data.error.mensaje
         : null
       setError(mensaje ?? 'No pudimos cancelar el turno.')
+    },
+  })
+
+  // 13/9/2026 — Sacarle el Ausente y dejarlo Reservado. Mutación propia y no un prop como
+  // `onMarcarAusente`: acá el modal **se queda abierto** —el turno vuelve a tener las
+  // acciones de siempre— y el 409 de "ese horario ya se lo diste a otro" tiene que verse
+  // en este mismo cartel, no en una pantalla que ya se cerró.
+  const reservadoMutation = useMutation({
+    mutationFn: () => marcarEstadoTurno(turno.id, 'reservado'),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+    },
+    onError: (err) => {
+      const mensaje = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error.mensaje
+        : null
+      setError(mensaje ?? 'No pudimos cambiar el turno.')
     },
   })
 
@@ -158,6 +177,26 @@ export function ModalTurno({
             Antes acá solo estaban reprogramar y cancelar, y era un agujero: desde la
             grilla semanal no había forma de cerrar un turno, que es lo más frecuente de
             todo. Había que cambiar a la vista Día para marcarlo. */}
+        {/* Las dos salidas de un ausente marcado por error: "todavía no llegó" vuelve a
+            Reservado, "sí vino" es Realizado y abre el cobro, como desde un reservado. */}
+        {turno.estado === 'ausente' && (
+          <div className="border-borde flex flex-wrap items-center gap-2 border-t pt-4">
+            <p className="text-tinta-suave mr-auto text-sm">
+              ¿Lo marcaste ausente por error?
+            </p>
+            <Button
+              variant="outline"
+              disabled={reservadoMutation.isPending}
+              onClick={() => reservadoMutation.mutate()}
+            >
+              {reservadoMutation.isPending ? 'Guardando…' : 'Pasar a reservado'}
+            </Button>
+            <Button variant="primary" onClick={onCobrar}>
+              Realizado
+            </Button>
+          </div>
+        )}
+
         {esReservado && !confirmandoCancelar && (
           <div className="border-borde flex flex-wrap items-center gap-2 border-t pt-4">
             {/* "Realizado" abre el cobro y desde ahí se guardan las dos cosas juntas

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   esCobrable,
+  puedePasarA,
   estaDentroDeVentanaDeCambio,
   excedeLimiteSemanal,
   horariosDelBloque,
@@ -277,5 +278,32 @@ describe('horariosDelBloque', () => {
 
   it('cruza la hora sin romperse', () => {
     expect(horariosDelBloque('10:50', [20, 30])).toEqual(['10:50', '11:10'])
+  })
+})
+
+// 13/9/2026 — Sacarle el Ausente a un turno. Se fija la tabla entera porque el error caro
+// es el que abre una puerta de más: revivir un cancelado o deshacer un realizado cobrado.
+describe('puedePasarA', () => {
+  it('desde reservado se cierra como siempre', () => {
+    expect(puedePasarA('reservado', 'realizado')).toBe(true)
+    expect(puedePasarA('reservado', 'ausente')).toBe(true)
+  })
+
+  it('a un ausente se le puede sacar el Ausente, a reservado o a realizado', () => {
+    expect(puedePasarA('ausente', 'reservado')).toBe(true)
+    expect(puedePasarA('ausente', 'realizado')).toBe(true)
+  })
+
+  it('no hay cambios que no cambian nada', () => {
+    expect(puedePasarA('reservado', 'reservado')).toBe(false)
+    expect(puedePasarA('ausente', 'ausente')).toBe(false)
+  })
+
+  it('realizado, cancelado y reprogramado no vuelven atrás', () => {
+    for (const desde of ['realizado', 'cancelado', 'reprogramado'] as const) {
+      for (const hacia of ['realizado', 'ausente', 'reservado'] as const) {
+        expect(puedePasarA(desde, hacia)).toBe(false)
+      }
+    }
   })
 })

@@ -27,6 +27,10 @@ export class TurnoNoCobrableError extends Error {}
 // lo impide). Se puede llegar acá marcando Realizado un turno cuyo rato ya se le dio a
 // otro que también se hizo: pasó por Ausente en el medio, que libera el horario.
 export class TurnoSeSolapaConRealizadoError extends Error {}
+// 13/9/2026 — Sacarle el Ausente a un turno cuyo rato Ariel ya le dio a otro. Marcar
+// Ausente libera el horario (a propósito: es cómo mete a otro cliente), así que devolverlo a
+// Reservado o Realizado puede chocar con el que entró después. Lo frena el EXCLUDE.
+export class HorarioYaOcupadoError extends Error {}
 // HU-28 — Los dos topes de la reserva pública. Existen porque reservar es gratis: sin seña
 // y sin verificar el teléfono, nada impedía que una sola persona se llevara la agenda
 // entera. Las dos son errores del **cliente**: las acciones de Ariel no pasan por acá.

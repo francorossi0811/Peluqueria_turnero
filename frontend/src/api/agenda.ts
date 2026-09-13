@@ -42,7 +42,10 @@ export async function cargarTurnoManual(
 export async function cargarTurnosEnGrupoManual(
   datos: NuevoGrupoManual,
 ): Promise<TurnoAdmin[]> {
-  const { data } = await apiClient.post<TurnoAdmin[]>('/admin/turnos/grupo', datos)
+  const { data } = await apiClient.post<TurnoAdmin[]>(
+    '/admin/turnos/grupo',
+    datos,
+  )
   return data
 }
 
@@ -71,7 +74,8 @@ export async function cancelarTurnoAdmin(id: string): Promise<TurnoAdmin> {
  * completarlo después con `registrarCobroTurno`. */
 export async function marcarEstadoTurno(
   id: string,
-  estado: 'realizado' | 'ausente',
+  // `reservado` es solo para sacarle el Ausente a un turno (13/9/2026).
+  estado: 'realizado' | 'ausente' | 'reservado',
   cobro?: DatosCobro,
 ): Promise<TurnoAdmin> {
   const { data } = await apiClient.patch<TurnoAdmin>(

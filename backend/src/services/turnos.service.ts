@@ -19,6 +19,7 @@ import {
   TurnoNoEncontradoError,
   TurnoNoModificableError,
   TurnoSeSolapaConRealizadoError,
+  HorarioYaOcupadoError,
   TurnoYaTieneEmailError,
 } from './errores'
 import {
@@ -832,6 +833,31 @@ export interface DatosCobro {
   montoCobrado: number
 }
 
+/** Los estados a los que Ariel puede llevar un turno desde el PATCH de estado. */
+export type EstadoMarcable = 'realizado' | 'ausente' | 'reservado'
+
+/**
+ * Qué cambios de estado acepta el PATCH de estado. Pura y exportada para fijarla con tests.
+ *
+ * - `reservado → realizado | ausente`: cerrar el turno, lo de todos los días (HU-12).
+ * - `ausente → reservado | realizado` (13/9/2026): **sacarle el Ausente** a alguien marcado
+ *   por error. Reservado lo deja pendiente otra vez; Realizado es "sí vino", y trae su cobro
+ *   en el mismo gesto, igual que desde un reservado.
+ *
+ * ⚠️ Lo que **no** está, a propósito: `realizado` no vuelve atrás (tiene cobro y totales
+ * colgando, y no se pidió) y `cancelado`/`reprogramado` tampoco (liberaron el rato con aviso
+ * al cliente, y revivirlos sería otro flujo). Tampoco `reservado → reservado`: sería un
+ * PATCH que no cambia nada.
+ */
+export function puedePasarA(
+  desde: EstadoTurno,
+  hacia: EstadoMarcable,
+): boolean {
+  if (desde === 'reservado') return hacia === 'realizado' || hacia === 'ausente'
+  if (desde === 'ausente') return hacia === 'reservado' || hacia === 'realizado'
+  return false
+}
+
 /**
  * HU-12 + HU-27 — Marcar si el cliente vino o no, y de paso cómo pagó.
  *
@@ -846,11 +872,12 @@ export interface DatosCobro {
  */
 export async function marcarTurno(
   id: string,
-  estado: 'realizado' | 'ausente',
+  estado: EstadoMarcable,
   cobro?: DatosCobro,
 ): Promise<TurnoConCliente> {
   const turno = await obtenerTurno(id)
-  validarEsReservado(turno)
+  if (!puedePasarA(turno.estado, estado)) throw new TurnoNoModificableError()
+  const veniaDeAusente = turno.estado === 'ausente'
 
   // Que el controller ya lo rechace no vuelve redundante esta línea: la regla es del
   // negocio y tiene que valer para cualquiera que llame al service, no solo para el que
@@ -878,8 +905,14 @@ export async function marcarTurno(
     //
     // Sin este catch, Ariel vería un error de Postgres crudo sobre una restricción cuyo
     // nombre no le dice nada.
+    //
+    // Viniendo de Ausente el choque puede ser con cualquier turno en pie —un reservado o un
+    // realizado que entró en el rato liberado—, así que el mensaje es otro: no hay que
+    // decidir cuál se hizo, hay que avisar que ese horario ya tiene dueño.
     if (esViolacionDeSolapamiento(err))
-      throw new TurnoSeSolapaConRealizadoError()
+      throw veniaDeAusente
+        ? new HorarioYaOcupadoError()
+        : new TurnoSeSolapaConRealizadoError()
     throw err
   }
 }

@@ -18,7 +18,10 @@ interface FilaTurnoProps {
   enCurso?: boolean
   onEditar: () => void
   onCancelar: () => void
-  onMarcarEstado: (estado: 'realizado' | 'ausente') => void
+  onMarcarEstado: (estado: 'realizado' | 'ausente' | 'reservado') => void
+  /** El error de la última marca sobre este turno, si falló. Hoy el caso real es sacarle el
+   * Ausente a un turno cuyo rato ya se le dio a otro (409 `HORARIO_YA_OCUPADO`). */
+  error?: string | null
   /** HU-27 — Abre el cobro sobre este turno, para cargarlo o corregirlo. */
   onCobrar: () => void
   cancelando: boolean
@@ -34,6 +37,7 @@ export function FilaTurno({
   onCobrar,
   cancelando,
   marcando,
+  error,
 }: FilaTurnoProps) {
   const [confirmandoCancelar, setConfirmandoCancelar] = useState(false)
   const esReservado = turno.estado === 'reservado'
@@ -128,6 +132,37 @@ export function FilaTurno({
             Cancelar
           </Button>
         </div>
+      )}
+
+      {/* 13/9/2026 — Sacarle el Ausente a alguien marcado por error. Dos salidas y no una,
+          porque son dos situaciones distintas: "todavía no llegó, lo marqué antes de
+          tiempo" vuelve a Reservado; "sí vino" es Realizado, y ese abre el cobro como
+          siempre. */}
+      {turno.estado === 'ausente' && (
+        <div className="border-borde mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+          <p className="text-tinta-suave mr-auto text-sm">
+            ¿Lo marcaste ausente por error?
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => onMarcarEstado('reservado')}
+            disabled={marcando}
+          >
+            Pasar a reservado
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => onMarcarEstado('realizado')}
+            disabled={marcando}
+          >
+            Realizado
+          </Button>
+        </div>
+      )}
+      {error && (
+        <p className="border-vino bg-vino-suave text-vino mt-3 rounded-md border px-3 py-2 text-sm">
+          {error}
+        </p>
       )}
 
       {/* HU-27 — El cobro de un turno ya realizado, en la vista Día.

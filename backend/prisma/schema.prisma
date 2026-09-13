@@ -484,3 +484,21 @@ model CoexistenceSincronizacion {
 
   @@map("coexistence_sincronizaciones")
 }
+
+/// La nota rápida de un día: un renglón que Ariel escribe en la agenda semanal, entre la
+/// mañana y la tarde ("traer cambio", "llamar al proveedor"), pedida el 13/9/2026.
+///
+/// - **La fecha es la clave primaria**, sin `id` aparte: hay una nota por día como mucho,
+///   y esa regla vive en la base y no en un `findFirst` + `if`. Mismo criterio que el
+///   `@unique` de `feriados.fecha`.
+/// - **No hay fila vacía.** Borrar el texto borra la fila: "sin nota" y "nota en blanco"
+///   serían dos formas de decir lo mismo.
+/// - `VarChar(200)` y no `String` a secas: es un renglón, no un bloc de notas, y el tope
+///   tiene que valer también para quien llame a la API sin pasar por la pantalla.
+model NotaDelDia {
+  fecha     DateTime @id @db.Date
+  texto     String   @db.VarChar(200)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("notas_del_dia")
+}

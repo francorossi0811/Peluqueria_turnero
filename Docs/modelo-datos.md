@@ -485,6 +485,22 @@ tabla y da el `DELETE`, porque quien se cruce con esto lo va a leer una sola vez
 el que queda pegado si el proceso se cae en el medio.
 
 
+### `notas_del_dia` — HU-32
+
+La nota rápida de un día, el renglón entre la mañana y la tarde de la agenda semanal.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `fecha` | `date` | **PK**. Una nota por día como mucho, y la regla vive acá, no en un `if` |
+| `texto` | `varchar(200)` | Un renglón. El tope vale también para quien llame a la API sin pasar por la pantalla |
+| `updated_at` | `timestamp` | Default `now()` |
+
+- **No hay filas vacías**: guardar un texto vacío borra la fila. "Sin nota" y "nota en
+  blanco" serían dos formas de decir lo mismo.
+- Sin `id` aparte: la fecha ya identifica la nota, y un `id` obligaría a buscar primero
+  para saber si hay que insertar o actualizar. Es un `upsert` por fecha.
+- Migración `20260913120000_notas_del_dia`: solo crea esta tabla, no toca `turnos`.
+
 ## 3. Reglas de integridad clave
 
 | Regla | Cómo se implementa |

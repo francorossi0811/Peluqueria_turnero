@@ -134,6 +134,7 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
 - ⚠️ **El cierre no tiene tolerancia**: un horario se ofrece solo si el turno entra **completo** antes de que cierre (`inicio + duración <= cierre`, CU-04). El que termina **exactamente** a la hora de cierre sí entra; el que se pasa un minuto, no. Hasta el 11/8/2026 este documento decía que había "10 minutos de margen" sobre el cierre: **era falso** — nunca existió en el código ni en las HU, y estaba invitando a implementarlo. Hay un test que fija los dos bordes. Lo que sí existe es otra cosa distinta: la **antelación mínima de 30 minutos** para reservar online (`MARGEN_MINIMO_MINUTOS`), que mira "ahora", no el cierre, y que las acciones de Ariel pasan en 0.
 - **Ariel puede cargar turnos hasta 7 días para atrás** (HU-08, 14/8/2026): atiende clientes de vidriera y los registra cuando tiene un rato libre. Lo habilita el flag `permitirPasado` de `disponibilidad.service.ts` —**no** un `margenMinutos` negativo, que mezclaría dos conceptos en la misma variable— y solo lo enciende la ruta nueva `GET /api/admin/disponibilidad`, que además va siempre con margen 0. El cliente no cambió: sigue con sus 30 minutos de antelación y nunca ve una hora pasada. ⚠️ El flag **no toca el cierre**; hay un test que fija los dos bordes con el flag encendido. En la UI el pasado se marca en ámbar, con cartel antes de confirmar y el botón cambiado a "Registrar turno pasado".
 - ⚠️ **Un turno `realizado` no se puede pisar; uno `ausente` o `cancelado` sí** (14/8/2026). Antes `ocupados` solo miraba `reservado` y, con el pasado habilitado, eso pasó a ser un agujero real. La regla vive en los dos lados: `obtenerDetalleDelDia` y el predicado del `EXCLUDE`, que ahora es `estado IN ('reservado','realizado')`. **`ausente` sigue afuera a propósito** — liberar el rato al marcarlo es el flujo que Ariel usa todos los días. Consecuencia: marcar Realizado puede fallar con 409 `TURNO_SE_SOLAPA_CON_REALIZADO` si ese rato ya se le dio a otro turno que se hizo.
+- ⚠️ **El Ausente se puede sacar, a Reservado o a Realizado** (13/9/2026). Las transiciones del `PATCH …/estado` viven en `puedePasarA` (`turnos.service.ts`, con test que fija la tabla entera): `reservado → realizado | ausente` y `ausente → reservado | realizado`. **Nada más**: realizado, cancelado y reprogramado no vuelven atrás. Como marcar Ausente libera el rato, sacarlo puede chocar con el turno que Ariel metió en ese hueco: lo frena el `EXCLUDE` y responde **`409 HORARIO_YA_OCUPADO`**, un código distinto de `TURNO_SE_SOLAPA_CON_REALIZADO` porque el mensaje es otro — ahí no hay que decidir cuál se hizo, hay que avisar que el horario ya tiene dueño. En la pantalla el aviso sale **en la fila o en el detalle del turno**, no arriba de la página.
 - **`origen` es `online | presencial | llamada | whatsapp`** (14/8/2026). `presencial` es el cliente de vidriera; `llamada` se llamaba `telefono` y se renombró porque se confundía con `clienteTelefono`, que es un dato de contacto y no un canal. El `RENAME VALUE` de la migración conservó las filas que ya existían.
 - ⚠️ **Una persona no puede acaparar la agenda** (HU-28, 15/8/2026): máximo **6 turnos `reservado` en cualquier ventana móvil de 7 días** por ficha de cliente, y **90 días** de horizonte hacia adelante (`DIAS_FUTURO_PUBLICO`). Antes no había **nada**: ni tope de cantidad ni tope hacia el futuro, así que la API aceptaba un turno para 2028. Los dos valen en las **dos** puertas públicas —`crearTurno` y `reprogramarTurno`— y **ninguno alcanza a Ariel**: se apagan con el mismo `esAdmin = Boolean(input.origen)` que ya distinguía los dos llamadores. La ventana es móvil y no lunes-a-domingo a propósito: con la semana del calendario entran 3 turnos de viernes a domingo y 3 más de lunes a martes, seis en cinco días. Solo cuenta `reservado` —cancelado y ausente liberaron el rato, realizado ya pasó—, así que cancelar libera el cupo enseguida. Al reprogramar, el turno no se cuenta contra sí mismo: si no, moverlo dentro de su propia semana fallaría justo cuando no cambia nada. ⚠️ **El tope era 3 y pasó a 6 el 23/8/2026**, junto con la reserva en grupo (HU-31): una familia de tres no es un acaparador, y con 3 no le alcanzaba ni para una pasada. Y eso **afloja el tope también para el que reserva de a uno** — inevitable sin una columna de grupo, que se decidió no crear. ⚠️ **El límite es por teléfono normalizado, así que no frena a quien inventa un número distinto en cada reserva.** Es una decisión consciente y está escrita en HU-28, no un olvido: la alternativa era rate limit por IP (castiga a la familia que reserva desde la misma casa) u OTP (un paso más en *todas* las reservas para frenar algo que todavía no pasó).
 - ⚠️ **Un cliente puede reservar un BLOQUE de hasta 6 turnos seguidos** (HU-31, 23/8/2026). El flujo es: elige un servicio → **le pregunta cuántos turnos** (1 a 6) → dice qué se hace cada uno → el sistema le ofrece solo los horarios donde entra el bloque **completo** → carga los datos una vez (un nombre por turno, **un solo teléfono y un solo mail**, así que la ficha es una sola). Va por `POST /api/turnos/grupo`, **endpoint aparte**: reservar un turno solo no pasa por una línea de código nueva, ni en el backend ni en el frontend (`turnos.length === 1` sigue llamando a `crearTurno`), y esa es la garantía de que el caso normal no puede romperse. Los inserts van en el **primer `$transaction` del proyecto**: entran todos o ninguno.
@@ -977,6 +978,63 @@ sin perder lo tipeado; 375 px sin scroll horizontal en el modal y en la landing;
 CTA midiendo `rgb(192,57,43)` sobre blanco y en una sola línea (186 px); y los cuatro
 servicios con `text-transform: uppercase` pero el texto intacto en el DOM. Cero errores de
 consola. 202 tests del backend y 20 del frontend en verde.
+
+### Varias fotos, nota del día y sacar el Ausente (13/9/2026) ✅ en `desarrollo`
+
+Tres pedidos de Franco. **Primer cambio hecho con la regla nueva**: rama `desarrollo`,
+base `desarrollo`, nada en `main` ni en producción.
+
+⚠️ **La migración `20260913120000_notas_del_dia` está aplicada SOLO en `desarrollo`.**
+Cuando esto pase a `main` hay que aplicarla en `production` **antes** de que Render termine
+de desplegar, o la agenda semanal va a pedir una tabla que no existe. El SQL es un
+`CREATE TABLE` y nada más (verificado: no toca `turnos_no_solapamiento`).
+
+**1. Varias fotos juntas en la ficha** (`FichaCliente.tsx`, sin cambios de backend).
+- `multiple` en el input, y las fotos se suben **de a una, en fila**: cada una ya viaja
+  comprimida y el endpoint recibe una por request, y diez en paralelo contra Render free es
+  el mismo chorro que rompió el selector de color de las etiquetas.
+- ⚠️ **Una foto que falla no corta el lote**: se anota y se sigue, y el cartel dice cuál
+  quedó afuera. La galería se refresca después de cada una.
+- ⚠️ La lista de archivos se copia **antes** de limpiar el input: `files` es la lista viva y
+  vaciar `value` la deja en cero.
+
+**2. La nota del día** (HU-32) — tabla `notas_del_dia`, `GET`/`PUT /admin/notas-del-dia`.
+- **Solo en la vista Semana**, en un renglón entre la mañana y la tarde (`RenglonNotas` en
+  `GrillaSemana.tsx`), una casilla por día de la grilla — que ya son solo los que trabaja.
+  En la vista Día no aparece: lo pidió así Franco.
+- ⚠️ **Se guarda al salir de la casilla o con Enter, nunca letra por letra.** Misma lección
+  que el color de las etiquetas. Escape descarta, y para eso hay un `useRef`: el `blur` que
+  dispara el propio Escape guardaría justo lo que se quería tirar.
+- ⚠️ La casilla lleva `key={dia-textoGuardado}` en vez de copiar la prop al estado con un
+  efecto: cuando la nota cambia en el servidor se vuelve a montar con el valor nuevo. No pisa
+  lo tipeado porque la nota solo cambia al guardar, y guardar pasa al salir.
+- Una sola consulta por semana, no una por casilla.
+
+**3. Sacarle el Ausente** — ver la regla en "Reglas de negocio clave". En la vista Día y en
+el detalle de la grilla aparecen "Pasar a reservado" y "Realizado"; Realizado abre el cobro
+(`ModalCobro` trata un `ausente` igual que un `reservado`: marca y cobra en el mismo PATCH).
+⚠️ La mutación de marcar de `AgendaPage` **no tenía `onError`**: un fallo no se veía en
+ningún lado. Con este cambio el fallo dejó de ser teórico y el error ahora cae en la fila.
+
+**Verificado de verdad**, en local contra la base `desarrollo`:
+- Notas por API: guarda recortando espacios, edita, borra con vacío (también si no había),
+  200 letras entra y 201 da `400`, fecha inválida `400`, sin token `401`. En pantalla: 5
+  casillas (martes a sábado), escribir y Enter = **1 PUT**, Escape = **0 PUT** y vuelve el
+  texto guardado, y la fila quedó en la base. La vista Día no tiene casillas.
+- Ausente por API: ida y vuelta ausente ↔ reservado, ausente → realizado con cobro,
+  realizado → reservado da `409 TURNO_NO_MODIFICABLE`, cobro con reservado da `400`, y el
+  choque (B ausente, C en su rato) da `409 HORARIO_YA_OCUPADO` hacia reservado **y** hacia
+  realizado. En pantalla: el ausente con rato libre pasa a reservado y el detalle muestra las
+  cuatro acciones de siempre; el del choque muestra el aviso en el detalle y en la fila, y
+  sigue ausente; Realizado abre el cobro.
+- Fotos: 4 elegidas con una rota en el medio → 3 subidas, POST y GET intercalados (en fila,
+  no en paralelo), el botón pasó por "Subiendo 1 de 4…" hasta "4 de 4…", y el cartel nombra
+  `rota.jpg`.
+- 375 px sin scroll horizontal en las dos vistas: el renglón de notas vive dentro del scroll
+  propio de la grilla. `tsc -b --force` y `tsc --noEmit` limpios, 206 tests del backend y 20
+  del frontend.
+- Quedaron datos de prueba **en `desarrollo`**: turnos "Prueba…" el 16/9, dos notas y tres
+  fotos en la ficha de Mariano Rossi. Producción no se tocó.
 
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 

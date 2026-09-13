@@ -214,24 +214,50 @@ function Galeria({ clienteId }: { clienteId: string }) {
     void queryClient.invalidateQueries({ queryKey: ['almacenamiento'] })
   }
 
+  // Por cuál foto va la subida, para que el botón diga "Subiendo 2 de 5…" y no un
+  // "Subiendo…" que con diez fotos parece colgado.
+  const [progreso, setProgreso] = useState<{ va: number; total: number } | null>(null)
+
+  /**
+   * Sube las fotos elegidas **de a una, en fila** (13/9/2026: antes se podía elegir una sola).
+   *
+   * ⚠️ En fila y no en paralelo, a propósito. Cada foto ya viaja comprimida a ~150 KB y el
+   * endpoint acepta una por request, así que no hizo falta tocar el backend; y diez subidas
+   * a la vez contra Render free es el mismo chorro de requests que rompió el selector de
+   * color de las etiquetas.
+   *
+   * Una foto que falla **no corta las demás**: se anota y se sigue. Es el caso de una foto
+   * que el navegador no puede leer en el medio de un lote — perder las otras nueve por esa
+   * sería peor que avisar cuál no entró. Y la galería se refresca después de cada una, así
+   * las fotos van apareciendo mientras sube el resto.
+   */
   const subirMutation = useMutation({
-    mutationFn: async (archivo: File) =>
-      subirFotoDeFicha(clienteId, await comprimirImagen(archivo)),
-    onSuccess: () => {
-      setError(null)
-      refrescar()
+    mutationFn: async (archivos: File[]) => {
+      const fallidas: { nombre: string; motivo: string }[] = []
+      for (const [i, archivo] of archivos.entries()) {
+        setProgreso({ va: i + 1, total: archivos.length })
+        try {
+          await subirFotoDeFicha(clienteId, await comprimirImagen(archivo))
+          refrescar()
+        } catch (err) {
+          fallidas.push({ nombre: archivo.name, motivo: motivoDelFallo(err) })
+        }
+      }
+      return { fallidas, total: archivos.length }
     },
-    onError: (err) => {
-      // El mensaje del backend es más útil que uno genérico: sabe si el problema fue el tope,
-      // el formato o el peso, y cada uno manda a hacer algo distinto.
-      const mensaje = isAxiosError<ErrorApi>(err)
-        ? err.response?.data.error.mensaje
-        : null
+    onMutate: () => setError(null),
+    onSettled: () => setProgreso(null),
+    onSuccess: ({ fallidas, total }) => {
+      if (fallidas.length === 0) return
+      if (total === 1) {
+        setError(fallidas[0].motivo)
+        return
+      }
+      const cuantas =
+        fallidas.length === 1 ? 'entró 1 foto' : `entraron ${fallidas.length} fotos`
       setError(
-        mensaje ??
-          (err instanceof ImagenNoLegibleError
-            ? 'No pudimos leer esa foto. Probá con otra.'
-            : 'No pudimos subir la foto. Probá de nuevo.'),
+        `No ${cuantas} de ${total}: ` +
+          fallidas.map((f) => `${f.nombre} (${f.motivo})`).join(' · '),
       )
     },
   })
@@ -249,11 +275,13 @@ function Galeria({ clienteId }: { clienteId: string }) {
   const fotos = galeria?.fotos ?? []
 
   function elegir(e: React.ChangeEvent<HTMLInputElement>) {
-    const archivo = e.target.files?.[0]
+    // ⚠️ Se copia la lista ANTES de limpiar el input: `files` es la lista viva del input, y
+    // vaciar `value` la deja en cero.
+    const archivos = Array.from(e.target.files ?? [])
     // Se limpia el input siempre: si no, elegir la misma foto dos veces seguidas no dispara
     // `change` la segunda vez y parece que el botón dejó de andar.
     e.target.value = ''
-    if (archivo) subirMutation.mutate(archivo)
+    if (archivos.length > 0) subirMutation.mutate(archivos)
   }
 
   return (
@@ -272,6 +300,7 @@ function Galeria({ clienteId }: { clienteId: string }) {
           ref={inputRef}
           type="file"
           accept="image/*"
+          multiple
           onChange={elegir}
           className="hidden"
         />
@@ -281,7 +310,11 @@ function Galeria({ clienteId }: { clienteId: string }) {
           onClick={() => inputRef.current?.click()}
           className="text-miel text-sm font-semibold hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:no-underline"
         >
-          {subirMutation.isPending ? 'Subiendo…' : '+ Agregar foto'}
+          {progreso
+            ? progreso.total > 1
+              ? `Subiendo ${progreso.va} de ${progreso.total}…`
+              : 'Subiendo…'
+            : '+ Agregar fotos'}
         </button>
       </div>
 
@@ -359,4 +392,16 @@ function Historial({ turnos }: { turnos: TurnoDeHistorial[] }) {
       )}
     </div>
   )
+}
+
+/** Por qué no entró una foto, en palabras de Ariel. El mensaje del backend manda cuando lo
+ * hay: sabe si el problema fue el formato o el peso, y cada uno pide hacer algo distinto. */
+function motivoDelFallo(err: unknown): string {
+  const mensaje = isAxiosError<ErrorApi>(err)
+    ? err.response?.data.error.mensaje
+    : null
+  if (mensaje) return mensaje
+  return err instanceof ImagenNoLegibleError
+    ? 'No pudimos leer esa foto. Probá con otra.'
+    : 'No pudimos subir la foto. Probá de nuevo.'
 }

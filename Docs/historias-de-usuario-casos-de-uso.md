@@ -108,6 +108,13 @@ Como Ariel, quiero bloquear un rango horario (almuerzo largo, un imprevisto, una
 Como Ariel, quiero marcar si el cliente vino o no, para llevar un registro (sin consecuencias automáticas en v1, ya que dejamos el sistema de deudas para fase 2).
 - Al marcar **Realizado** me pregunta cómo pagó (HU-27). Es parte del mismo gesto: ya estoy tocando el turno que acaba de terminar, y que registrar el cobro fuera un paso aparte significa que me lo olvido.
 - **Ausente no pregunta nada**: el que no vino no pagó.
+- ⚠️ **Enmienda del 13/9/2026: el Ausente se puede sacar.** Si lo marqué por error, el
+  turno me ofrece dos salidas: **pasarlo a Reservado** ("todavía no llegó, lo marqué antes de
+  tiempo") o **marcarlo Realizado** ("sí vino"), que me pregunta cómo pagó como siempre.
+  - Como marcar Ausente libera el horario, puede que ya se lo haya dado a otro. En ese caso
+    no me deja y me avisa que ese horario está ocupado.
+  - Realizado, cancelado y reprogramado **no** vuelven atrás: no se pidió, y el realizado
+    tiene un cobro colgando.
 
 **HU-13 — Configurar servicios**
 Como Ariel, quiero poder agregar, editar o desactivar servicios y sus duraciones, sin depender de que alguien le toque el código.
@@ -417,6 +424,8 @@ Como Ariel, quiero que nadie pueda acaparar mis horarios reservando de a montone
 
 **HU-29 — Fotos en las fichas y en los servicios**
 Como Ariel, quiero guardar fotos de cómo quedó el corte en la ficha de cada cliente, y ponerle una foto propia a cada servicio, para no depender de mi memoria ni dejar la web con una imagen genérica.
+- **Puedo elegir varias fotos juntas** (13/9/2026): se suben de a una y el botón me dice por
+  cuál va. Si alguna no se puede leer, las demás entran igual y me dice cuál quedó afuera.
 - En la ficha sumo **las fotos que hagan falta** por persona. Es lo que resuelve el "quiero el mismo de la otra vez", que en la planilla de papel no tenía dónde vivir. (Hasta el 23/8/2026 había un tope de 5 y lo pedí sacar: sé que ocupan, y prefiero cuidarlo yo antes de que el sistema me corte en la mitad de un trabajo.)
 - **Puedo borrar las viejas**, y las borro yo: si no, el tope se convierte en una pared y el espacio se llena de fotos que ya no le sirven a nadie. En "Mi cuenta" veo cuántas hay y cuánto pesan, así decido con un número y no a ojo.
 - A cada servicio le pongo **una** foto, y se la puedo poner también a uno que acabo de crear. Antes un servicio nuevo quedaba con una imagen de stock y no había forma de cambiarla desde el panel.
@@ -430,6 +439,17 @@ Lo que ocupa ese lugar es el **medidor de "Mi cuenta"**, que por eso dejó de se
 *Por qué en la base y no en un servicio de imágenes:* no había **ningún** lugar donde un archivo subido sobreviviera — la carpeta pública del frontend se arma al compilar y el disco del servidor se borra en cada reinicio. Un servicio tipo Cloudinary pedía cuenta nueva y trámite externo, que es exactamente lo que tiene frenado a WhatsApp (HU-22). Como la aplicación solo maneja la URL `/api/imagenes/<id>`, mudarse a un bucket más adelante no cambia una sola pantalla.
 
 *Sobre quién puede ver una foto:* la lectura es **pública para el que conoce el identificador**, que es el mismo criterio del link del turno (HU-01). No es un descuido: una etiqueta `<img>` no puede mandar credenciales, así que pedirlas rompería la galería del panel y la web a la vez. Es aceptable porque acordamos que son **fotos del corte, sin caras**. ⚠️ **Si algún día se le sacan fotos a la cara de alguien, esto hay que revisarlo**: la salida es traer la imagen con la sesión y dibujarla desde memoria, y ahí sí se puede exigir estar logueado para las de ficha.
+
+**HU-32 — Anotarme algo para el día, en la agenda**
+Como Ariel, quiero un renglón de nota en cada día de la agenda semanal, para acordarme de
+lo que tengo que hacer ese día ("traer cambio", "llamar al proveedor") sin salir del panel.
+*(Pedido del 13/9/2026.)*
+- Va **entre la mañana y la tarde**, en el corte que ya uso para ubicarme, con una casilla
+  por cada día que trabajo.
+- **Solo en la vista Semana.** En la vista Día no aparece.
+- Es **un renglón**, no un bloc de notas: hasta 200 letras.
+- Se guarda cuando salgo de la casilla o toco Enter. Escape descarta lo que estaba
+  escribiendo. Si la borro entera, la nota desaparece.
 
 **HU-31 — Reservar para mí y para los míos en una sola vez**
 Como clienta que viene con los hijos, quiero sacar los turnos de todos de una sola pasada y seguidos, para no tener que cargar mis datos tres veces ni que nos toquen horarios sueltos.

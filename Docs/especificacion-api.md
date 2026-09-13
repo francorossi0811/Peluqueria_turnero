@@ -552,6 +552,25 @@ trae el rango visible: sin esto, un turno que entra para dentro de tres días es
 hasta que Ariel navega hasta ahí. Con la vista diaria el aviso habla de "esta semana"; con
 la semanal, de "la semana que viene".
 
+#### Sacarle el Ausente a un turno (13/9/2026)
+
+`PATCH /api/admin/turnos/:id/estado` acepta ahora `estado: "reservado"` además de
+`realizado` y `ausente`. Los cambios permitidos son exactamente estos (`puedePasarA`):
+
+| Desde | Hacia |
+|---|---|
+| `reservado` | `realizado`, `ausente` |
+| `ausente` | `reservado`, `realizado` |
+
+Cualquier otro responde `409 TURNO_NO_MODIFICABLE`. El `cobro` solo se acepta con
+`realizado` —también viniendo de `ausente`—; con cualquier otro estado, `400`.
+
+⚠️ **Marcar Ausente libera el rato**, así que devolver un ausente a `reservado` o
+`realizado` puede chocar con un turno que entró después en ese horario. Lo frena el
+`EXCLUDE` y responde `409 HORARIO_YA_OCUPADO` ("Ese horario ya se lo diste a otro turno"),
+distinto de `TURNO_SE_SOLAPA_CON_REALIZADO`: acá no hay que decidir cuál se hizo, hay que
+avisar que el horario ya tiene dueño.
+
 ### Notificaciones push — HU-18
 
 | Método | Ruta | Descripción |
@@ -845,6 +864,20 @@ gratuito de Render, y que Ariel decida cuándo refrescar es más predecible que 
 intervalo.
 
 ---
+
+### Notas del día — HU-32
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/admin/notas-del-dia?desde=&hasta=` | Las notas que existan en el rango (máx. 62 días). Un día sin nota no aparece |
+| PUT | `/api/admin/notas-del-dia/:fecha` | `{ "texto" }`. Crea o cambia la nota; con texto vacío (o solo espacios) la **borra** |
+
+- `PUT` responde `{ "nota": { "fecha", "texto" } }`, o `{ "nota": null }` si borró. Borrar
+  la nota de un día que no tenía ninguna no es un error: responde lo mismo.
+- Una sola puerta para crear, cambiar y borrar porque para Ariel es un solo gesto: escribe
+  en el renglón y sale. Partirlo obligaría a la pantalla a decidir qué mandar mirando si
+  antes había algo.
+- El texto se recorta antes de validar. Más de 200 letras → `400 PARAMETROS_INVALIDOS`.
 
 ### Sincronización de Coexistence — HU-22 (solo `super_admin`)
 

@@ -49,6 +49,10 @@ import {
   postSincronizarFeriados,
 } from '../controllers/feriados.controller'
 import {
+  getNotasDelDia,
+  putNotaDelDia,
+} from '../controllers/notasDelDia.controller'
+import {
   deleteBloqueo,
   getBloqueos,
   patchBloqueo,
@@ -178,6 +182,10 @@ adminRouter.post(
   postSincronizarFeriados,
 )
 adminRouter.patch('/admin/feriados/:id', requireAuth, patchFeriado)
+
+// HU-32 — La nota rápida de cada día, en la agenda semanal.
+adminRouter.get('/admin/notas-del-dia', requireAuth, getNotasDelDia)
+adminRouter.put('/admin/notas-del-dia/:fecha', requireAuth, putNotaDelDia)
 
 adminRouter.get('/admin/bloqueos', requireAuth, getBloqueos)
 adminRouter.post('/admin/bloqueos', requireAuth, postBloqueo)

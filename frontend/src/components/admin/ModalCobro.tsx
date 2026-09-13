@@ -63,7 +63,10 @@ export function ModalCobro({ turno, onClose }: ModalCobroProps) {
   // El turno llega `reservado` cuando esto se abrió desde "Realizado", y `realizado`
   // cuando Ariel viene a completar o corregir un cobro. Es la única diferencia entre los
   // dos usos, así que se deduce del turno en vez de pedir un prop que puede mentir.
-  const alMarcar = turno.estado === 'reservado'
+  //
+  // `ausente` cuenta como marcar (13/9/2026): es sacarle el Ausente a alguien que sí vino, y
+  // el cobro viaja en el mismo PATCH que lo pasa a Realizado, igual que desde un reservado.
+  const alMarcar = turno.estado === 'reservado' || turno.estado === 'ausente'
 
   // ⚠️ El precio se lee **ahora**, no de un snapshot guardado al reservar. La duración sí
   // se congela (decide la disponibilidad y moverla correría turnos ya agendados), pero el
@@ -192,8 +195,8 @@ export function ModalCobro({ turno, onClose }: ModalCobroProps) {
             </span>
           ) : (
             <span className="text-tinta-tenue text-xs">
-              Este servicio todavía no tiene precio cargado — se lo podés poner en
-              "Horarios y servicios".
+              Este servicio todavía no tiene precio cargado — se lo podés poner
+              en "Horarios y servicios".
             </span>
           )}
         </label>

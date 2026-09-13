@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { isAxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/ui/Button'
 import { Kicker } from '../../components/ui/Kicker'
@@ -34,7 +35,7 @@ import {
   domingoDeLaSemana,
   turnoEnCurso,
 } from '../../utils/fecha'
-import type { Bloqueo, TurnoAdmin } from '../../types/api'
+import type { Bloqueo, ErrorApi, TurnoAdmin } from '../../types/api'
 
 type Vista = 'dia' | 'semana'
 
@@ -172,16 +173,32 @@ export function AgendaPage() {
     },
   })
 
+  // El error de la última marca, atado al turno: se muestra en esa fila y no arriba de la
+  // página, donde en un día cargado quedaría fuera de la vista. Antes esta mutación no
+  // tenía `onError` y un fallo no se veía en ningún lado; con sacarle el Ausente a un turno
+  // eso dejó de ser teórico (el rato pudo habérsele dado a otro).
+  const [errorMarcar, setErrorMarcar] = useState<{
+    id: string
+    mensaje: string
+  } | null>(null)
+
   const marcarMutation = useMutation({
     mutationFn: ({
       id,
       estado,
     }: {
       id: string
-      estado: 'realizado' | 'ausente'
+      estado: 'realizado' | 'ausente' | 'reservado'
     }) => marcarEstadoTurno(id, estado),
+    onMutate: () => setErrorMarcar(null),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+    },
+    onError: (err, { id }) => {
+      const mensaje = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error.mensaje
+        : null
+      setErrorMarcar({ id, mensaje: mensaje ?? 'No pudimos cambiar el turno.' })
     },
   })
 
@@ -481,6 +498,9 @@ export function AgendaPage() {
                             : marcarMutation.mutate({ id: t.id, estado })
                         }
                         onCobrar={() => setTurnoCobrar(t)}
+                        error={
+                          errorMarcar?.id === t.id ? errorMarcar.mensaje : null
+                        }
                         cancelando={
                           cancelarMutation.isPending &&
                           cancelarMutation.variables === t.id

@@ -1,4 +1,11 @@
+import { Fragment, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Insignia } from './Insignia'
+import {
+  guardarNotaDelDia,
+  MAX_LARGO_NOTA,
+  obtenerNotasDelDia,
+} from '../../api/notas'
 import {
   DIAS_CARGA_HACIA_ATRAS,
   DIAS_CORTOS,
@@ -304,25 +311,149 @@ export function GrillaSemana({
         </div>
 
         {tramos.map((tramo, i) => (
-          <TramoGrilla
-            key={tramo.inicio}
-            tramo={tramo}
-            dias={dias}
-            turnos={turnos}
-            bloqueos={bloqueos}
-            franjas={franjas}
-            feriados={feriados}
-            hoy={hoy}
-            minutosAhora={minutosAhora}
-            onElegirHueco={onElegirHueco}
-            onElegirTurno={onElegirTurno}
-            onElegirBloqueo={onElegirBloqueo}
-            // El corte entre la mañana y la tarde: en la planilla es una franja verde, y
-            // es lo que Ariel usa para no confundir un hueco de las 11 con uno de las 18.
-            separado={i > 0}
-          />
+          <Fragment key={tramo.inicio}>
+            {/* HU-32 — La nota del día va justo en el corte entre la mañana y la tarde, que
+                es el renglón que Ariel ya mira para ubicarse: arriba lo de la mañana,
+                abajo lo de la tarde, y en el medio lo que tiene que acordarse ese día. */}
+            {i > 0 && <RenglonNotas dias={dias} />}
+            <TramoGrilla
+              tramo={tramo}
+              dias={dias}
+              turnos={turnos}
+              bloqueos={bloqueos}
+              franjas={franjas}
+              feriados={feriados}
+              hoy={hoy}
+              minutosAhora={minutosAhora}
+              onElegirHueco={onElegirHueco}
+              onElegirTurno={onElegirTurno}
+              onElegirBloqueo={onElegirBloqueo}
+              // El corte entre la mañana y la tarde: en la planilla es una franja verde, y
+              // es lo que Ariel usa para no confundir un hueco de las 11 con uno de las 18.
+              separado={i > 0}
+            />
+          </Fragment>
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * HU-32 — El renglón de notas: una casilla por día, entre la mañana y la tarde.
+ *
+ * Es un renglón y no un bloc de notas a propósito ("traer cambio", "llamar al
+ * proveedor"): una línea que se lee de un vistazo al lado de los turnos del día.
+ *
+ * Una sola consulta para toda la semana, no una por día: cinco casillas pidiendo lo suyo
+ * serían cinco viajes a Render cada vez que se abre la agenda.
+ */
+function RenglonNotas({ dias }: { dias: string[] }) {
+  const desde = dias[0]
+  const hasta = dias[dias.length - 1]
+  const query = useQuery({
+    queryKey: ['notas-del-dia', desde, hasta],
+    queryFn: () => obtenerNotasDelDia(desde, hasta),
+  })
+
+  return (
+    <div
+      className="border-agenda-linea grid border-t-4"
+      style={{ gridTemplateColumns: `4.5rem repeat(${dias.length}, 1fr)` }}
+    >
+      <div className="bg-agenda-fondo border-agenda-linea text-agenda-tinta sticky left-0 z-10 flex items-center justify-center border-r-2 px-1 font-bold">
+        Nota
+      </div>
+      {dias.map((dia) => {
+        const guardado = query.data?.find((n) => n.fecha === dia)?.texto ?? ''
+        return (
+          // ⚠️ La `key` lleva el texto guardado y no es un descuido: cuando la nota cambia
+          // en el servidor la casilla se vuelve a montar con el valor nuevo, en vez de
+          // copiar la prop al estado con un efecto. No pisa lo que Ariel está tipeando
+          // porque la nota solo cambia al guardar, y guardar pasa al salir de la casilla.
+          <CeldaNota
+            key={`${dia}-${guardado}`}
+            dia={dia}
+            guardado={guardado}
+            cargando={query.isPending}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * La casilla de un día.
+ *
+ * ⚠️ **Se guarda al salir de la casilla o con Enter, nunca letra por letra.** Es la lección
+ * del selector de color de las etiquetas (4/9/2026): un `PATCH` por cada cambio del input
+ * son decenas de requests en paralelo, y el último que llega al servidor no es
+ * necesariamente el último que se escribió. Acá sería perder el final de la nota.
+ *
+ * Escape descarta lo tipeado y vuelve a lo guardado.
+ */
+function CeldaNota({
+  dia,
+  guardado,
+  cargando,
+}: {
+  dia: string
+  guardado: string
+  cargando: boolean
+}) {
+  const queryClient = useQueryClient()
+  const [texto, setTexto] = useState(guardado)
+  const [fallo, setFallo] = useState(false)
+  // Escape tiene que descartar, pero salir de la casilla es lo que guarda: sin esta marca,
+  // el `blur` que dispara el propio Escape guardaría justo lo que se quería tirar.
+  const descartar = useRef(false)
+
+  const mutation = useMutation({
+    mutationFn: (limpio: string) => guardarNotaDelDia(dia, limpio),
+    onSuccess: () => {
+      setFallo(false)
+      void queryClient.invalidateQueries({ queryKey: ['notas-del-dia'] })
+    },
+    onError: () => setFallo(true),
+  })
+
+  function alSalir() {
+    if (descartar.current) {
+      descartar.current = false
+      setTexto(guardado)
+      return
+    }
+    const limpio = texto.trim()
+    if (limpio === guardado) return
+    mutation.mutate(limpio)
+  }
+
+  return (
+    <div className="bg-agenda-fondo border-agenda-linea border-r-2 p-1 last:border-r-0">
+      <input
+        value={texto}
+        maxLength={MAX_LARGO_NOTA}
+        disabled={cargando}
+        onChange={(e) => setTexto(e.target.value)}
+        onBlur={alSalir}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') {
+            descartar.current = true
+            e.currentTarget.blur()
+          }
+        }}
+        placeholder="Nota"
+        aria-label={`Nota del ${dia}`}
+        // El texto entero en el globito: la casilla es angosta y una nota larga se corta.
+        title={
+          fallo ? 'No se pudo guardar la nota. Tocá y probá de nuevo.' : texto
+        }
+        className={`bg-turno-hoy text-agenda-tinta placeholder:text-agenda-tinta/40 w-full rounded border px-2 py-1 ${
+          fallo ? 'border-ausente-fuerte border-2' : 'border-agenda-linea/40'
+        } ${mutation.isPending ? 'opacity-60' : ''}`}
+      />
     </div>
   )
 }
