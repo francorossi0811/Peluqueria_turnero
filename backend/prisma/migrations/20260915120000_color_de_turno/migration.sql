@@ -1,0 +1,13 @@
+-- HU-34 — El color con el que Ariel marca un turno en la grilla semanal.
+--
+-- Nullable y sin default: `null` es "pintalo por su estado", que es como sigue estando
+-- todo lo ya cargado. Por eso el ALTER no toca ninguna fila existente.
+--
+-- VARCHAR(7) es exactamente lo que ocupa un `#rrggbb`, que es lo único que el backend
+-- acepta (`esColorValido`).
+--
+-- ⚠️ El diff salió con esta sola línea: no toca `turnos_no_solapamiento`, el EXCLUDE
+-- escrito a mano que vive en la migración inicial y no en schema.prisma. Verificado contra
+-- `pg_constraint` después de aplicar.
+-- AlterTable
+ALTER TABLE "turnos" ADD COLUMN     "color" VARCHAR(7);

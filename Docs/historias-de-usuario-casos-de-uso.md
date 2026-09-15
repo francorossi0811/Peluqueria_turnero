@@ -467,6 +467,36 @@ dejarlo pagado de antes sin tener que pedírselos por WhatsApp.
 - Los datos viven en un solo lugar del código (`frontend/src/utils/contacto.ts`), junto al
   teléfono: si Ariel cambia de cuenta, se cambian ahí.
 
+**HU-34 — Pintar un turno del color que yo quiera**
+Como Ariel, quiero poder cambiarle el color a un turno puntual, para marcar a ojo lo que
+tiene algo distinto (un trabajo largo, alguien que viene de lejos, lo que sea que necesite
+recordar), sin que el sistema me lo cambie solo.
+*(Pedido del 15/9/2026.)*
+- Le pongo el color **desde el detalle del turno**, con el mismo selector que las etiquetas,
+  y me ofrece **los últimos colores que usé** para tocar uno y listo. También puedo dejarlo
+  "sin color" y que vuelva a pintarse como siempre.
+- Se ve en la **vista Semana**. La vista Día no cambia.
+- ⚠️ **El color que elijo le gana al color del día**: un turno futuro al que le puse color
+  **no pasa a blanco cuando llega el día**, que es lo que hace el pendiente normal (HU-23).
+  Mientras el turno esté pendiente, el color es el que yo elegí.
+- Cuando lo marco **Realizado o Ausente**, vuelven el verde y el rojo del estado: son los
+  colores con los que leo lo que me queda por hacer. El color **no se borra**, así que si le
+  saco el Ausente a alguien, el turno vuelve a verse del color que le había puesto.
+- Solo se le puede poner color a un turno **pendiente** (incluso a uno de un día que ya pasó
+  y quedó sin cerrar). Sobre uno ya marcado el sistema lo rechaza, en vez de guardar un color
+  que no se vería en ningún lado.
+- El texto de arriba del bloque se pone **blanco o negro solo**, según qué tan oscuro sea el
+  color, para que el nombre se lea siempre.
+
+*Por qué los últimos colores salen de los turnos y no de una preferencia guardada:* el dato
+ya está en la base, así que una tabla aparte sería estado que se puede desincronizar para
+conseguir lo mismo (mismo criterio que el cobro sin tabla `pagos`, HU-27). Y de paso Ariel ve
+la misma lista desde el celular y desde la tablet del mostrador.
+
+*El color dice lo que Ariel quiera, y eso no contradice a HU-23:* el color del **estado**
+sigue mandando en cuanto el turno se cierra. Lo que se abre es el pendiente, que es donde él
+necesita anotarse algo que el sistema no sabe.
+
 **HU-31 — Reservar para mí y para los míos en una sola vez**
 Como clienta que viene con los hijos, quiero sacar los turnos de todos de una sola pasada y seguidos, para no tener que cargar mis datos tres veces ni que nos toquen horarios sueltos.
 

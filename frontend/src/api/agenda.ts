@@ -85,6 +85,34 @@ export async function marcarEstadoTurno(
   return data
 }
 
+/** HU-34 — Le pone (o le saca, con `null`) el color a un turno pendiente.
+ *
+ * Endpoint propio y no dentro del PATCH de turno, con el mismo criterio que el nombre y el
+ * teléfono: aquel mueve el turno en el tiempo y revalida disponibilidad; esto solo cambia
+ * cómo se ve y no le puede pisar el horario a nadie. */
+export async function cambiarColorTurno(
+  id: string,
+  color: string | null,
+): Promise<TurnoAdmin> {
+  const { data } = await apiClient.patch<TurnoAdmin>(
+    `/admin/turnos/${id}/color`,
+    { color },
+  )
+  return data
+}
+
+/** HU-34 — Los últimos colores que Ariel usó, para elegir de a un toque.
+ *
+ * Salen de los turnos y no de una preferencia guardada por dispositivo: así el celular y
+ * la tablet del mostrador muestran la misma lista, que es el mismo motivo por el que
+ * `vistoPorAdmin` vive en la base. */
+export async function obtenerColoresRecientes(): Promise<string[]> {
+  const { data } = await apiClient.get<{ colores: string[] }>(
+    '/admin/turnos/colores-recientes',
+  )
+  return data.colores
+}
+
 /** HU-27 — Le carga o le corrige el cobro a un turno ya realizado.
  *
  * Es la contracara de que el cobro sea opcional: sin esto, un turno marcado a las

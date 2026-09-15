@@ -3,7 +3,9 @@ import { getMe, patchPassword } from '../controllers/admin.controller'
 import {
   getAgenda,
   getBuscarTurnos,
+  getColoresRecientes,
   patchCobroTurno,
+  patchColorTurno,
   patchEstadoTurno,
   patchNombreTurno,
   patchTelefonoTurno,
@@ -123,6 +125,13 @@ adminRouter.delete(
 adminRouter.get('/admin/disponibilidad', requireAuth, getDisponibilidadAdmin)
 adminRouter.get('/admin/turnos', requireAuth, getAgenda)
 adminRouter.get('/admin/turnos/buscar', requireAuth, getBuscarTurnos)
+// HU-34 — Los últimos colores que usó. Va acá arriba, con el resto de las rutas literales,
+// para que 'colores-recientes' no se pueda leer como un id.
+adminRouter.get(
+  '/admin/turnos/colores-recientes',
+  requireAuth,
+  getColoresRecientes,
+)
 adminRouter.post('/admin/turnos', requireAuth, postTurnoManual)
 // HU-31 — El bloque de turnos seguidos, del lado de Ariel. Ruta aparte de la pública: es la
 // ruta la que dice quién crea el turno, y de ahí cuelgan sus tres asimetrías (sin topes, sin
@@ -136,6 +145,8 @@ adminRouter.post(
 )
 adminRouter.patch('/admin/turnos/:id/estado', requireAuth, patchEstadoTurno)
 adminRouter.patch('/admin/turnos/:id/nombre', requireAuth, patchNombreTurno)
+// HU-34 — El color del turno en la grilla. Solo sobre un turno pendiente.
+adminRouter.patch('/admin/turnos/:id/color', requireAuth, patchColorTurno)
 adminRouter.patch('/admin/turnos/:id/telefono', requireAuth, patchTelefonoTurno)
 // HU-27 — Le carga o le corrige el cobro a un turno ya realizado. El cobro del momento
 // va dentro del PATCH de estado de arriba, que es cuando Ariel lo hace de verdad.

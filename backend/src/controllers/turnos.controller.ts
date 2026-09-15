@@ -4,8 +4,10 @@ import {
   buscarTurnos,
   cancelarTurno,
   cancelarTurnoAdmin,
+  cambiarColorDelTurno,
   cambiarNombreDelTurno,
   cargarTelefonoDelTurno,
+  coloresRecientes,
   idsNuevosDespuesDe,
   crearTurno,
   crearTurnosEnGrupo,
@@ -55,9 +57,11 @@ import {
   formatearHora,
 } from '../utils/fechaHora'
 import {
+  esColorValido,
   esNombreValido,
   esTelefonoUtilizable,
   esTelefonoValido,
+  MENSAJE_COLOR_INVALIDO,
   MENSAJE_NOMBRE_INVALIDO,
   MENSAJE_TELEFONO_INEXISTENTE,
   MENSAJE_TELEFONO_INVALIDO,
@@ -340,6 +344,9 @@ function turnoAdminDto(turno: TurnoConCliente) {
     medioPago: turno.medioPago,
     montoCobrado: turno.montoCobrado,
     cobradoEn: turno.cobradoEn ? turno.cobradoEn.toISOString() : null,
+    // HU-34 — Solo de admin: es una marca de la agenda de Ariel, no un dato del turno que
+    // le importe al cliente.
+    color: turno.color,
   }
 }
 
@@ -943,6 +950,53 @@ export async function patchTelefonoTurno(req: Request, res: Response) {
     if (manejarErroresComunes(err, res)) return
     throw err
   }
+}
+
+// HU-34 — El color de un turno. `null` es sacárselo y volver al color del estado, así que
+// es un valor legítimo y no "falta el campo": por eso `nullable()` y no `optional()` — con
+// `optional()`, un body vacío por error se leería como "sacale el color".
+// El mensaje del `z.string()` no es decorativo: sin él, un body sin `color` respondía
+// "Invalid input: expected string, received undefined" —crudo de zod y en inglés—, que es
+// exactamente lo que se corrigió en `esquemasFecha.ts`. Estos textos los lee Ariel.
+const colorSchema = z.object({
+  color: z
+    .string({ error: `Falta el color. ${MENSAJE_COLOR_INVALIDO}` })
+    .trim()
+    .refine(esColorValido, MENSAJE_COLOR_INVALIDO)
+    .nullable(),
+})
+
+export async function patchColorTurno(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = colorSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  try {
+    const turno = await cambiarColorDelTurno(
+      idParsed.data.id,
+      bodyParsed.data.color,
+    )
+    res.json(turnoAdminDto(turno))
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+/** HU-34 — Los últimos colores que Ariel usó, para elegir de a un toque. */
+export async function getColoresRecientes(_req: Request, res: Response) {
+  res.json({ colores: await coloresRecientes() })
 }
 
 // HU-12 — Marcar Realizado o Ausente.

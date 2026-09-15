@@ -471,6 +471,24 @@ Sobre `PATCH /api/admin/password`:
 | PATCH | `/api/admin/turnos/:id/nombre` | `{ "clienteNombre": "Nico" }` — corrige el nombre de un turno ya cargado. Es la contracara de que el bloque del panel pida **un solo nombre** para los N turnos (4/9/2026). Sin la regla de "solo letras", igual que la carga manual. **No toca la ficha**: la identidad es el teléfono y en la interfaz manda el apodo |
 | PATCH | `/api/admin/turnos/:id/telefono` | `{ "clienteTelefono": "351 459 3325" }` — le carga el teléfono a un turno que se guardó sin él (HU-08) y lo engancha con su ficha (HU-25) |
 | PATCH | `/api/admin/turnos/:id/cobro` | `{ "medioPago": "efectivo", "montoCobrado": 9500 }` — le carga o le corrige el cobro a un turno **ya realizado** (HU-27) |
+| PATCH | `/api/admin/turnos/:id/color` | `{ "color": "#c0392b" }` o `{ "color": null }` — el color del turno en la grilla semanal (HU-34). Solo sobre un turno **pendiente** |
+| GET | `/api/admin/turnos/colores-recientes` | `{ "colores": ["#c0392b", …] }` — los últimos 6 colores distintos que usó Ariel, del más reciente al más viejo (HU-34) |
+
+**Sobre `PATCH …/color` (HU-34, 15/9/2026).** El color se guarda en `turnos.color` y tiene
+que ser un hexadecimal de 6 dígitos con `#`; cualquier otra cosa (`red`, `#fff`,
+`rgb(...)`) responde `400 PARAMETROS_INVALIDOS`. `null` es un valor legítimo —"sacale el
+color"— y por eso el campo es **nullable y no opcional**: con opcional, un body vacío por
+error se leería como un pedido de borrarlo.
+
+Solo acepta turnos en estado `reservado`; sobre uno ya marcado responde
+`409 TURNO_NO_MODIFICABLE`. No es una restricción de más: el color se dibuja únicamente
+mientras el turno está pendiente (al marcarlo Realizado o Ausente mandan el verde y el rojo
+del estado), así que aceptarlo sobre un realizado guardaría un dato invisible, que desde la
+pantalla se ve igual que un color que no se guardó.
+
+`GET …/colores-recientes` sale de los propios turnos y no de una tabla de preferencias: el
+dato ya está guardado, y así la lista es la misma en el celular y en la tablet del mostrador.
+Ordena por `updated_at`, que es cuándo eligió ese color y no cuándo se creó el turno.
 
 Sobre `PATCH …/telefono`: va en un endpoint propio y no dentro de `PATCH
 /api/admin/turnos/:id` a propósito. Aquel mueve el turno en el tiempo y tiene que

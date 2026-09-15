@@ -919,6 +919,81 @@ export async function registrarCobro(
 }
 
 /**
+ * HU-34 — El color con el que Ariel marca un turno en la grilla, o `null` para sacárselo.
+ *
+ * **Solo sobre un turno pendiente**, y no es una restricción de más: el color se mira
+ * únicamente mientras el turno está `reservado` (al marcarlo mandan el verde y el rojo del
+ * estado), así que aceptarlo sobre un realizado guardaría un dato que no se ve en ningún
+ * lado — el peor resultado posible, porque desde la pantalla se vería igual que un color
+ * que no se guardó.
+ *
+ * Endpoint propio y no dentro de `editarTurno`, con el mismo criterio que el teléfono
+ * (HU-25) y el nombre: aquel mueve el turno en el tiempo y revalida disponibilidad; esto
+ * solo cambia cómo se ve y no le puede pisar el horario a nadie.
+ */
+export async function cambiarColorDelTurno(
+  id: string,
+  color: string | null,
+): Promise<TurnoConCliente> {
+  const turno = await obtenerTurno(id)
+  if (turno.estado !== 'reservado') throw new TurnoNoModificableError()
+
+  return prisma.turno.update({
+    where: { id },
+    include: INCLUDE_CLIENTE,
+    data: { color },
+  })
+}
+
+/** Los primeros `cantidad` colores distintos de una lista, en el orden en que aparecen.
+ *
+ * Aparte y pura para poder testearla: es la regla de "los últimos que usó" —sin repetir, y
+ * comparando en minúscula, porque `#C0392B` y `#c0392b` son el mismo color y verlos dos
+ * veces en la fila de recientes sería un error que Ariel no podría explicarse. */
+export function primerosDistintos(
+  colores: string[],
+  cantidad: number,
+): string[] {
+  const vistos: string[] = []
+  for (const color of colores) {
+    const normalizado = color.toLowerCase()
+    if (!vistos.includes(normalizado)) vistos.push(normalizado)
+    if (vistos.length === cantidad) break
+  }
+  return vistos
+}
+
+/** Cuántos turnos se miran hacia atrás para juntar los colores recientes. Es un techo, no
+ * una regla: con 6 colores distintos corta antes. Evita traer la tabla entera el día que
+ * Ariel haya coloreado cientos de turnos. */
+const TURNOS_A_MIRAR_POR_COLOR = 100
+
+/**
+ * HU-34 — Los últimos colores que Ariel usó, para ofrecérselos de a un toque.
+ *
+ * Salen de los propios turnos y no de una tabla de preferencias: el dato ya está guardado,
+ * y una tabla aparte sería estado que se puede desincronizar para conseguir exactamente lo
+ * mismo (el mismo criterio con el que el cobro no tiene tabla `pagos`). De paso, sale igual
+ * en el celular y en la tablet, que es lo que Ariel pidió.
+ *
+ * Ordena por `updatedAt` y no por `createdAt`: lo que importa es cuándo eligió ese color,
+ * no cuándo se creó el turno — un color que le puso hoy a un turno de la semana que viene
+ * tiene que aparecer primero.
+ */
+export async function coloresRecientes(cantidad = 6): Promise<string[]> {
+  const filas = await prisma.turno.findMany({
+    where: { color: { not: null } },
+    select: { color: true },
+    orderBy: { updatedAt: 'desc' },
+    take: TURNOS_A_MIRAR_POR_COLOR,
+  })
+  return primerosDistintos(
+    filas.map((f) => f.color as string),
+    cantidad,
+  )
+}
+
+/**
  * HU-25 — Cargarle el teléfono a un turno que se guardó sin él, y engancharlo a su ficha.
  *
  * Es la contracara de que el teléfono sea opcional en la carga manual (HU-08): sin esto,

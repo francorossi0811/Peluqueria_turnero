@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  esColorValido,
   esNombreValido,
   esTelefonoUtilizable,
   esTelefonoValido,
@@ -99,5 +100,30 @@ describe('esNombreValido', () => {
     expect(esNombreValido('   ')).toBe(false)
     expect(esNombreValido('---')).toBe(false)
     expect(esNombreValido("' '")).toBe(false)
+  })
+})
+
+// HU-34 — El color del turno. La forma está cerrada al `#rrggbb` que manda el panel porque
+// ese valor se dibuja como fondo y además decide si encima va texto blanco o negro, y esa
+// cuenta necesita tres números.
+describe('esColorValido', () => {
+  it('acepta el hexadecimal de 6 dígitos, en minúscula y en mayúscula', () => {
+    expect(esColorValido('#c0392b')).toBe(true)
+    expect(esColorValido('#C0392B')).toBe(true)
+    expect(esColorValido('#000000')).toBe(true)
+    expect(esColorValido('  #ffffff  ')).toBe(true)
+  })
+
+  it('rechaza la forma corta: el panel no la manda y obligaría a normalizar', () => {
+    expect(esColorValido('#fff')).toBe(false)
+  })
+
+  it('rechaza lo que no es un hexadecimal con #', () => {
+    expect(esColorValido('c0392b')).toBe(false)
+    expect(esColorValido('red')).toBe(false)
+    expect(esColorValido('rgb(192,57,43)')).toBe(false)
+    expect(esColorValido('#gggggg')).toBe(false)
+    expect(esColorValido('#c0392bb')).toBe(false)
+    expect(esColorValido('')).toBe(false)
   })
 })

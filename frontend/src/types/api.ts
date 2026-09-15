@@ -146,6 +146,11 @@ export interface TurnoAdmin extends Turno {
   medioPago: MedioPago | null
   montoCobrado: number | null
   cobradoEn: string | null // ISO
+  /** HU-34 — El color que Ariel le puso a este turno (`#rrggbb`), o `null` para que lo
+   * pinte su estado. Solo se usa mientras el turno está `reservado`: al marcarlo Realizado
+   * o Ausente mandan el verde y el rojo. No se borra al marcar, así que sacarle el Ausente
+   * devuelve el turno a su color. */
+  color: string | null
 }
 
 /** HU-27 — Cómo pagó. Conjunto cerrado: es un enum en la base, no una tabla que Ariel

@@ -14,6 +14,7 @@ import {
   sumarDias,
   turnoEnCurso,
 } from '../../utils/fecha'
+import { tintaSobre } from '../../utils/color'
 import type {
   Bloqueo,
   Feriado,
@@ -158,6 +159,20 @@ function clasesDeEstado(estado: string, esHoyOPasado: boolean): string {
       : 'bg-turno-futuro text-agenda-tinta'
   }
   return CLASES_ESTADO[estado] ?? 'bg-turno-futuro text-agenda-tinta'
+}
+
+/** HU-34 — El color que Ariel le puso a **este** turno, si es que corresponde usarlo.
+ *
+ * Solo pisa al color del estado mientras el turno está pendiente, y ahí gana también sobre
+ * el corte de "hoy o antes": un turno al que le puso color no se vuelve blanco al llegar el
+ * día, que es justo lo que pidió — el color es suyo y se queda hasta que lo cierre.
+ *
+ * Con el turno marcado (realizado / ausente) devuelve `null` y mandan el verde y el rojo:
+ * son los colores con los que lee lo que le queda por hacer, y dejarlos tapar por un color
+ * elegido convertiría la grilla en una decoración. El color igual **no se borra** de la
+ * base, así que sacarle el Ausente a alguien devuelve el turno a su color. */
+function colorElegido(turno: { estado: string; color: string | null }) {
+  return turno.estado === 'reservado' ? turno.color : null
 }
 
 /** Reparte en columnas los turnos que comparten un rato, para que ninguno tape a otro.
@@ -756,6 +771,9 @@ function TramoGrilla({
               // Día, para que las dos coincidan.
               const enCurso = turnoEnCurso(t, dia, hoy, minutosAhora)
 
+              // HU-34 — El color propio del turno, cuando lo tiene y sigue pendiente.
+              const propio = colorElegido(t)
+
               // El alto sale solo de la duración. No se redondea al paso de 20 minutos:
               // si se redondeara, un turno de 35 se vería igual que uno de 40 y Ariel
               // perdería justamente el dato que la planilla no le podía dar.
@@ -775,15 +793,30 @@ function TramoGrilla({
                   // `rounded-md` + `shadow-sm`: el relieve mínimo que despega el bloque del
                   // fondo sin que parezca una tarjeta. El `shadow` se refuerza a `md` solo
                   // en el turno en curso, junto con el borde grueso.
-                  className={`border-agenda-linea absolute overflow-hidden rounded-md border-2 text-left shadow-sm transition hover:brightness-110 ${clasesDeEstado(
-                    t.estado,
-                    // Strings ISO `YYYY-MM-DD`, que se ordenan solos. Nunca `new Date(dia)`:
-                    // lo parsearía en UTC y en Argentina correría el borde un día.
-                    dia <= hoy,
-                  )} ${enCurso ? CLASES_EN_CURSO : ''}`}
+                  className={`border-agenda-linea absolute overflow-hidden rounded-md border-2 text-left shadow-sm transition hover:brightness-110 ${
+                    // Con color propio no van las clases de estado: pintarían el fondo con
+                    // una clase y el color iría por estilo, y ganaría el estilo igual. Que
+                    // solo una de las dos cosas escriba el fondo es lo que hace que esto se
+                    // pueda leer sin saber qué le gana a qué.
+                    propio
+                      ? ''
+                      : clasesDeEstado(
+                          t.estado,
+                          // Strings ISO `YYYY-MM-DD`, que se ordenan solos. Nunca
+                          // `new Date(dia)`: lo parsearía en UTC y en Argentina correría el
+                          // borde un día.
+                          dia <= hoy,
+                        )
+                  } ${enCurso ? CLASES_EN_CURSO : ''}`}
                   style={{
                     top: (inicio - tramo.inicio) / MINUTOS_POR_PX,
                     height: t.servicio.duracionMinutos / MINUTOS_POR_PX,
+                    // HU-34 — El texto lo decide el color elegido, no el tema: sobre un
+                    // color claro va negro y sobre uno oscuro blanco (ver `tintaSobre`).
+                    ...(propio && {
+                      backgroundColor: propio,
+                      color: tintaSobre(propio),
+                    }),
                     // El reparto en columnas (ver `repartirEnColumnas`). Los 2 px de
                     // cada lado son los mismos que antes daban `left-0.5 right-0.5`,
                     // así que un turno solo —el caso normal— queda idéntico a como

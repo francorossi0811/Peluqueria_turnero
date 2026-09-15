@@ -84,3 +84,20 @@ export function esNombreValido(valor: string): boolean {
 
 export const MENSAJE_NOMBRE_INVALIDO =
   'El nombre solo puede tener letras, sin números ni símbolos.'
+
+/** HU-34 — Un color de turno: hexadecimal de 6 dígitos con `#` adelante, que es
+ * exactamente lo que manda el `<input type="color">` del panel.
+ *
+ * Cerrado a esa forma y no a "cualquier color de CSS" a propósito: el valor se dibuja como
+ * fondo de un bloque y además se usa para decidir si encima va texto blanco o negro
+ * (`tintaSobre` en el frontend), y esa cuenta necesita tres números, no `red` ni
+ * `color-mix(...)`. Los 3 dígitos cortos (`#fff`) tampoco entran: el panel nunca los manda
+ * y aceptarlos obligaría a normalizar antes de comparar dos colores como iguales. */
+const FORMA_DE_COLOR = /^#[0-9a-fA-F]{6}$/
+
+export function esColorValido(valor: string): boolean {
+  return FORMA_DE_COLOR.test(valor.trim())
+}
+
+export const MENSAJE_COLOR_INVALIDO =
+  'El color tiene que ser un hexadecimal de 6 dígitos, ej: #c0392b.'

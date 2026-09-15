@@ -414,6 +414,20 @@ model Turno {
   // visto en uno tiene que callarlo en el otro.
   vistoPorAdmin Boolean @default(false) @map("visto_por_admin")
 
+  /// HU-34 — El color con el que Ariel marca **este** turno en la grilla semanal, como
+  /// `#c0392b`. `null` es lo normal: el turno se pinta por su estado, como siempre.
+  ///
+  /// ⚠️ Solo se mira mientras el turno está `reservado`. Al marcarlo Realizado o Ausente
+  /// vuelven a mandar el verde y el rojo, que son los que Ariel lee de un vistazo. **No se
+  /// borra al marcar**, a propósito: si le saca el Ausente a alguien, el turno vuelve a
+  /// estar pendiente y tiene que volver con el color que le había puesto.
+  ///
+  /// Vive en la base y no en el navegador por lo mismo que `vistoPorAdmin`: Ariel usa el
+  /// celular y la tablet del mostrador, y el color que puso en uno tiene que verse en el
+  /// otro. De paso, los últimos colores que usó salen de esta misma columna, sin tabla
+  /// aparte para guardar una preferencia.
+  color String? @db.VarChar(7)
+
   turnoOrigenId String? @map("turno_origen_id") @db.Uuid
   turnoOrigen   Turno?  @relation("Reprogramacion", fields: [turnoOrigenId], references: [id])
   turnosNuevos  Turno[] @relation("Reprogramacion")
