@@ -27,15 +27,15 @@ Como cliente, quiero reservar un turno eligiendo servicio, día y horario, para 
 - **Veo cuánto sale cada servicio** antes de reservar, en la tarjeta y en todo el flujo (enmienda a HU-27 del 14/8/2026 — antes el precio no se mostraba nunca).
 - Al confirmar, recibo un link único para administrar mi turno.
 - No necesito crear cuenta ni contraseña.
-- El teléfono es obligatorio y se valida en dos niveles: **cómo está escrito** (entre 8 y 15 dígitos, admitiendo espacios, guiones, paréntesis y un `+` inicial) y **si el número puede existir** (que la característica sea real). Es el único dato con el que Ariel me puede ubicar si algo cambia, así que no puede quedar en cualquier cosa. El email es opcional, pero si lo dejo tiene que tener formato válido. (Solo es obligatorio **acá**: cuando el turno lo carga Ariel a mano, ver HU-08, puede quedar vacío.)
+- El teléfono es obligatorio y se valida en dos niveles: **cómo está escrito** (entre 8 y 15 dígitos, admitiendo espacios, guiones, paréntesis y un `+` inicial) y **si el número puede existir** (que la característica sea real). Es el único dato con el que Ariel me puede ubicar si algo cambia, así que no puede quedar en cualquier cosa. (Solo es obligatorio **acá**: cuando el turno lo carga Ariel a mano, ver HU-08, puede quedar vacío.)
+- ⚠️ **No me pide email** (enmienda del 15/9/2026, pedido de Franco). Era opcional, pero el campo se leía como "hay que mandar algo por mail" y confundía a Ariel y a los clientes; el aviso de esta versión va por WhatsApp. El backend dejó de aceptarlo en la reserva pública. El mail sigue existiendo solo cuando Ariel carga el turno a mano y el cliente se lo dicta (HU-08).
   - ⚠️ *La segunda regla se agregó el 14/8/2026 y corre en las tres puertas. Antes solo estaba en el endpoint con el que Ariel completa un teléfono, y esa asimetría hacía que un número bien escrito pero inexistente entrara al reservar, dejara el turno sin ficha, y después le dijera "inválido" a Ariel sobre un número que el sistema ya había aceptado. Ahora el error aparece mientras el cliente está ahí para corregirlo, pegado al campo y sin sacarlo del paso de datos.*
 
 **HU-02 — Recibir confirmación**
 Como cliente, quiero recibir una confirmación clara de mi turno, para saber que quedó agendado correctamente.
 - La confirmación muestra fecha, hora, servicio y el link único. El link queda siempre visible y se puede copiar, haya dejado email o no.
 - **Me llega la confirmación por WhatsApp al número que dejé, con el link adentro** (HU-22). Es el canal principal desde la v3.
-- Si dejo mi email (es opcional) y el WhatsApp no se pudo mandar, me llega por mail con el link y el turno adjunto para el calendario — así no dependo de copiar el link a mano.
-- Si no lo dejé al reservar, la misma pantalla de confirmación me lo ofrece ahí: cargo el mail y lo recibo, sin volver a empezar (ver HU-19).
+- ~~Si dejo mi email (es opcional) y el WhatsApp no se pudo mandar, me llega por mail con el link y el turno adjunto para el calendario.~~ ~~Si no lo dejé al reservar, la pantalla de confirmación me lo ofrece ahí.~~ **Ya no vale desde el 15/9/2026**: el cliente no deja mail al reservar, y la pantalla y el endpoint para cargarlo después se borraron. El respaldo por mail solo alcanza a los turnos a los que Ariel les cargó un email a mano.
 
 **HU-03 — Cancelar turno**
 Como cliente, quiero poder cancelar mi turno usando mi link único, para liberar el horario si no puedo asistir, sin tener que llamar a Ariel.
@@ -400,10 +400,10 @@ vez de en el color.
 Como cliente, quiero agregar el turno al calendario de mi celular, para que me lo recuerde y para no depender de guardar un link.
 - El botón está en la pantalla de confirmación y también al abrir el link de gestión.
 - El evento incluye el link para cancelar o reprogramar en su descripción.
-- Si dejé mi email **y la confirmación salió por mail** (ver HU-22: el mail es el respaldo de WhatsApp), el turno viene además adjunto ahí (HU-02). El botón de la pantalla de confirmación está siempre, así que el calendario nunca depende del canal por el que me avisaron.
+- Si el turno tiene email **y la confirmación salió por mail** (ver HU-22: el mail es el respaldo de WhatsApp), el turno viene además adjunto ahí (HU-02). Desde el 15/9/2026 eso pasa solo cuando Ariel cargó el email a mano: el cliente ya no lo deja al reservar. El botón está siempre, así que el calendario nunca depende del canal por el que me avisaron.
 - Si reprogramo, el evento del calendario se actualiza en lugar de duplicarse.
 - El evento avisa solo 2 horas antes, sin depender de cómo tenga configurado el calendario cada uno. Dos horas dejan margen para reacomodarse y siguen estando fuera de la ventana de 60 minutos, así que todavía puedo cancelar o reprogramar online.
-- Si reservé **sin** dejar email, la pantalla de confirmación me lo ofrece ahí mismo y me manda el link con el turno adjunto. Se puede una sola vez por turno: el id del turno es el token de acceso, así que sin ese límite cualquiera con el link podría hacer que el sistema mande mails a direcciones arbitrarias. El email queda guardado, así que una reprogramación posterior también me llega.
+- ~~Si reservé **sin** dejar email, la pantalla de confirmación me lo ofrece ahí mismo y me manda el link con el turno adjunto.~~ **Se borró el 15/9/2026**, junto con el mail de la reserva (HU-01): la pantalla y su endpoint (`POST /api/turnos/:id/enviar-confirmacion`) ya no existen.
 
 ### Administrador (Ariel)
 
@@ -453,13 +453,26 @@ lo que tengo que hacer ese día ("traer cambio", "llamar al proveedor") sin sali
 - El texto baja solo de renglón al llegar al borde, y la casilla crece para que la nota se
   lea entera. **Shift+Enter** baja de renglón a mano, para cuando son dos cosas distintas.
 
+**HU-33 — Dejar el turno pagado desde el link**
+Como cliente, quiero ver los datos para transferirle a Ariel en la pantalla de mi turno, para
+dejarlo pagado de antes sin tener que pedírselos por WhatsApp.
+*(Pedido del 15/9/2026.)*
+- En la pantalla del link de gestión veo **alias, CVU y nombre completo del titular**, cada
+  uno con su botón de **copiar**. Son tres botones y no uno: la app del banco pide el alias
+  o el CVU en un campo, y pegar todo junto ahí no sirve.
+- Se ven **en cualquier estado del turno** (reservado, cancelado, realizado…).
+- El sistema **no ve el pago**. Cuando le llega, Ariel lo registra a mano marcando el turno
+  Realizado con medio **Mercado Pago** (HU-27), igual que cualquier otro cobro.
+- Los datos viven en un solo lugar del código (`frontend/src/utils/contacto.ts`), junto al
+  teléfono: si Ariel cambia de cuenta, se cambian ahí.
+
 **HU-31 — Reservar para mí y para los míos en una sola vez**
 Como clienta que viene con los hijos, quiero sacar los turnos de todos de una sola pasada y seguidos, para no tener que cargar mis datos tres veces ni que nos toquen horarios sueltos.
 
 - Elijo un servicio y lo primero que me pregunta es **cuántos turnos** quiero sacar, de 1 a 6. Después digo qué se hace cada uno: pueden ser servicios distintos (dos cortes de varón y uno de mujer).
 - El sistema **busca un hueco donde entremos todos seguidos** y me ofrece solo esos horarios. La hora que elijo es la del primero; los demás arrancan cuando termina el anterior.
 - Antes de confirmar veo **de qué hora a qué hora** nos queda el bloque entero, y el total a pagar.
-- Los datos se cargan **una sola vez, al final**: un nombre por turno, y **un solo teléfono y un solo mail** para todos.
+- Los datos se cargan **una sola vez, al final**: un nombre por turno, y **un solo teléfono** para todos (sin mail desde el 15/9/2026, ver HU-01).
 - Puedo **sacar uno** del bloque si me equivoqué en la cantidad, sin rehacer todo.
 - Se confirman **todos o ninguno**: no me puede quedar el primero reservado y el resto no.
 - Cada turno queda con **su propio link** para reprogramarlo o cancelarlo por separado, y el mensaje de WhatsApp que le mando a Ariel los lleva a todos.
@@ -622,7 +635,7 @@ cada turno o bloqueo de ese día**.
 | Servicio de larga duración cerca del cierre o del descanso | No se ofrece como horario válido si no entra completo (ver CU-04). Vale igual para los horarios pegados al final de otro turno, que son candidatos desde el 14/8/2026 |
 | Ariel cambia la duración de un servicio después de que ya hay turnos reservados con la duración vieja | El turno guarda una "foto" del servicio (nombre + duración) al momento de reservar, no una referencia que cambie después |
 | Ariel cambia el horario laboral general | Los turnos ya reservados fuera del nuevo horario se mantienen válidos; solo los horarios *nuevos* respetan la config actualizada |
-| Cliente pierde su link único | Si dejó email, el link le llegó por mail y además quedó dentro del evento del calendario (HU-02, HU-19). Si no dejó email, no hay recuperación automática: le escribe a Ariel, que busca el turno en su panel y le reenvía el link |
+| Cliente pierde su link único | El link quedó en el mensaje de WhatsApp que mandó al reservar, y dentro del evento del calendario si lo agregó (HU-19). Si no, no hay recuperación automática: le escribe a Ariel, que busca el turno en su panel y le reenvía el link. (Hasta el 15/9/2026 también podía llegarle por mail; el cliente ya no deja mail) |
 | Cliente reprograma repetidamente para "trabar" horarios | ⚠️ **Enmienda del 15/8/2026:** hasta esta fecha decía "fuera de alcance v1 — posible mejora futura (límite de reprogramaciones)". HU-28 lo cubre **en parte**: reprogramar no puede amontonar más de 3 turnos en una semana ni llevarlos más allá de los 90 días, así que ya no sirve para trabar horarios lejanos ni para concentrarlos. Lo que sigue sin límite es la **cantidad de veces** que se mueve un mismo turno, que no le quita el lugar a nadie |
 | Una persona reserva muchos turnos y llena la agenda | Máximo **6** turnos reservados por ficha de cliente en cualquier ventana de 7 días, más un horizonte de 90 días (HU-28). ⚠️ Eran 3 hasta el 23/8/2026; subió con la reserva en grupo (HU-31). Se cuenta por teléfono normalizado, así que **no** frena a quien invente un número distinto en cada reserva — decisión consciente, ver la nota de HU-28 |
 | Los turnos de un mismo bloque se pisan entre sí | **No puede pasar.** El cliente manda una sola hora de arranque y el backend deriva las demás encadenando duraciones, así que un bloque con huecos o superpuesto no se puede ni expresar. Esto reemplazó a un chequeo explícito que existía cuando cada turno llevaba su propia hora |

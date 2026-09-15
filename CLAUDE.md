@@ -184,7 +184,7 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
 - Nunca se borra un turno físicamente: la aplicación no hace `DELETE` sobre `turnos`, todo cambio es un `UPDATE` de `estado` (+ `updated_at`). Al reprogramar, el turno viejo queda en estado `reprogramado` y el nuevo apunta a él con `turno_origen_id`. **No hay tabla de historial/auditoría** — el rastro es ese, no un log de cambios.
 - La sesión del admin dura 7 días y se renueva sola mientras use el panel; cambiar la contraseña invalida los tokens emitidos antes (HU-15, HU-16).
 - **Se entra al panel con el email, no con un usuario** (HU-26). `administradores.usuario` es solo el nombre que se muestra. Hay dos roles: `super_admin` (Franco) y `admin` (Ariel); **la única diferencia es administrar cuentas**, todo lo demás lo puede el `admin`.
-- El cliente puede dejar un **email opcional** al reservar: si lo deja, recibe la confirmación con su link único y el turno adjunto para el calendario. Si no lo dejó, la pantalla de confirmación se lo ofrece ahí mismo (`POST /api/turnos/:id/enviar-confirmacion`, **un solo uso por turno** — el id del turno es el token, así que sin ese límite sería un relay de mails abierto).
+- ⚠️ **El cliente reserva SIN email** (15/9/2026, pedido de Franco). Era opcional, pero el campo se leía como "hay que mandar algo por mail" y confundía a Ariel y a los clientes. Se sacó **también del backend**: `bodySchema` y `grupoSchema` ya no declaran `clienteEmail` (zod lo descarta si llega, así que un bundle viejo no da 400), y `POST /api/turnos/:id/enviar-confirmacion` —con `guardarEmailDelCliente` y `TurnoYaTieneEmailError`— se borró. **El mail sigue vivo en la carga de Ariel**: `bodyManualSchema` y `grupoManualSchema` lo declaran aparte (`emailOpcionalSchema`), y con email cargado sale la confirmación con link y `.ics` como siempre. La columna `turnos.cliente_email` no se tocó: sin migración.
 - El **teléfono se valida en dos niveles**, y desde el 14/8/2026 los dos corren en las **tres** puertas (reserva pública, carga manual y `PATCH …/telefono`): `esTelefonoValido` mira cómo está escrito (8 a 15 dígitos, con espacios/guiones/paréntesis y un `+` inicial) y `esTelefonoUtilizable` mira si el número **puede existir** (`aE164`, metadata `max` de `libphonenumber-js`). **Es obligatorio cuando reserva un cliente por la web** (es el único dato con el que Ariel lo ubica) y **opcional cuando el turno lo carga Ariel a mano**, porque no se sabe los números de memoria; si escribió algo, tiene que pasar las dos reglas. La diferencia se hace sobrescribiendo el campo en `bodyManualSchema`, no aflojando `bodySchema`.
   - ⚠️ **Por qué la segunda regla está en las tres y no solo en el PATCH, que era donde vivía:** un número bien escrito pero inexistente (`2954123456`) entraba en la reserva, `vincularCliente` no lo podía normalizar y el turno quedaba **sin ficha**; cuando Ariel lo quería completar a mano, el PATCH sí lo rechazaba y le decía "inválido" sobre un número que el sistema ya había aceptado. Una regla decidía si entraba y otra distinta si servía, en momentos distintos, y el que se comía el problema era el que ya no podía corregirlo. Hay un test que fija la diferencia entre las dos reglas.
   - ⚠️ La copia del frontend (`utils/validaciones.ts`) tiene **solo la primera**: la segunda necesita la metadata de `libphonenumber-js`, cara para el bundle público. El backend rechaza y las dos pantallas muestran su mensaje **pegado al campo** — en `ReservarPage` eso además implica **quedarse en el paso de datos**, porque antes rebotaba al paso del horario con un mensaje genérico.
@@ -1047,6 +1047,31 @@ ningún lado. Con este cambio el fallo dejó de ser teórico y el error ahora ca
   del frontend.
 - Quedaron datos de prueba **en `desarrollo`**: turnos "Prueba…" el 16/9, dos notas y tres
   fotos en la ficha de Mariano Rossi. Producción no se tocó.
+
+### Reservar sin mail y datos para transferir (15/9/2026) ✅ en `desarrollo`
+
+Dos pedidos de Franco del lado del cliente. **Sin migraciones.**
+
+1. **Sin mail en la reserva** — ver la regla en "Reglas de negocio clave". En pantalla se fue el
+   campo "Email (opcional)" del paso de datos; en el backend, el campo de los dos schemas
+   públicos y el endpoint de cargarlo después. De `ReservarPage` se borró `PedirMail`, que
+   estaba comentado junto con `PasoConfirmacion`: su endpoint ya no existe, así que
+   descomentarlo no habría funcionado. `PasoConfirmacion` sigue comentado.
+2. **HU-33 — alias, CVU y titular en la pantalla del turno**, cada uno con su botón de copiar
+   (`BotonCopiar`, nuevo en `components/ui`), **en cualquier estado**. Los datos viven en
+   `utils/contacto.ts` junto al teléfono. El sistema no ve el pago: Ariel lo registra como
+   Mercado Pago al marcar Realizado (HU-27, sin cambios).
+   - ⚠️ Tres botones y no uno: la app del banco pide alias **o** CVU en un campo.
+   - ⚠️ `wrap-anywhere` y **no** `break-all` en el valor: el CVU son 22 dígitos sin espacios y
+     sin permiso de cortarse empuja la página a 375 px, pero `break-all` partía el nombre del
+     titular por la mitad ("Enr / ique"). Se vio midiendo a ancho de celular.
+   - ⚠️ **Dos caminos para copiar**: `navigator.clipboard` y, si rechaza, `execCommand('copy')`
+     sobre un `textarea` fuera de pantalla, para los celulares viejos que traen la API moderna
+     a medias. Si fallan los dos, el botón dice "No se pudo" en vez de quedarse callado.
+   - ⚠️ **Para probarlo en el navegador de Claude hace falta un click de verdad** (la acción
+     `left_click`), no un `.click()` por script: sin gesto del usuario los dos caminos fallan y
+     el botón muestra "No se pudo". Con el click real dice "Copiado ✓". Verificado las dos
+     cosas: el fallo se ve, y el éxito también, y en los dos casos vuelve solo a "Copiar".
 
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 

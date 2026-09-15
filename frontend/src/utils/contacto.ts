@@ -17,6 +17,16 @@ export const TELEFONO_URL = 'tel:+54' + TELEFONO_LEGIBLE
 
 export const DIRECCION = 'Pastor Taboada 10, X5016 Córdoba'
 
+/** HU-33 — Los datos para dejar el turno pagado de antes (15/9/2026).
+ *
+ * Se muestran en la pantalla de gestión del turno, cada uno con su botón de copiar. Son
+ * datos pensados para publicarse —el sentido es que cualquier cliente pueda transferir—, así
+ * que no es un problema que vivan en un repo público. El sistema no ve el pago: Ariel lo
+ * registra a mano como Mercado Pago cuando le llega. */
+export const ALIAS_PAGO = 'arielenrique22mp'
+export const CVU_PAGO = '0000003100093653313742'
+export const TITULAR_PAGO = 'Ariel Juan Domingo Enrique'
+
 /** El mismo chat de WhatsApp, pero con el mensaje ya escrito y listo para mandar.
  *
  * ⚠️ **Va por `api.whatsapp.com/send` y NO por `wa.me`, y no es capricho: `wa.me` rompe

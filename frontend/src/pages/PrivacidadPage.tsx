@@ -14,13 +14,13 @@ import { EMAIL_CONTACTO, EMAIL_CONTACTO_URL } from '../utils/contacto'
  *
  * ⚠️ El texto es contenido legal, no copy de la interfaz: si cambia lo que el sistema
  * hace con los datos, hay que cambiarlo acá y actualizar la fecha de arriba. Hoy
- * describe exactamente lo que el código guarda — nombre, teléfono, email opcional y los
- * datos del turno — y los cinco proveedores por los que pasa. */
+ * describe exactamente lo que el código guarda — nombre, teléfono y los datos del turno
+ * (el cliente ya no deja mail desde el 15/9/2026) — y los proveedores por los que pasa. */
 export function PrivacidadPage() {
   return (
     <LayoutLegal
       titulo="Política de privacidad"
-      actualizado="Última actualización: 21 de agosto de 2026"
+      actualizado="Última actualización: 15 de septiembre de 2026"
     >
       <SeccionLegal titulo="1. Quiénes somos">
         <p>
@@ -63,13 +63,6 @@ export function PrivacidadPage() {
                 <td className="px-3 py-2">Sí</td>
                 <td className="px-3 py-2">
                   Contactarte si hay algún cambio en tu turno
-                </td>
-              </tr>
-              <tr>
-                <td className="px-3 py-2">Email</td>
-                <td className="px-3 py-2">No</td>
-                <td className="px-3 py-2">
-                  Enviarte la confirmación del turno y el archivo de calendario
                 </td>
               </tr>
             </tbody>
@@ -161,7 +154,8 @@ export function PrivacidadPage() {
             <strong className="text-tinta">
               Proveedor de correo electrónico
             </strong>{' '}
-            — envío del mail de confirmación, si dejaste tu email.
+            — envío del mail de confirmación, solo si le diste tu email a Ariel
+            en persona para que lo cargue.
           </li>
         </ListaLegal>
         <p>

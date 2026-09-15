@@ -3,7 +3,6 @@ import {
   getTurno,
   getTurnoIcs,
   postCancelarTurno,
-  postEnviarConfirmacion,
   postReprogramarTurno,
   postTurno,
   postTurnosEnGrupo,
@@ -22,5 +21,6 @@ turnosRouter.get('/turnos/:id', getTurno)
 turnosRouter.get('/turnos/:id/calendario.ics', getTurnoIcs)
 turnosRouter.post('/turnos/:id/cancelar', postCancelarTurno)
 turnosRouter.post('/turnos/:id/reprogramar', postReprogramarTurno)
-// HU-19 — Cargar el mail después de reservar, para recibir el link. Un solo uso.
-turnosRouter.post('/turnos/:id/enviar-confirmacion', postEnviarConfirmacion)
+// ⚠️ `POST /turnos/:id/enviar-confirmacion` (HU-19, cargar el mail después de reservar) se
+// borró el 15/9/2026 junto con el campo de mail de la reserva: el cliente ya no deja mail
+// por ningún lado, y era además la única puerta pública que hacía mandar un mail.

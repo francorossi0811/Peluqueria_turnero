@@ -25,17 +25,6 @@ export function esTelefonoValido(valor: string): boolean {
 export const MENSAJE_TELEFONO_INVALIDO =
   'El teléfono no parece válido. Poné el número con característica, ej: 351 459 3325.'
 
-/** Chequeo deliberadamente laxo: alcanza para atajar el error de tipeo típico
- * (falta la arroba, falta el punto, sobra un espacio) sin rechazar direcciones raras
- * pero válidas. La validación de verdad la hace `z.email()` en el backend. */
-const FORMA_DE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-export function esEmailValido(valor: string): boolean {
-  return FORMA_DE_EMAIL.test(valor.trim())
-}
-
-export const MENSAJE_EMAIL_INVALIDO = 'Ese email no parece válido.'
-
 /** Letras, espacios, apóstrofes y guiones. El comentario largo está en el backend, que es
  * el que manda; acá se repite para poder mostrar el error en el campo al instante.
  *

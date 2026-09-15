@@ -148,12 +148,14 @@ ninguno el día figura como `completo`.
 | POST | `/api/turnos/:id/cancelar` | Cancela el turno, valida ventana de 60 min (CU-02) |
 | POST | `/api/turnos/:id/reprogramar` | Reprograma a un nuevo horario, valida ventana de 60 min + disponibilidad (CU-02, HU-04) |
 | GET | `/api/turnos/:id/calendario.ics` | El turno como evento de calendario (HU-19). Devuelve `text/calendar`, no JSON. Público por el mismo motivo que `GET /api/turnos/:id`: el id *es* el token |
-| POST | `/api/turnos/:id/enviar-confirmacion` | Carga el email de un turno que no lo tenía y le manda la confirmación (HU-19). **Un solo uso por turno** |
 
-`POST /api/turnos` acepta además `clienteEmail` (opcional, HU-19). Un string vacío se
-trata como "no dejó email"; uno con formato inválido responde `400 PARAMETROS_INVALIDOS`.
-Si hay email, se envía la confirmación con el link y el `.ics` adjunto — también al
-reprogramar, porque reprogramar genera un turno nuevo y por lo tanto un link nuevo.
+⚠️ **Sin email desde el 15/9/2026.** `POST /api/turnos` y `POST /api/turnos/grupo` ya no
+declaran `clienteEmail`: si llega, zod lo descarta y el turno se guarda con
+`cliente_email = NULL` (un bundle viejo cacheado no recibe 400). `POST
+/api/turnos/:id/enviar-confirmacion` **se borró** (responde 404). El email sigue aceptándose,
+opcional, **solo en `POST /api/admin/turnos` y `POST /api/admin/turnos/grupo`**: si Ariel lo
+carga, se envía la confirmación con el link y el `.ics` adjunto — también al reprogramar,
+porque reprogramar genera un turno nuevo y por lo tanto un link nuevo. La columna no se tocó.
 
 `clienteTelefono` se valida en **dos niveles**, los dos en `backend/src/utils/validaciones.ts`
 y los dos con respuesta `400 PARAMETROS_INVALIDOS`:
@@ -222,7 +224,6 @@ igual que `POST /api/turnos`.
 ```json
 {
   "clienteTelefono": "351 456 7890",
-  "clienteEmail": "ana@gmail.com",
   "fecha": "2026-09-15",
   "hora": "11:05",
   "turnos": [
@@ -237,7 +238,7 @@ uno encadenando duraciones: con una Barba de 15 y un Corte de 20 arrancando 11:0
 11:05–11:20 y 11:20–11:40. Un bloque con huecos o superpuesto **no se puede expresar**, así
 que no hay ningún error de "tus turnos se pisan" — dejó de existir junto con el formato viejo.
 
-⚠️ **El teléfono y el mail van afuera del array.** Es lo que hace estructuralmente imposible
+⚠️ **El teléfono va afuera del array** (en la ruta de admin, también el mail). Es lo que hace estructuralmente imposible
 mandar varios teléfonos y terminar con varias fichas: la ficha del cliente es **una sola** para
 todo el bloque (HU-25). El nombre sí va por turno.
 
@@ -292,20 +293,10 @@ cliente el mensaje de cancelación y a Ariel el push de que se liberó el horari
 admin (`/api/admin/turnos/:id/cancelar`) manda solo el primero — Ariel no se avisa a sí
 mismo.
 
-**POST `/api/turnos/:id/enviar-confirmacion`** — body `{ "email": "juana@gmail.com" }`.
-Guarda el email en el turno y le manda la confirmación con el link y el `.ics`. Response
-`200`: `{ "email": "juana@gmail.com" }`.
-
-Es para el cliente que reservó sin dejar email y lo carga después, desde la pantalla de
-confirmación. **Solo funciona si el turno todavía no tiene email y está `reservado`**; si
-ya tiene, responde `409 TURNO_YA_TIENE_EMAIL`. Ese límite es lo que evita que el endpoint
-sea un relay de mails abierto: el id del turno es el token, así que cualquiera con el link
-puede llamarlo, y sin el límite se podrían disparar mails a direcciones arbitrarias sin
-tope. El chequeo y la escritura son una sola operación atómica (`updateMany` con
-`clienteEmail: null` en el `where`), así que dos requests simultáneos no pasan los dos.
-
-Como efecto secundario deseado, el email queda guardado en el turno: si el cliente después
-reprograma, la reprogramación también le llega por mail.
+~~**POST `/api/turnos/:id/enviar-confirmacion`**~~ — **borrado el 15/9/2026** junto con el
+mail de la reserva pública. Cargaba el email de un turno que no lo tenía (un solo uso por
+turno, `409 TURNO_YA_TIENE_EMAIL`); con el cliente sin mail no tenía pantalla ni sentido, y
+era la única ruta pública que hacía mandar un mail.
 
 **POST `/api/turnos/:id/reprogramar`** — mismo body que la creación (`fecha`, `hora`, y
 opcionalmente nuevo `servicioId`). Internamente: valida ventana de 60 min sobre el turno

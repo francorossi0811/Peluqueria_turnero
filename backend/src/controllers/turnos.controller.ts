@@ -13,7 +13,6 @@ import {
   esCobrable,
   estaDentroDeVentanaDeCambio,
   fechaCargableComoAdmin,
-  guardarEmailDelCliente,
   listarTurnosEnRango,
   marcarTurno,
   marcarTurnosComoVistos,
@@ -35,7 +34,6 @@ import {
   TurnoNoEncontradoError,
   TurnoNoModificableError,
   TurnoSeSolapaConRealizadoError,
-  TurnoYaTieneEmailError,
   HorarioYaOcupadoError,
 } from '../services/errores'
 import {
@@ -93,30 +91,32 @@ const bodySchema = z.object({
     .trim()
     .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
     .refine(esTelefonoUtilizable, MENSAJE_TELEFONO_INEXISTENTE),
-  // HU-19 — Opcional. El `preprocess` es necesario porque un input de texto vacío llega
-  // como `""`, que no pasa la validación de email; sin esto, dejar el campo en blanco
-  // daría error en vez de significar "no dejó mail".
-  clienteEmail: z.preprocess(
-    (v) => (v === '' || v === null ? undefined : v),
-    z.email('El email no parece válido.').optional(),
-  ),
+  // ⚠️ Sin `clienteEmail` desde el 15/9/2026: el cliente reserva sin mail (pedido de
+  // Franco — el campo opcional se leía como "hay que mandar algo por mail"). Un bundle
+  // viejo que todavía lo mande no da 400: zod descarta las claves que no declara. El mail
+  // sigue existiendo solo en la carga de Ariel (`emailOpcionalSchema`, más abajo).
 })
+
+// HU-19 — Solo para la carga manual de Ariel. El `preprocess` es necesario porque un input
+// de texto vacío llega como `""`, que no pasa la validación de email; sin esto, dejar el
+// campo en blanco daría error en vez de significar "no dejó mail".
+const emailOpcionalSchema = z.preprocess(
+  (v) => (v === '' || v === null ? undefined : v),
+  z.email('El email no parece válido.').optional(),
+)
 
 // HU-31 — La reserva en grupo. Reusa los mismos refines del teléfono y del nombre que
 // `bodySchema`: la regla de qué es un teléfono utilizable tiene que ser una sola, y ya se
 // pagó una vez el precio de tener dos (ver la nota de HU-08 en CLAUDE.md).
 //
-// ⚠️ El teléfono y el mail están afuera del array a propósito — ver `DatosGrupoDeTurnos`.
+// ⚠️ El teléfono está afuera del array a propósito — ver `DatosGrupoDeTurnos`. Sin mail,
+// igual que `bodySchema`.
 const grupoSchema = z.object({
   clienteTelefono: z
     .string()
     .trim()
     .refine(esTelefonoValido, MENSAJE_TELEFONO_INVALIDO)
     .refine(esTelefonoUtilizable, MENSAJE_TELEFONO_INEXISTENTE),
-  clienteEmail: z.preprocess(
-    (v) => (v === '' || v === null ? undefined : v),
-    z.email('El email no parece válido.').optional(),
-  ),
   // ⚠️ La fecha y la hora son del **bloque**, no de cada turno: los turnos van pegados uno
   // atrás del otro y el backend deriva la hora de cada uno encadenando duraciones. Un bloque
   // con huecos o superpuesto dejó de ser representable, así que no hay nada que validar.
@@ -162,6 +162,7 @@ const reprogramarSchema = z.object({
 // Lo que **no** cambia: si escribió algo, tiene que ser un teléfono válido.
 const bodyManualSchema = bodySchema.extend({
   origen: z.enum(['presencial', 'llamada', 'whatsapp']),
+  clienteEmail: emailOpcionalSchema,
   // ⚠️ El nombre se **sobrescribe** para sacarle la regla de "solo letras", por el mismo
   // motivo que el teléfono de acá abajo y con el mismo mecanismo (pisar el campo en este
   // schema, no aflojar el de `bodySchema`). Ariel anota lo que le sirve para reconocer a
@@ -194,6 +195,7 @@ const bodyManualSchema = bodySchema.extend({
  * pida un cálculo absurdo. */
 const grupoManualSchema = grupoSchema.extend({
   origen: z.enum(['presencial', 'llamada', 'whatsapp']),
+  clienteEmail: emailOpcionalSchema,
   // ⚠️ **Un solo nombre para todo el bloque** (4/9/2026, pedido de Franco). Es la tercera
   // asimetría panel/cliente de este endpoint, y va por lo mismo que las otras dos: Ariel
   // carga el bloque con la persona enfrente. Tipear cuatro nombres con las manos ocupadas
@@ -460,14 +462,8 @@ export async function postTurno(req: Request, res: Response) {
     return
   }
 
-  const {
-    servicioId,
-    fecha,
-    hora,
-    clienteNombre,
-    clienteTelefono,
-    clienteEmail,
-  } = parsed.data
+  const { servicioId, fecha, hora, clienteNombre, clienteTelefono } =
+    parsed.data
 
   try {
     const turno = await crearTurno({
@@ -476,7 +472,6 @@ export async function postTurno(req: Request, res: Response) {
       hora,
       clienteNombre,
       clienteTelefono,
-      clienteEmail,
     })
     res.status(201).json(turnoADto(turno))
 
@@ -513,12 +508,11 @@ export async function postTurnosEnGrupo(req: Request, res: Response) {
     return
   }
 
-  const { clienteTelefono, clienteEmail, fecha, hora, turnos } = parsed.data
+  const { clienteTelefono, fecha, hora, turnos } = parsed.data
 
   try {
     const creados = await crearTurnosEnGrupo({
       clienteTelefono,
-      clienteEmail,
       fecha: fechaDesdeIso(fecha),
       hora,
       turnos,
@@ -630,54 +624,6 @@ export async function getTurnoIcs(req: Request, res: Response) {
     res.setHeader('Content-Disposition', 'attachment; filename="turno.ics"')
     res.send(icsDeTurno(turno))
   } catch (err) {
-    if (manejarErroresComunes(err, res)) return
-    throw err
-  }
-}
-
-const emailSchema = z.object({
-  email: z.email('El email no parece válido.'),
-})
-
-/** HU-19 — El cliente que reservó sin dejar mail lo carga desde la pantalla de
- * confirmación y recibe ahí mismo su link.
- *
- * Público, sin auth, igual que el resto de `/turnos/:id`: el id es el token. El límite
- * de un solo uso por turno —el motivo por el que esto no es un relay de mails abierto—
- * está explicado en `guardarEmailDelCliente`. */
-export async function postEnviarConfirmacion(req: Request, res: Response) {
-  const idParsed = idSchema.safeParse(req.params)
-  if (!idParsed.success) {
-    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
-    return
-  }
-
-  const bodyParsed = emailSchema.safeParse(req.body)
-  if (!bodyParsed.success) {
-    respondErrorParametrosInvalidos(
-      res,
-      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
-    )
-    return
-  }
-
-  const { email } = bodyParsed.data
-
-  try {
-    const turno = await guardarEmailDelCliente(idParsed.data.id, email)
-    res.json({ email })
-
-    void enviarConfirmacionDeTurno(turno)
-  } catch (err) {
-    if (err instanceof TurnoYaTieneEmailError) {
-      res.status(409).json({
-        error: {
-          codigo: 'TURNO_YA_TIENE_EMAIL',
-          mensaje: 'Este turno ya tiene un email cargado.',
-        },
-      })
-      return
-    }
     if (manejarErroresComunes(err, res)) return
     throw err
   }

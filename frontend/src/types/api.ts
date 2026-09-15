@@ -63,11 +63,11 @@ export interface DisponibilidadDia {
 
 /** HU-31 — Reservar 2 o 3 turnos de una (la mamá que trae a los hijos).
  *
- * ⚠️ El teléfono y el mail van **afuera** del array: son del grupo, y es lo que hace que la
- * ficha del cliente siga siendo una sola. El nombre va por turno — son los hijos. */
+ * ⚠️ El teléfono va **afuera** del array: es del grupo, y es lo que hace que la ficha del
+ * cliente siga siendo una sola. El nombre va por turno — son los hijos. Sin mail desde el
+ * 15/9/2026. */
 export interface NuevoGrupoDeTurnos {
   clienteTelefono: string
-  clienteEmail?: string
   /** El día del bloque entero: los turnos van pegados, así que es uno solo. */
   fecha: string // "YYYY-MM-DD"
   /** A qué hora arranca el **primero**. Las demás las calcula el backend encadenando
@@ -82,7 +82,6 @@ export interface NuevoTurno {
   hora: string // "HH:mm"
   clienteNombre: string
   clienteTelefono: string
-  clienteEmail?: string // HU-19: opcional
 }
 
 export interface Reprogramacion {
@@ -230,6 +229,8 @@ export interface DatosCliente {
 // (`NuevoTurno`) sigue siendo obligatorio, que es donde de verdad hace falta.
 export interface NuevoTurnoManual extends Omit<NuevoTurno, 'clienteTelefono'> {
   clienteTelefono?: string
+  /** HU-19 — Solo en la carga de Ariel: el cliente ya no deja mail al reservar (15/9/2026). */
+  clienteEmail?: string
   origen: OrigenManual
 }
 
@@ -245,6 +246,7 @@ export interface NuevoTurnoManual extends Omit<NuevoTurno, 'clienteTelefono'> {
 export interface NuevoGrupoManual
   extends Omit<NuevoGrupoDeTurnos, 'clienteTelefono' | 'turnos'> {
   clienteTelefono?: string
+  clienteEmail?: string
   clienteNombre: string
   turnos: { servicioId: string; clienteNombre?: string }[]
   origen: OrigenManual

@@ -11,7 +11,7 @@ import { obtenerServicios } from '../api/servicios'
 import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { crearTurno, crearTurnosEnGrupo } from '../api/turnos'
 // Los usa `PasoConfirmacion`, que está comentado más abajo — ver la nota de ahí.
-// import { enviarConfirmacion, urlCalendario } from '../api/turnos'
+// import { urlCalendario } from '../api/turnos'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import { formatearPesos } from '../utils/dinero'
 import { WHATSAPP_URL } from '../utils/contacto'
@@ -20,10 +20,8 @@ import { WHATSAPP_URL } from '../utils/contacto'
 import { whatsappDeTurnosConfirmados } from '../utils/mensajesWhatsapp'
 import { WHATSAPP_AUTOMATICO } from '../utils/avisos'
 import {
-  esEmailValido,
   esNombreValido,
   esTelefonoValido,
-  MENSAJE_EMAIL_INVALIDO,
   MENSAJE_NOMBRE_INVALIDO,
   MENSAJE_TELEFONO_INVALIDO,
 } from '../utils/validaciones'
@@ -100,7 +98,8 @@ export function ReservarPage() {
   const [fecha, setFecha] = useState<string | null>(null)
   const [hora, setHora] = useState<string | null>(null)
   const [clienteTelefono, setClienteTelefono] = useState('')
-  const [clienteEmail, setClienteEmail] = useState('')
+  // ⚠️ Sin campo de mail desde el 15/9/2026 (pedido de Franco): el "Email (opcional)" se
+  // leía como "hay que mandar algo por mail", y el aviso de esta versión va por WhatsApp.
   // const [turnoCreado, setTurnoCreado] = useState<Turno | null>(null)
   // Entre que la mutación resuelve y el navegador se va a WhatsApp pasa un rato en el
   // que `isPending` ya es `false`: sin esto el botón vuelve a decir "Confirmar por
@@ -149,7 +148,6 @@ export function ReservarPage() {
   // va por el suyo. El caso normal no toca una línea de código nueva del backend.
   const crearTurnoMutation = useMutation({
     mutationFn: async (elegidos: TurnoElegido[]): Promise<Turno[]> => {
-      const email = clienteEmail.trim() || undefined
       if (elegidos.length === 1) {
         const turno = await crearTurno({
           servicioId: elegidos[0].servicio.id,
@@ -157,15 +155,11 @@ export function ReservarPage() {
           hora: hora!,
           clienteNombre: elegidos[0].nombre,
           clienteTelefono,
-          // Vacío significa "no dejó mail". Se manda `undefined` y no '' para no guardar
-          // un dato falso en la base.
-          clienteEmail: email,
         })
         return [turno]
       }
       return crearTurnosEnGrupo({
         clienteTelefono,
-        clienteEmail: email,
         fecha: fecha!,
         hora: hora!,
         turnos: elegidos.map((t) => ({
@@ -317,7 +311,6 @@ export function ReservarPage() {
     setHora(null)
     setTurnos([])
     setClienteTelefono('')
-    setClienteEmail('')
     // setTurnoCreado(null)
     setRedirigiendo(false)
     setErrorHorario(null)
@@ -418,7 +411,6 @@ export function ReservarPage() {
             fecha={fecha!}
             horaInicio={hora!}
             telefono={clienteTelefono}
-            email={clienteEmail}
             enviando={crearTurnoMutation.isPending || redirigiendo}
             errorTelefonoServidor={errorTelefonoServidor}
             errorReserva={errorReserva}
@@ -430,7 +422,6 @@ export function ReservarPage() {
               setErrorTelefonoServidor(null)
               setClienteTelefono(v)
             }}
-            onEmailChange={setClienteEmail}
             onVolver={() => {
               // Volver a la grilla limpia el cartel: elegir otra fecha es una salida real
               // para el tope semanal (un día fuera de esos 7) y para el horizonte. El
@@ -448,18 +439,17 @@ export function ReservarPage() {
             ninguno, así que el aviso lo manda el cliente desde su WhatsApp y el paso
             'confirmacion' no se llega a renderizar nunca: `onSuccess` se va del sitio.
 
-            Para volver a prenderla hay que descomentar CUATRO cosas, que van juntas:
-            este bloque, el estado `turnoCreado`, los componentes `PasoConfirmacion` y
-            `PedirMail` del final del archivo, y sus imports de arriba
-            (`enviarConfirmacion`, `urlCalendario`, el tipo `Turno`). Y sacar la
-            redirección del `onSuccess`, claro.
+            Para volver a prenderla hay que descomentar TRES cosas, que van juntas:
+            este bloque, el estado `turnoCreado`, el componente `PasoConfirmacion` del
+            final del archivo con sus imports de arriba (`urlCalendario`, el tipo
+            `Turno`). Y sacar la redirección del `onSuccess`, claro. `PedirMail` ya no
+            está: se borró el 15/9/2026 junto con su endpoint.
 
         {paso === 'confirmacion' && turnoCreado && (
           <PasoConfirmacion
             turno={turnoCreado}
             nombre={clienteNombre}
             telefono={clienteTelefono}
-            email={clienteEmail.trim()}
             onVolverAlInicio={volverAlInicio}
           />
         )} */}
@@ -680,14 +670,12 @@ function PasoDatos({
   fecha,
   horaInicio,
   telefono,
-  email,
   enviando,
   errorTelefonoServidor,
   errorReserva,
   onNombreChange,
   onSacar,
   onTelefonoChange,
-  onEmailChange,
   onVolver,
   onSubmit,
 }: {
@@ -699,7 +687,6 @@ function PasoDatos({
   fecha: string
   horaInicio: string
   telefono: string
-  email: string
   enviando: boolean
   /** El rechazo que solo puede dar el backend: un número bien escrito cuya característica
    * no existe. Se dibuja en el mismo lugar que los errores locales. */
@@ -711,7 +698,6 @@ function PasoDatos({
   onNombreChange: (indice: number, v: string) => void
   onSacar: (indice: number) => void
   onTelefonoChange: (v: string) => void
-  onEmailChange: (v: string) => void
   onVolver: () => void
   onSubmit: (e: React.FormEvent) => void
 }) {
@@ -723,7 +709,6 @@ function PasoDatos({
     /** Un error por turno, por índice: cada mensaje va pegado a **su** campo. */
     nombres?: (string | undefined)[]
     telefono?: string
-    email?: string
   }>({})
 
   // El form va con `noValidate` y valida acá: si dejáramos la validación nativa del
@@ -744,9 +729,6 @@ function PasoDatos({
     })
     if (nombres.some(Boolean)) nuevos.nombres = nombres
     if (!esTelefonoValido(telefono)) nuevos.telefono = MENSAJE_TELEFONO_INVALIDO
-    // El email es opcional: solo se valida si escribió algo.
-    if (email.trim() && !esEmailValido(email))
-      nuevos.email = MENSAJE_EMAIL_INVALIDO
 
     setErrores(nuevos)
     if (Object.keys(nuevos).length > 0) return
@@ -754,8 +736,10 @@ function PasoDatos({
     onSubmit(e)
   }
 
-  function limpiarError(campo: 'telefono' | 'email') {
-    setErrores((prev) => (prev[campo] ? { ...prev, [campo]: undefined } : prev))
+  function limpiarErrorTelefono() {
+    setErrores((prev) =>
+      prev.telefono ? { ...prev, telefono: undefined } : prev,
+    )
   }
 
   function limpiarErrorNombre(indice: number) {
@@ -859,7 +843,7 @@ function PasoDatos({
             value={telefono}
             onChange={(e) => {
               onTelefonoChange(e.target.value)
-              limpiarError('telefono')
+              limpiarErrorTelefono()
             }}
             placeholder="Ej: 351 459 3325"
             className={claseInput(Boolean(errorTelefono))}
@@ -869,30 +853,6 @@ function PasoDatos({
           ) : (
             <span className="text-tinta-tenue text-xs">
               Es con lo que Ariel te ubica si hace falta reprogramar.
-            </span>
-          )}
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-            Email (opcional)
-          </span>
-          <input
-            type="email"
-            inputMode="email"
-            value={email}
-            onChange={(e) => {
-              onEmailChange(e.target.value)
-              limpiarError('email')
-            }}
-            placeholder="Ej: juan@gmail.com"
-            className={claseInput(Boolean(errores.email))}
-          />
-          {errores.email ? (
-            <ErrorCampo>{errores.email}</ErrorCampo>
-          ) : (
-            <span className="text-tinta-tenue text-xs">
-              Por si querés tenerlo también por mail.
             </span>
           )}
         </label>
@@ -913,7 +873,11 @@ function PasoDatos({
           </div>
         )}
 
-        <div className="mt-2 flex gap-3">
+        {/* ⚠️ Apilados en celular: desde que los botones van en mayúscula y sin cortar
+            renglón (4/9/2026), "Confirmar por WhatsApp" mide 270 px y al lado de "Volver" se
+            salía 16 px de la pantalla a 375 px. `col-reverse` deja la acción principal
+            arriba, que es donde va el pulgar. */}
+        <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row">
           <button type="button" className={BTN_GHOST} onClick={onVolver}>
             Volver
           </button>
@@ -939,10 +903,11 @@ function PasoDatos({
   )
 }
 
-// ⚠️ COMENTADO, NO BORRADO — la pantalla de confirmación y el pedido de mail.
+// ⚠️ COMENTADO, NO BORRADO — la pantalla de confirmación.
 //
-// Las dos son el final del flujo que existía cuando el sistema le avisaba al cliente
-// solo: le mostraba su link, le ofrecía mandárselo por mail y le daba el .ics. Hoy el
+// Es el final del flujo que existía cuando el sistema le avisaba al cliente solo: le
+// mostraba su link y le daba el .ics. (Le ofrecía también mandárselo por mail con
+// `PedirMail`, que se borró el 15/9/2026 junto con el mail de la reserva.) Hoy el
 // aviso lo manda el cliente por WhatsApp desde el paso de datos, así que a este código
 // no se llega.
 //
@@ -960,20 +925,14 @@ function PasoDatos({
 //   turno,
 //   nombre,
 //   telefono,
-//   email,
 //   onVolverAlInicio,
 // }: {
 //   turno: Turno
 //   nombre: string
 //   telefono: string
-//   email: string
 //   onVolverAlInicio: () => void
 // }) {
 //   const [copiado, setCopiado] = useState(false)
-//   // Si no dejó mail al reservar, puede cargarlo acá (HU-19). Una vez enviado, esta
-//   // pantalla se comporta igual que si lo hubiera dejado desde el principio.
-//   const [emailCargado, setEmailCargado] = useState<string | null>(null)
-//   const emailDelTurno = email || emailCargado
 //   const link = `${window.location.origin}/turno/${turno.id}`
 //
 //   return (
@@ -994,37 +953,23 @@ function PasoDatos({
 //         Te contactaremos al {telefono} si hace falta reprogramar.
 //       </p>
 //
-//       {/* Con mail, el link no se muestra: ya le llegó a la casilla y ahí no se pierde.
-//           Mostrarlo igual invitaría a copiarlo a mano, que es justo el paso que el mail
-//           viene a sacar. Sin mail, el link es lo único que tiene, así que va bien
-//           visible y con botón para copiarlo. */}
-//       {emailDelTurno ? (
-//         <p className="border-borde bg-superficie-2 text-tinta mt-2 rounded-md border px-3 py-2 text-left text-sm">
-//           Te mandamos el link para gestionar tu turno a{' '}
-//           <strong>{emailDelTurno}</strong>. Con ese link podés cancelar o
-//           reprogramar hasta 60 minutos antes. Si no lo ves, fijate en spam.
-//         </p>
-//       ) : (
-//         <>
-//           <label className="text-tinta-tenue mb-2 block text-left text-xs tracking-wide uppercase">
-//             Tu link para gestionar el turno
-//           </label>
-//           <div className="border-borde bg-superficie-2 text-tinta mb-3 truncate rounded-md border px-3 py-2 text-left text-sm">
-//             {link}
-//           </div>
-//           <button
-//             className={`${BTN_OUTLINE} w-full`}
-//             onClick={() => {
-//               void navigator.clipboard.writeText(link)
-//               setCopiado(true)
-//             }}
-//           >
-//             {copiado ? 'Copiado ✓' : 'Copiar link'}
-//           </button>
-//
-//           <PedirMail turnoId={turno.id} onEnviado={setEmailCargado} />
-//         </>
-//       )}
+//       {/* Sin mail, el link es lo único que tiene, así que va bien visible y con botón
+//           para copiarlo. */}
+//       <label className="text-tinta-tenue mb-2 block text-left text-xs tracking-wide uppercase">
+//         Tu link para gestionar el turno
+//       </label>
+//       <div className="border-borde bg-superficie-2 text-tinta mb-3 truncate rounded-md border px-3 py-2 text-left text-sm">
+//         {link}
+//       </div>
+//       <button
+//         className={`${BTN_OUTLINE} w-full`}
+//         onClick={() => {
+//           void navigator.clipboard.writeText(link)
+//           setCopiado(true)
+//         }}
+//       >
+//         {copiado ? 'Copiado ✓' : 'Copiar link'}
+//       </button>
 //
 //       {/* Va al final y no arriba: lo primero que el cliente necesita saber es que el
 //           turno quedó y cómo lo va a gestionar. Guardarlo en el calendario es el paso
@@ -1040,74 +985,5 @@ function PasoDatos({
 //         Volver al inicio
 //       </button>
 //     </div>
-//   )
-// }
-//
-// /** HU-19 — Segunda oportunidad para dejar el mail, para el que reservó sin ponerlo.
-//  *
-//  * Va acá y no en otro lado porque este es el momento en que el cliente está mirando su
-//  * link y cae en la cuenta de que lo puede perder. El backend lo acepta una sola vez por
-//  * turno (ver `guardarEmailDelCliente`), así que este bloque desaparece al enviarlo. */
-// function PedirMail({
-//   turnoId,
-//   onEnviado,
-// }: {
-//   turnoId: string
-//   onEnviado: (email: string) => void
-// }) {
-//   const [email, setEmail] = useState('')
-//   const [error, setError] = useState<string | null>(null)
-//
-//   const mutation = useMutation({
-//     mutationFn: () => enviarConfirmacion(turnoId, email.trim()),
-//     onSuccess: (data) => onEnviado(data.email),
-//     onError: (err) => {
-//       setError(
-//         (isAxiosError<ErrorApi>(err) && err.response?.data.error.mensaje) ||
-//           'No pudimos mandarte el mail. Probá de nuevo.',
-//       )
-//     },
-//   })
-//
-//   return (
-//     <form
-//       noValidate
-//       onSubmit={(e) => {
-//         e.preventDefault()
-//         if (!esEmailValido(email)) {
-//           setError(MENSAJE_EMAIL_INVALIDO)
-//           return
-//         }
-//         setError(null)
-//         mutation.mutate()
-//       }}
-//       className="border-borde bg-superficie-2 mt-4 rounded-md border p-3 text-left"
-//     >
-//       <p className="text-tinta text-sm">
-//         ¿Querés que te lo mandemos por mail? Así no dependés de guardar el link
-//         ahora.
-//       </p>
-//       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-//         <input
-//           type="email"
-//           inputMode="email"
-//           value={email}
-//           onChange={(e) => {
-//             setEmail(e.target.value)
-//             setError(null)
-//           }}
-//           placeholder="Ej: juan@gmail.com"
-//           className={`${claseInput(Boolean(error))} flex-1`}
-//         />
-//         <button
-//           type="submit"
-//           disabled={mutation.isPending}
-//           className={`${BTN_OUTLINE} disabled:cursor-not-allowed disabled:opacity-50`}
-//         >
-//           {mutation.isPending ? 'Enviando…' : 'Mandámelo'}
-//         </button>
-//       </div>
-//       {error && <p className="text-vino mt-2 text-xs">{error}</p>}
-//     </form>
 //   )
 // }
