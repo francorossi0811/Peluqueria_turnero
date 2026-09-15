@@ -458,8 +458,9 @@ Como cliente, quiero ver los datos para transferirle a Ariel en la pantalla de m
 dejarlo pagado de antes sin tener que pedírselos por WhatsApp.
 *(Pedido del 15/9/2026.)*
 - En la pantalla del link de gestión veo **alias, CVU y nombre completo del titular**, cada
-  uno con su botón de **copiar**. Son tres botones y no uno: la app del banco pide el alias
-  o el CVU en un campo, y pegar todo junto ahí no sirve.
+  **alias y CVU** con su botón de **copiar** (uno por dato y no uno solo: la app del banco
+  pide el alias o el CVU en un campo, y pegar todo junto ahí no sirve). **El titular se ve
+  pero no se copia**: está para confirmar a quién le transfiero, no para pegarlo.
 - Se ven **en cualquier estado del turno** (reservado, cancelado, realizado…).
 - El sistema **no ve el pago**. Cuando le llega, Ariel lo registra a mano marcando el turno
   Realizado con medio **Mercado Pago** (HU-27), igual que cualquier otro cobro.

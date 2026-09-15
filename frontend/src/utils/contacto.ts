@@ -19,7 +19,8 @@ export const DIRECCION = 'Pastor Taboada 10, X5016 Córdoba'
 
 /** HU-33 — Los datos para dejar el turno pagado de antes (15/9/2026).
  *
- * Se muestran en la pantalla de gestión del turno, cada uno con su botón de copiar. Son
+ * Se muestran en la pantalla de gestión del turno; alias y CVU con botón de copiar, el
+ * titular solo a la vista. Son
  * datos pensados para publicarse —el sentido es que cualquier cliente pueda transferir—, así
  * que no es un problema que vivan en un repo público. El sistema no ve el pago: Ariel lo
  * registra a mano como Mercado Pago cuando le llega. */

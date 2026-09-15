@@ -467,11 +467,12 @@ function ContactoAriel({
   )
 }
 
-/** HU-33 — Alias, CVU y titular de Ariel, cada uno con su botón de copiar.
+/** HU-33 — Alias, CVU y titular de Ariel. Alias y CVU con botón de copiar; el titular no.
  *
- * Tres botones y no uno que copie todo junto: la app del banco pide el alias **o** el CVU
- * en un campo, y pegar un párrafo ahí no sirve. El titular va para que el cliente
- * confirme que le está transfiriendo a la persona correcta antes de mandar la plata.
+ * Un botón por dato y no uno que copie todo junto: la app del banco pide el alias **o** el
+ * CVU en un campo, y pegar un párrafo ahí no sirve. ⚠️ **El titular se muestra pero no se
+ * copia** (pedido de Franco, 15/9/2026): no es un dato que se pegue en ningún lado, está
+ * para que el cliente confirme que le está transfiriendo a la persona correcta.
  *
  * `wrap-anywhere` en el valor y **no** `break-all`: el CVU son 22 dígitos sin espacios y
  * sin permiso de cortarse empuja la página a scroll horizontal a 375 px, pero `break-all`
@@ -481,9 +482,9 @@ function ContactoAriel({
  * carácter; el nombre es un nombre. */
 function DatosParaPagar() {
   const datos = [
-    { etiqueta: 'Alias', valor: ALIAS_PAGO, codigo: true },
-    { etiqueta: 'CVU', valor: CVU_PAGO, codigo: true },
-    { etiqueta: 'Titular', valor: TITULAR_PAGO, codigo: false },
+    { etiqueta: 'Alias', valor: ALIAS_PAGO, copiable: true },
+    { etiqueta: 'CVU', valor: CVU_PAGO, copiable: true },
+    { etiqueta: 'Titular', valor: TITULAR_PAGO, copiable: false },
   ]
   return (
     <Card className="mb-4">
@@ -495,19 +496,19 @@ function DatosParaPagar() {
         WhatsApp.
       </p>
       <dl className="mt-3 flex flex-col gap-3">
-        {datos.map(({ etiqueta, valor, codigo }) => (
+        {datos.map(({ etiqueta, valor, copiable }) => (
           <div key={etiqueta} className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <dt className="text-tinta-tenue text-xs tracking-wide uppercase">
                 {etiqueta}
               </dt>
               <dd
-                className={`text-tinta text-sm wrap-anywhere select-all ${codigo ? 'font-mono' : ''}`}
+                className={`text-tinta text-sm wrap-anywhere ${copiable ? 'font-mono select-all' : ''}`}
               >
                 {valor}
               </dd>
             </div>
-            <BotonCopiar texto={valor} etiqueta={etiqueta} />
+            {copiable && <BotonCopiar texto={valor} etiqueta={etiqueta} />}
           </div>
         ))}
       </dl>

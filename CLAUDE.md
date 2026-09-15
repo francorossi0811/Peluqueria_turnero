@@ -1057,11 +1057,12 @@ Dos pedidos de Franco del lado del cliente. **Sin migraciones.**
    públicos y el endpoint de cargarlo después. De `ReservarPage` se borró `PedirMail`, que
    estaba comentado junto con `PasoConfirmacion`: su endpoint ya no existe, así que
    descomentarlo no habría funcionado. `PasoConfirmacion` sigue comentado.
-2. **HU-33 — alias, CVU y titular en la pantalla del turno**, cada uno con su botón de copiar
+2. **HU-33 — alias, CVU y titular en la pantalla del turno**; alias y CVU con botón de copiar
+   y **el titular sin botón** (pedido de Franco: solo está para confirmar a quién se le paga)
    (`BotonCopiar`, nuevo en `components/ui`), **en cualquier estado**. Los datos viven en
    `utils/contacto.ts` junto al teléfono. El sistema no ve el pago: Ariel lo registra como
    Mercado Pago al marcar Realizado (HU-27, sin cambios).
-   - ⚠️ Tres botones y no uno: la app del banco pide alias **o** CVU en un campo.
+   - ⚠️ Un botón por dato y no uno solo: la app del banco pide alias **o** CVU en un campo.
    - ⚠️ `wrap-anywhere` y **no** `break-all` en el valor: el CVU son 22 dígitos sin espacios y
      sin permiso de cortarse empuja la página a 375 px, pero `break-all` partía el nombre del
      titular por la mitad ("Enr / ique"). Se vio midiendo a ancho de celular.
