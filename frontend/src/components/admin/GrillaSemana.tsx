@@ -404,8 +404,8 @@ function RenglonNotas({ dias }: { dias: string[] }) {
  * ⚠️ **Es un `<textarea>` y no un `<input>`, y crece con el texto** (pedido de Franco,
  * 13/9/2026: "se tiene que ver completa siempre"). Un input es de una sola línea: con la
  * casilla de ~160 px una nota de tres palabras ya se cortaba. Acá el texto baja solo al
- * renglón siguiente cuando llega al borde. Enter **no** agrega un salto: sigue guardando,
- * porque la nota es un texto corrido y el corte de línea lo pone el ancho de la casilla.
+ * renglón siguiente cuando llega al borde. Enter guarda, y **Shift+Enter** agrega un salto
+ * de línea a mano para cuando la nota son dos cosas distintas.
  */
 function CeldaNota({
   dia,
@@ -474,7 +474,10 @@ function CeldaNota({
         onChange={(e) => setTexto(e.target.value)}
         onBlur={alSalir}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          // Enter guarda; Shift+Enter baja de renglón (pedido de Franco, 15/9/2026), que
+          // es la convención de WhatsApp y de casi todo chat: la que Ariel ya tiene en los
+          // dedos. Sin Shift el Enter se come el salto y sale de la casilla.
+          if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
             e.currentTarget.blur()
           }

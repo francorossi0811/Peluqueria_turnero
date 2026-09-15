@@ -450,6 +450,8 @@ lo que tengo que hacer ese día ("traer cambio", "llamar al proveedor") sin sali
 - Es **un renglón**, no un bloc de notas: hasta 200 letras.
 - Se guarda cuando salgo de la casilla o toco Enter. Escape descarta lo que estaba
   escribiendo. Si la borro entera, la nota desaparece.
+- El texto baja solo de renglón al llegar al borde, y la casilla crece para que la nota se
+  lea entera. **Shift+Enter** baja de renglón a mano, para cuando son dos cosas distintas.
 
 **HU-31 — Reservar para mí y para los míos en una sola vez**
 Como clienta que viene con los hijos, quiero sacar los turnos de todos de una sola pasada y seguidos, para no tener que cargar mis datos tres veces ni que nos toquen horarios sueltos.

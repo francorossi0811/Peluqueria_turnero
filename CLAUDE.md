@@ -1012,8 +1012,11 @@ de desplegar, o la agenda semanal va a pedir una tabla que no existe. El SQL es 
 - ⚠️ **La nota se lee entera siempre**: es un `<textarea>` que baja de renglón solo al
   llegar al borde y **crece con el texto** (pedido de Franco). El renglón mide como
   **mínimo** `ALTO_PASO_PX` (72 px, lo de un renglón de 20 minutos) y la casilla más larga
-  lo empuja; las vecinas se estiran con él (`min-h-full`) para que siga parejo. Enter no
-  mete un salto de línea: sigue guardando, porque la nota es texto corrido.
+  lo empuja; las vecinas se estiran con él (`min-h-full`) para que siga parejo. **Enter
+  guarda y Shift+Enter baja de renglón** (15/9/2026), la convención de WhatsApp. ⚠️ Para
+  probarlo en el navegador de Claude no sirve la tecla simulada: manda el `keydown` con
+  `shiftKey` pero **no escribe el salto ni en un textarea pelado** —verificado con una
+  casilla de control sin código de la app—. Se prueba poniendo el `\n` en el valor.
 - ⚠️ **Al alto calculado hay que sumarle el borde.** `scrollHeight` mide contenido +
   padding, pero la caja es `border-box`: sin sumarlo la nota crecía y **igual quedaba
   cortada por 2 px**. Se encontró midiendo `scrollHeight > clientHeight`, no mirando.
