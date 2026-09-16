@@ -455,6 +455,30 @@ Si se olvida, el código sale desplegado buscando una tabla que ahí no existe y
 pasarla por `DATABASE_URL` en el `migrate diff` y en el `migrate deploy`, y después
 confirmar contra `pg_constraint` que `turnos_no_solapamiento` sigue en pie.
 
+⚠️ **Pero esa connection string viene con `-pooler`, y migrar por el pooler deja el candado
+de migraciones colgado.** Pasó el 15/9/2026 y costó dos deploys fallidos. `prisma migrate
+deploy` toma un `pg_advisory_lock(72707369)` que es **de sesión**; a través de pgbouncer la
+sesión del servidor sobrevive a la desconexión del cliente, así que el candado quedó tomado
+por un backend del pool después de que la migración terminara bien. El build de Render
+—que corre `npm run migrate:deploy` como parte de su build command— esperó sus 10 segundos,
+no lo consiguió y cortó con **`Error: P1002 — Timed out trying to acquire a postgres advisory
+lock`**. Dos veces seguidas, hasta que el pool recicló esa conexión.
+
+- **Para migrar a mano, usar la connection string SIN `-pooler`** (la directa), que es para lo
+  que existe. El pooler es para la aplicación.
+- ⚠️ **El síntoma engaña y hay que saber leerlo**: las migraciones quedan aplicadas (las
+  aplicó la corrida manual) y la API sigue respondiendo, porque Render deja vivo el deploy
+  anterior. O sea que desde afuera parece que salió todo bien y lo que hay es el **frontend
+  nuevo contra el backend viejo**. Se detecta pidiendo una ruta nueva sin token: si responde
+  `404` en vez de `401`, está corriendo el código viejo.
+- **Cómo destrabarlo:** `SELECT pid, application_name FROM pg_locks l JOIN pg_stat_activity a
+  USING (pid) WHERE l.locktype='advisory' AND l.objid=72707369`. Si sigue tomado por un
+  backend del pool, se espera a que se recicle o se termina esa sesión; después, volver a
+  desplegar el mismo commit (`trigger_deploy`), sin tocar código.
+- La alternativa que evita todo esto: **no migrar a mano y dejar que lo haga el build de
+  Render**, que ya lo hace solo. El paso manual sigue teniendo sentido cuando se quiere ver
+  el SQL aplicarse antes de que el código salga.
+
 ⚠️ **Enmienda (22/8/2026): el webhook ya no está enteramente fuera de alcance.** Existe `GET`/`POST /api/webhooks/whatsapp` porque Meta lo exige para dar de alta la suscripción — ver `Docs/especificacion-api.md`. **Pero solo cumple el contrato mínimo**: el `GET` hace el handshake y el `POST` responde 200 y loguea. Lo que sigue sin estar es **procesar los eventos**: validar `X-Hub-Signature-256` y leer los `statuses`. O sea que la advertencia de abajo sigue valiendo igual.
 
 ⚠️ Sin procesar los estados, **el respaldo por mail cubre el envío que falla, no el que rebota**: Meta responde cuando acepta el mensaje, no cuando lo entrega. **Esto se vio pasar de verdad el 20/8/2026** — un aviso de cancelación que Meta aceptó y nunca llegó, sin nada que loguear.
