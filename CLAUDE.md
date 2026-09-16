@@ -1089,8 +1089,9 @@ Dos pedidos de Franco del lado del cliente. **Sin migraciones.**
      pedido de Franco). Primero se construyó como una tarjeta en `GestionTurnoPage` con botones
      de copiar; se sacó entera, junto con el componente `BotonCopiar`, que quedó sin uso.
      `LINEAS_PARA_PAGAR` en `utils/mensajesWhatsapp.ts` las agrega al final del mensaje, después
-     de un renglón en blanco: *"Si querés pagar el turno por adelantado, acá tenés el alias 👇"*
-     y los tres datos.
+     de un renglón en blanco: *"Si querés pagar el turno por adelantado, acá tenés el alias 👇"*,
+     los tres datos, y el cierre **"POR FAVOR MANDAR COMPROBANTE"** en mayúscula — el sistema no
+     ve la transferencia, así que el comprobante es lo único que le avisa a Ariel que se pagó.
    - ⚠️ **Suena al revés y no lo es**: el mensaje lo manda el cliente, así que le está mandando
      a Ariel los datos de Ariel. El destino que importa es el **chat del cliente** — ahí le
      quedan guardados para cuando quiera transferir, sin volver a la web ni pedírselos. Es el

@@ -83,6 +83,14 @@ describe('los datos para pagar', () => {
     expect(msg.indexOf('Alias:')).toBeGreaterThan(msg.indexOf(ANA.link))
   })
 
+  it('cierra pidiendo el comprobante, en mayúscula y al final de todo', () => {
+    const msg = mensajeDeTurno('confirmado', ANA)
+    expect(msg.endsWith('POR FAVOR MANDAR COMPROBANTE')).toBe(true)
+    expect(mensajeDeTurnosConfirmados([ANA, TOTO])).toContain(
+      'Titular: Ariel Juan Domingo Enrique\nPOR FAVOR MANDAR COMPROBANTE',
+    )
+  })
+
   it('van separados por un renglón vacío de lo que ya decía el mensaje', () => {
     expect(mensajeDeTurno('confirmado', ANA)).toContain(
       `${ANA.link}\n\nSi querés pagar el turno por adelantado`,

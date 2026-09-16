@@ -459,7 +459,9 @@ dejar el turno pagado de antes sin tener que pedírselos.
 *(Pedido del 15/9/2026, movido al mensaje el 16/9/2026.)*
 - Al confirmar la reserva, el mensaje de WhatsApp que le mando a Ariel termina con
   **alias, CVU y nombre completo del titular**, después de un renglón en blanco y del texto
-  *"Si querés pagar el turno por adelantado, acá tenés el alias 👇"*.
+  *"Si querés pagar el turno por adelantado, acá tenés el alias 👇"*, y cierra con
+  **"POR FAVOR MANDAR COMPROBANTE"** en mayúscula: sin el comprobante Ariel no se entera de
+  que el turno se pagó, porque el sistema no ve la transferencia.
 - ⚠️ **Van en el mensaje y no en la pantalla del turno** (16/9/2026). Suena al revés —le mando
   a Ariel sus propios datos— pero lo que importa es que **me quedan a mí en el chat**, que es
   donde los voy a buscar cuando quiera transferir. Es el mismo efecto por el que el link de

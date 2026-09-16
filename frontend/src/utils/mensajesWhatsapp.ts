@@ -107,6 +107,9 @@ const LINEAS_PARA_PAGAR = [
   `Alias: ${ALIAS_PAGO}`,
   `CVU: ${CVU_PAGO}`,
   `Titular: ${TITULAR_PAGO}`,
+  // En mayúscula a pedido de Franco (16/9/2026): es lo único que el cliente tiene que
+  // hacer después de transferir, y sin el comprobante Ariel no se entera del pago.
+  'POR FAVOR MANDAR COMPROBANTE',
 ]
 
 /** El mensaje armado, en singular — Ariel es uno solo, igual que en las plantillas. */
