@@ -938,59 +938,58 @@ export async function cambiarColorDelTurno(
   const turno = await obtenerTurno(id)
   if (turno.estado !== 'reservado') throw new TurnoNoModificableError()
 
-  return prisma.turno.update({
+  const actualizado = await prisma.turno.update({
     where: { id },
     include: INCLUDE_CLIENTE,
     data: { color },
   })
+
+  // La paleta se anota solo cuando eligió un color. Sacárselo a un turno no es elegir
+  // nada, así que no toca el historial — ver `registrarColorUsado`.
+  if (color) await registrarColorUsado(color)
+
+  return actualizado
 }
 
-/** Los primeros `cantidad` colores distintos de una lista, en el orden en que aparecen.
+/**
+ * HU-34 — Deja anotado que Ariel usó este color, para su paleta de recientes.
  *
- * Aparte y pura para poder testearla: es la regla de "los últimos que usó" —sin repetir, y
- * comparando en minúscula, porque `#C0392B` y `#c0392b` son el mismo color y verlos dos
- * veces en la fila de recientes sería un error que Ariel no podría explicarse. */
-export function primerosDistintos(
-  colores: string[],
-  cantidad: number,
-): string[] {
-  const vistos: string[] = []
-  for (const color of colores) {
-    const normalizado = color.toLowerCase()
-    if (!vistos.includes(normalizado)) vistos.push(normalizado)
-    if (vistos.length === cantidad) break
-  }
-  return vistos
-}
+ * ⚠️ **Es una tabla propia y no se deduce de los turnos** (15/9/2026, corrección pedida por
+ * Franco). La primera versión leía los colores desde `turnos.color`, y eso tenía un efecto
+ * que solo se ve usándolo: al tocar "Sin color", el color desaparecía también de la paleta
+ * —si era el único turno que lo tenía—, así que sacarle el color a un turno le borraba el
+ * color de la lista. La paleta es lo que Ariel eligió alguna vez; los turnos son otra cosa.
+ *
+ * El `upsert` sobre el color en minúscula es lo que evita repetidos: `#C0392B` y `#c0392b`
+ * son el mismo color, y verlo dos veces en la fila sería un error que él no podría
+ * explicarse. Guardar la fecha aparte y no confiar en `@updatedAt` es a propósito: volver a
+ * elegir un color que ya estaba tiene que **subirlo** en la lista, y eso es una escritura
+ * explícita, no un efecto secundario.
+ */
+async function registrarColorUsado(color: string): Promise<void> {
+  const normalizado = color.toLowerCase()
+  const ahora = new Date()
 
-/** Cuántos turnos se miran hacia atrás para juntar los colores recientes. Es un techo, no
- * una regla: con 6 colores distintos corta antes. Evita traer la tabla entera el día que
- * Ariel haya coloreado cientos de turnos. */
-const TURNOS_A_MIRAR_POR_COLOR = 100
+  await prisma.colorReciente.upsert({
+    where: { color: normalizado },
+    create: { color: normalizado, usadoEn: ahora },
+    update: { usadoEn: ahora },
+  })
+}
 
 /**
  * HU-34 — Los últimos colores que Ariel usó, para ofrecérselos de a un toque.
  *
- * Salen de los propios turnos y no de una tabla de preferencias: el dato ya está guardado,
- * y una tabla aparte sería estado que se puede desincronizar para conseguir exactamente lo
- * mismo (el mismo criterio con el que el cobro no tiene tabla `pagos`). De paso, sale igual
- * en el celular y en la tablet, que es lo que Ariel pidió.
- *
- * Ordena por `updatedAt` y no por `createdAt`: lo que importa es cuándo eligió ese color,
- * no cuándo se creó el turno — un color que le puso hoy a un turno de la semana que viene
- * tiene que aparecer primero.
+ * Vive en la base y no en el navegador porque Ariel usa el celular y la tablet del
+ * mostrador: la paleta que armó en uno tiene que estar en el otro. Es el mismo motivo por el
+ * que `vistoPorAdmin` tampoco vive en el navegador.
  */
 export async function coloresRecientes(cantidad = 6): Promise<string[]> {
-  const filas = await prisma.turno.findMany({
-    where: { color: { not: null } },
-    select: { color: true },
-    orderBy: { updatedAt: 'desc' },
-    take: TURNOS_A_MIRAR_POR_COLOR,
+  const filas = await prisma.colorReciente.findMany({
+    orderBy: { usadoEn: 'desc' },
+    take: cantidad,
   })
-  return primerosDistintos(
-    filas.map((f) => f.color as string),
-    cantidad,
-  )
+  return filas.map((f) => f.color)
 }
 
 /**

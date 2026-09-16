@@ -488,10 +488,15 @@ recordar), sin que el sistema me lo cambie solo.
 - El texto de arriba del bloque se pone **blanco o negro solo**, según qué tan oscuro sea el
   color, para que el nombre se lea siempre.
 
-*Por qué los últimos colores salen de los turnos y no de una preferencia guardada:* el dato
-ya está en la base, así que una tabla aparte sería estado que se puede desincronizar para
-conseguir lo mismo (mismo criterio que el cobro sin tabla `pagos`, HU-27). Y de paso Ariel ve
-la misma lista desde el celular y desde la tablet del mostrador.
+- ⚠️ **La lista de colores es mía y no depende de los turnos**: si le saco el color a un
+  turno, ese color **sigue** en la lista de los que usé. Sacarle el color a un turno no es
+  olvidarme del color.
+
+*Por qué la paleta es una tabla propia:* se probó primero deduciéndola de los turnos, y tocar
+"Sin color" en el único turno que tenía ese color lo borraba también de la lista. Son dos
+cosas distintas: el turno es cómo se ve hoy la agenda, la paleta es lo que Ariel eligió alguna
+vez. Vive en la base (y no en cada dispositivo) para que sea la misma en el celular y en la
+tablet del mostrador.
 
 *El color dice lo que Ariel quiera, y eso no contradice a HU-23:* el color del **estado**
 sigue mandando en cuanto el turno se cierra. Lo que se abre es el pendiente, que es donde él

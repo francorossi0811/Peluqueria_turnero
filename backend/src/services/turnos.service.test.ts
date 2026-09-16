@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   esCobrable,
-  primerosDistintos,
   puedePasarA,
   estaDentroDeVentanaDeCambio,
   excedeLimiteSemanal,
@@ -306,38 +305,5 @@ describe('puedePasarA', () => {
         expect(puedePasarA(desde, hacia)).toBe(false)
       }
     }
-  })
-})
-
-// HU-34 — Los últimos colores que usó Ariel, que salen de los propios turnos.
-describe('primerosDistintos', () => {
-  it('conserva el orden en que aparecen: lo último que usó va primero', () => {
-    expect(primerosDistintos(['#c0392b', '#14682c', '#f5d020'], 6)).toEqual([
-      '#c0392b',
-      '#14682c',
-      '#f5d020',
-    ])
-  })
-
-  it('no repite un color que usó en varios turnos', () => {
-    expect(
-      primerosDistintos(['#c0392b', '#c0392b', '#14682c', '#c0392b'], 6),
-    ).toEqual(['#c0392b', '#14682c'])
-  })
-
-  it('trata igual el mismo color escrito en mayúscula y en minúscula', () => {
-    // `<input type="color">` manda minúscula, pero un color cargado por API puede venir en
-    // mayúscula: verlo dos veces en la fila de recientes sería un error que Ariel no
-    // podría explicarse.
-    expect(primerosDistintos(['#C0392B', '#c0392b'], 6)).toEqual(['#c0392b'])
-  })
-
-  it('corta en la cantidad pedida', () => {
-    const muchos = ['#111111', '#222222', '#333333', '#444444']
-    expect(primerosDistintos(muchos, 2)).toEqual(['#111111', '#222222'])
-  })
-
-  it('con la lista vacía devuelve vacío, que es el caso del primer día', () => {
-    expect(primerosDistintos([], 6)).toEqual([])
   })
 })

@@ -486,9 +486,15 @@ mientras el turno está pendiente (al marcarlo Realizado o Ausente mandan el ver
 del estado), así que aceptarlo sobre un realizado guardaría un dato invisible, que desde la
 pantalla se ve igual que un color que no se guardó.
 
-`GET …/colores-recientes` sale de los propios turnos y no de una tabla de preferencias: el
-dato ya está guardado, y así la lista es la misma en el celular y en la tablet del mostrador.
-Ordena por `updated_at`, que es cuándo eligió ese color y no cuándo se creó el turno.
+`GET …/colores-recientes` lee la tabla `colores_recientes`, que es **la paleta de Ariel y no
+un reflejo de los turnos**. Cada vez que elige un color se anota ahí (`upsert` sobre el color
+en minúscula, con la fecha de uso); sacarle el color a un turno —`{ "color": null }`— **no
+toca la paleta**.
+
+⚠️ Esto se corrigió el 15/9/2026, el mismo día: la primera versión deducía la lista de
+`turnos.color`, y así tocar "Sin color" en el único turno que tenía ese color lo borraba
+también de la paleta. Devuelve hasta 6 colores, del último usado al más viejo, y vive en la
+base para que la lista sea la misma en el celular y en la tablet del mostrador.
 
 Sobre `PATCH …/telefono`: va en un endpoint propio y no dentro de `PATCH
 /api/admin/turnos/:id` a propósito. Aquel mueve el turno en el tiempo y tiene que

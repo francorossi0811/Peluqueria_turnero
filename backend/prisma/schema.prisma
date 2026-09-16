@@ -516,3 +516,26 @@ model NotaDelDia {
 
   @@map("notas_del_dia")
 }
+
+/// HU-34 — La paleta de Ariel: los colores que usó alguna vez para pintar un turno, para
+/// ofrecérselos de a un toque (15/9/2026).
+///
+/// ⚠️ **Tabla propia, y no una consulta sobre `turnos.color`.** La primera versión deducía
+/// la lista de los turnos, y tenía un efecto que solo se ve usándolo: tocar "Sin color" en
+/// el único turno que tenía ese color lo borraba **también de la paleta**. Sacarle el color
+/// a un turno no es olvidarse del color. Son dos cosas distintas: el turno es cómo se ve
+/// hoy la agenda, la paleta es lo que Ariel eligió alguna vez.
+///
+/// - **El color es la clave primaria**, en minúscula: `#C0392B` y `#c0392b` son el mismo
+///   color, y esa regla vive en la base (un `upsert`) y no en un `if` de la aplicación.
+/// - `usado_en` se escribe explícitamente en cada uso —no con `@updatedAt`— porque volver a
+///   elegir un color que ya estaba tiene que **subirlo** en la lista, y eso es una decisión,
+///   no un efecto secundario de tocar la fila.
+/// - Vive en la base y no en el navegador, igual que `turnos.visto_por_admin`: la paleta que
+///   armó en el celular tiene que estar en la tablet del mostrador.
+model ColorReciente {
+  color   String   @id @db.VarChar(7)
+  usadoEn DateTime @default(now()) @map("usado_en")
+
+  @@map("colores_recientes")
+}

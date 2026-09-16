@@ -502,6 +502,27 @@ La nota rápida de un día, el renglón entre la mañana y la tarde de la agenda
   para saber si hay que insertar o actualizar. Es un `upsert` por fecha.
 - Migración `20260913120000_notas_del_dia`: solo crea esta tabla, no toca `turnos`.
 
+### `colores_recientes` — HU-34
+
+La paleta de Ariel: los colores que usó alguna vez para pintar un turno, para ofrecérselos
+de a un toque en el detalle del turno.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `color` | `varchar(7)` | **PK**, en minúscula. `#C0392B` y `#c0392b` son el mismo color, y esa regla vive acá (un `upsert`) y no en un `if` de la aplicación |
+| `usado_en` | `timestamp` | Cuándo lo usó por última vez. Se ordena por esto, descendente |
+
+- ⚠️ **Tabla propia y no una consulta sobre `turnos.color`.** La primera versión del mismo
+  día deducía la paleta de los turnos, y eso tenía un efecto que solo se ve usándolo: tocar
+  **"Sin color"** en el único turno que tenía ese color lo borraba **también de la paleta**.
+  Sacarle el color a un turno no es olvidarse del color. Son dos cosas distintas: el turno es
+  cómo se ve hoy la agenda, la paleta es lo que Ariel eligió alguna vez.
+- `usado_en` se escribe **explícitamente** en cada uso, no con un `@updatedAt`: volver a
+  elegir un color que ya estaba tiene que **subirlo** en la lista, y eso es una decisión, no
+  un efecto secundario de tocar la fila.
+- Se anota solo al **poner** un color. `{ "color": null }` (sacárselo a un turno) no la toca.
+- Migración `20260915130000_colores_recientes`: solo crea esta tabla, no toca `turnos`.
+
 ## 3. Reglas de integridad clave
 
 | Regla | Cómo se implementa |
