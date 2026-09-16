@@ -61,4 +61,43 @@ describe('mensajeDeTurnosConfirmados', () => {
     const msg = mensajeDeTurnosConfirmados([ANA, TOTO, LUCA])
     expect(msg).not.toContain('\n\n\n')
   })
+
+  it('lleva los datos para pagar una sola vez, aunque sean tres turnos', () => {
+    const msg = mensajeDeTurnosConfirmados([ANA, TOTO, LUCA])
+    expect(msg.split('Si querés pagar el turno por adelantado')).toHaveLength(2)
+  })
+})
+
+// HU-33 — Los datos para transferir viajan en el mensaje (16/9/2026). El destino real es el
+// chat del cliente: ahí le queda guardado el alias para cuando quiera pagar.
+describe('los datos para pagar', () => {
+  it('van al final del mensaje de confirmación, después del link', () => {
+    const msg = mensajeDeTurno('confirmado', ANA)
+    expect(msg).toContain(
+      'Si querés pagar el turno por adelantado, acá tenés el alias 👇',
+    )
+    expect(msg).toContain('Alias: arielenrique22mp')
+    expect(msg).toContain('CVU: 0000003100093653313742')
+    expect(msg).toContain('Titular: Ariel Juan Domingo Enrique')
+    // Después del link, que es lo que el cliente necesita primero.
+    expect(msg.indexOf('Alias:')).toBeGreaterThan(msg.indexOf(ANA.link))
+  })
+
+  it('van separados por un renglón vacío de lo que ya decía el mensaje', () => {
+    expect(mensajeDeTurno('confirmado', ANA)).toContain(
+      `${ANA.link}\n\nSi querés pagar el turno por adelantado`,
+    )
+  })
+
+  // Los dos casos en que ofrecer el alias sería ruido, o peor: un turno cancelado no se
+  // paga, y el que reprograma ya lo tenía reservado (y ya recibió los datos al sacarlo).
+  it('no van en el mensaje de cancelación ni en el de reprogramación', () => {
+    for (const motivo of ['cancelado', 'reprogramado', 'pedirReprogramar'] as const) {
+      expect(mensajeDeTurno(motivo, ANA)).not.toContain('Alias:')
+    }
+  })
+
+  it('no deja dos renglones en blanco seguidos', () => {
+    expect(mensajeDeTurno('confirmado', ANA)).not.toContain('\n\n\n')
+  })
 })

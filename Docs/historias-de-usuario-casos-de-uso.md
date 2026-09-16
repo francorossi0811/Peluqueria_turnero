@@ -453,15 +453,20 @@ lo que tengo que hacer ese día ("traer cambio", "llamar al proveedor") sin sali
 - El texto baja solo de renglón al llegar al borde, y la casilla crece para que la nota se
   lea entera. **Shift+Enter** baja de renglón a mano, para cuando son dos cosas distintas.
 
-**HU-33 — Dejar el turno pagado desde el link**
-Como cliente, quiero ver los datos para transferirle a Ariel en la pantalla de mi turno, para
-dejarlo pagado de antes sin tener que pedírselos por WhatsApp.
-*(Pedido del 15/9/2026.)*
-- En la pantalla del link de gestión veo **alias, CVU y nombre completo del titular**, cada
-  **alias y CVU** con su botón de **copiar** (uno por dato y no uno solo: la app del banco
-  pide el alias o el CVU en un campo, y pegar todo junto ahí no sirve). **El titular se ve
-  pero no se copia**: está para confirmar a quién le transfiero, no para pegarlo.
-- Se ven **en cualquier estado del turno** (reservado, cancelado, realizado…).
+**HU-33 — Que me queden los datos para pagar el turno por adelantado**
+Como cliente, quiero que los datos para transferirle a Ariel me queden en el chat, para poder
+dejar el turno pagado de antes sin tener que pedírselos.
+*(Pedido del 15/9/2026, movido al mensaje el 16/9/2026.)*
+- Al confirmar la reserva, el mensaje de WhatsApp que le mando a Ariel termina con
+  **alias, CVU y nombre completo del titular**, después de un renglón en blanco y del texto
+  *"Si querés pagar el turno por adelantado, acá tenés el alias 👇"*.
+- ⚠️ **Van en el mensaje y no en la pantalla del turno** (16/9/2026). Suena al revés —le mando
+  a Ariel sus propios datos— pero lo que importa es que **me quedan a mí en el chat**, que es
+  donde los voy a buscar cuando quiera transferir. Es el mismo efecto por el que el link de
+  gestión también viaja adentro del mensaje. En la pantalla del turno ya no están.
+- Van **solo en la confirmación**, la de un turno y la de un bloque (ahí una sola vez, porque
+  los turnos son varios y la cuenta es una). En el mensaje de cancelación no van —no hay turno
+  que pagar— ni en el de reprogramación, donde el turno ya estaba sacado.
 - El sistema **no ve el pago**. Cuando le llega, Ariel lo registra a mano marcando el turno
   Realizado con medio **Mercado Pago** (HU-27), igual que cualquier otro cobro.
 - Los datos viven en un solo lugar del código (`frontend/src/utils/contacto.ts`), junto al

@@ -1082,22 +1082,22 @@ Dos pedidos de Franco del lado del cliente. **Sin migraciones.**
    públicos y el endpoint de cargarlo después. De `ReservarPage` se borró `PedirMail`, que
    estaba comentado junto con `PasoConfirmacion`: su endpoint ya no existe, así que
    descomentarlo no habría funcionado. `PasoConfirmacion` sigue comentado.
-2. **HU-33 — alias, CVU y titular en la pantalla del turno**; alias y CVU con botón de copiar
-   y **el titular sin botón** (pedido de Franco: solo está para confirmar a quién se le paga)
-   (`BotonCopiar`, nuevo en `components/ui`), **en cualquier estado**. Los datos viven en
-   `utils/contacto.ts` junto al teléfono. El sistema no ve el pago: Ariel lo registra como
-   Mercado Pago al marcar Realizado (HU-27, sin cambios).
-   - ⚠️ Un botón por dato y no uno solo: la app del banco pide alias **o** CVU en un campo.
-   - ⚠️ `wrap-anywhere` y **no** `break-all` en el valor: el CVU son 22 dígitos sin espacios y
-     sin permiso de cortarse empuja la página a 375 px, pero `break-all` partía el nombre del
-     titular por la mitad ("Enr / ique"). Se vio midiendo a ancho de celular.
-   - ⚠️ **Dos caminos para copiar**: `navigator.clipboard` y, si rechaza, `execCommand('copy')`
-     sobre un `textarea` fuera de pantalla, para los celulares viejos que traen la API moderna
-     a medias. Si fallan los dos, el botón dice "No se pudo" en vez de quedarse callado.
-   - ⚠️ **Para probarlo en el navegador de Claude hace falta un click de verdad** (la acción
-     `left_click`), no un `.click()` por script: sin gesto del usuario los dos caminos fallan y
-     el botón muestra "No se pudo". Con el click real dice "Copiado ✓". Verificado las dos
-     cosas: el fallo se ve, y el éxito también, y en los dos casos vuelve solo a "Copiar".
+2. **HU-33 — alias, CVU y titular para que el cliente pueda pagar por adelantado.** Los datos
+   viven en `utils/contacto.ts`, junto al teléfono. El sistema no ve el pago: Ariel lo registra
+   como Mercado Pago al marcar Realizado (HU-27, sin cambios).
+   - ⚠️ **Van en el MENSAJE de WhatsApp, no en la pantalla del turno** (movidos el 16/9/2026,
+     pedido de Franco). Primero se construyó como una tarjeta en `GestionTurnoPage` con botones
+     de copiar; se sacó entera, junto con el componente `BotonCopiar`, que quedó sin uso.
+     `LINEAS_PARA_PAGAR` en `utils/mensajesWhatsapp.ts` las agrega al final del mensaje, después
+     de un renglón en blanco: *"Si querés pagar el turno por adelantado, acá tenés el alias 👇"*
+     y los tres datos.
+   - ⚠️ **Suena al revés y no lo es**: el mensaje lo manda el cliente, así que le está mandando
+     a Ariel los datos de Ariel. El destino que importa es el **chat del cliente** — ahí le
+     quedan guardados para cuando quiera transferir, sin volver a la web ni pedírselos. Es el
+     mismo efecto lateral por el que el link de gestión viaja adentro del mensaje.
+   - Solo en los dos mensajes de **confirmación** (el de a uno y el del grupo, ahí una sola vez).
+     En el de cancelación no van —no hay turno que pagar— ni en el de reprogramación, donde el
+     turno ya estaba sacado. Hay tests que fijan las dos cosas.
 
 ### Color por turno en la grilla (15/9/2026) — HU-34 ✅ en `desarrollo`
 

@@ -11,7 +11,12 @@
 // palabra distinta; sueltos en tres pantallas, se despegan entre sí a la primera edición.
 
 import { fechaLegible } from './fecha'
-import { whatsappCon } from './contacto'
+import {
+  ALIAS_PAGO,
+  CVU_PAGO,
+  TITULAR_PAGO,
+  whatsappCon,
+} from './contacto'
 
 /** Por qué un cliente le escribe a Ariel sobre un turno.
  *
@@ -83,6 +88,27 @@ const LINEA_DEL_LINK =
 const LINEA_DE_LOS_LINKS =
   'Los links para reprogramar o cancelar cada turno 👇'
 
+/** HU-33 — Los datos para pagar por adelantado, al final del mensaje de confirmación.
+ *
+ * ⚠️ **Viven acá y ya no en la pantalla del turno** (16/9/2026, pedido de Franco). Suena al
+ * revés —el cliente le manda a Ariel el alias de Ariel— pero el destino que importa es el
+ * **chat del cliente**: el mensaje le queda guardado en su propio WhatsApp, que es donde lo
+ * va a buscar el día que quiera transferir, sin tener que pedírselo ni volver a la web. Es
+ * el mismo efecto lateral por el que el link de gestión viaja adentro del mensaje.
+ *
+ * ⚠️ Solo en los dos mensajes de **confirmación** (el de a uno y el del grupo). En el de
+ * cancelación no va —no hay turno que pagar— y en el de reprogramación tampoco: ese turno
+ * ya estaba reservado, así que los datos ya le llegaron cuando lo sacó.
+ *
+ * El 👇 sobrevive porque `whatsappCon` va por `api.whatsapp.com` y no por `wa.me`, que
+ * rompe todo lo que no entre en latin-1 — ver la nota en `contacto.ts`. */
+const LINEAS_PARA_PAGAR = [
+  'Si querés pagar el turno por adelantado, acá tenés el alias 👇',
+  `Alias: ${ALIAS_PAGO}`,
+  `CVU: ${CVU_PAGO}`,
+  `Titular: ${TITULAR_PAGO}`,
+]
+
 /** El mensaje armado, en singular — Ariel es uno solo, igual que en las plantillas. */
 export function mensajeDeTurno(
   motivo: MotivoWhatsapp,
@@ -101,6 +127,8 @@ export function mensajeDeTurno(
   if (cierre.length > 0) lineas.push('', ...cierre)
   // Cancelado es el único que no lleva link: el turno ya no existe para gestionar.
   if (motivo !== 'cancelado') lineas.push('', LINEA_DEL_LINK, link)
+  // HU-33 — Los datos para transferir, al final de todo y solo al confirmar.
+  if (motivo === 'confirmado') lineas.push('', ...LINEAS_PARA_PAGAR)
   return lineas.join('\n')
 }
 
@@ -140,6 +168,8 @@ export function mensajeDeTurnosConfirmados(turnos: DatosDelTurno[]): string {
   lineas.push('', '¡Nos vemos!')
   lineas.push('', LINEA_DE_LOS_LINKS)
   for (const t of turnos) lineas.push(`${t.nombre}: ${t.link}`)
+  // Una sola vez para todo el bloque: los turnos son varios, la cuenta es una.
+  lineas.push('', ...LINEAS_PARA_PAGAR)
   return lineas.join('\n')
 }
 

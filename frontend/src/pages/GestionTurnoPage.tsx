@@ -18,14 +18,7 @@ import {
 import { obtenerDisponibilidad } from '../api/disponibilidad'
 import { hoyIso, sumarDias, fechaLegible } from '../utils/fecha'
 import { formatearPesos } from '../utils/dinero'
-import {
-  ALIAS_PAGO,
-  CVU_PAGO,
-  TELEFONO_URL,
-  TITULAR_PAGO,
-  WHATSAPP_URL,
-} from '../utils/contacto'
-import { BotonCopiar } from '../components/ui/BotonCopiar'
+import { TELEFONO_URL, WHATSAPP_URL } from '../utils/contacto'
 import { whatsappDeTurno } from '../utils/mensajesWhatsapp'
 import { WHATSAPP_AUTOMATICO } from '../utils/avisos'
 import type { DatosDelTurno, MotivoWhatsapp } from '../utils/mensajesWhatsapp'
@@ -304,9 +297,11 @@ export function GestionTurnoPage({ id }: { id: string }) {
         </p>
       </Card>
 
-      {/* HU-33 — En todos los estados, pedido de Franco: hay clientes que lo dejan pagado
-          de antes, y el link del turno es lo único que tienen a mano. */}
-      <DatosParaPagar />
+      {/* ⚠️ HU-33 — Acá vivían el alias, el CVU y el titular, y se fueron al mensaje de
+          WhatsApp de la confirmación (16/9/2026, pedido de Franco): así le quedan guardados
+          al cliente en su propio chat, que es donde los va a buscar cuando quiera
+          transferir, en vez de tener que volver a esta pantalla. Ver `LINEAS_PARA_PAGAR`
+          en `utils/mensajesWhatsapp.ts`. */}
 
       {errorAccion && (
         <div className="border-vino bg-vino-suave text-vino mb-4 rounded-md border px-3 py-2 text-sm">
@@ -464,55 +459,6 @@ function ContactoAriel({
         </a>
       </div>
     </div>
-  )
-}
-
-/** HU-33 — Alias, CVU y titular de Ariel. Alias y CVU con botón de copiar; el titular no.
- *
- * Un botón por dato y no uno que copie todo junto: la app del banco pide el alias **o** el
- * CVU en un campo, y pegar un párrafo ahí no sirve. ⚠️ **El titular se muestra pero no se
- * copia** (pedido de Franco, 15/9/2026): no es un dato que se pegue en ningún lado, está
- * para que el cliente confirme que le está transfiriendo a la persona correcta.
- *
- * `wrap-anywhere` en el valor y **no** `break-all`: el CVU son 22 dígitos sin espacios y
- * sin permiso de cortarse empuja la página a scroll horizontal a 375 px, pero `break-all`
- * cortaba también el nombre del titular por la mitad de una palabra ("Enr / ique"), medido
- * a ancho de celular. `anywhere` corta primero en los espacios y parte una palabra solo si
- * sola no entra. Solo alias y CVU van en monoespaciada: son códigos que se comparan de a
- * carácter; el nombre es un nombre. */
-function DatosParaPagar() {
-  const datos = [
-    { etiqueta: 'Alias', valor: ALIAS_PAGO, copiable: true },
-    { etiqueta: 'CVU', valor: CVU_PAGO, copiable: true },
-    { etiqueta: 'Titular', valor: TITULAR_PAGO, copiable: false },
-  ]
-  return (
-    <Card className="mb-4">
-      <p className="text-tinta-tenue text-xs tracking-wide uppercase">
-        ¿Querés dejarlo pagado?
-      </p>
-      <p className="text-tinta-suave mt-1 text-sm">
-        Transferí por Mercado Pago o desde tu banco, y avisale a Ariel por
-        WhatsApp.
-      </p>
-      <dl className="mt-3 flex flex-col gap-3">
-        {datos.map(({ etiqueta, valor, copiable }) => (
-          <div key={etiqueta} className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <dt className="text-tinta-tenue text-xs tracking-wide uppercase">
-                {etiqueta}
-              </dt>
-              <dd
-                className={`text-tinta text-sm wrap-anywhere ${copiable ? 'font-mono select-all' : ''}`}
-              >
-                {valor}
-              </dd>
-            </div>
-            {copiable && <BotonCopiar texto={valor} etiqueta={etiqueta} />}
-          </div>
-        ))}
-      </dl>
-    </Card>
   )
 }
 
