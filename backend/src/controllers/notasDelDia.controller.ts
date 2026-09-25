@@ -1,9 +1,11 @@
 import { Request, Response } from 'express'
 import { z } from 'zod'
 import {
+  cambiarColorDeNota,
   guardarNotaDelDia,
   listarNotasDelDia,
 } from '../services/notasDelDia.service'
+import { esColorValido, MENSAJE_COLOR_INVALIDO } from '../utils/validaciones'
 import {
   esquemaDeFecha,
   FIN_ANTES_QUE_INICIO,
@@ -86,4 +88,51 @@ export async function putNotaDelDia(req: Request, res: Response) {
       bodyParsed.data.texto,
     ),
   })
+}
+
+// El mismo schema que el color de un turno: `nullable()` y no `optional()`, porque `null` es
+// "sacale el color" y un body vacío por error no tiene que leerse así.
+const colorSchema = z.object({
+  color: z
+    .string({ error: `Falta el color. ${MENSAJE_COLOR_INVALIDO}` })
+    .trim()
+    .refine(esColorValido, MENSAJE_COLOR_INVALIDO)
+    .nullable(),
+})
+
+/** Pinta la nota de un día (su prioridad) o le saca el color. 404 si ese día no tiene nota. */
+export async function patchColorNota(req: Request, res: Response) {
+  const fechaParsed = fechaParamSchema.safeParse(req.params)
+  if (!fechaParsed.success) {
+    responderInvalido(
+      res,
+      fechaParsed.error.issues[0]?.message ?? 'Fecha inválida.',
+    )
+    return
+  }
+
+  const bodyParsed = colorSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    responderInvalido(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Color inválido.',
+    )
+    return
+  }
+
+  const nota = await cambiarColorDeNota(
+    fechaParsed.data.fecha,
+    bodyParsed.data.color,
+  )
+  if (!nota) {
+    res.status(404).json({
+      error: {
+        codigo: 'NOTA_NO_ENCONTRADA',
+        mensaje:
+          'Ese día no tiene nota. Escribí la nota primero y después elegí el color.',
+      },
+    })
+    return
+  }
+  res.json({ nota })
 }

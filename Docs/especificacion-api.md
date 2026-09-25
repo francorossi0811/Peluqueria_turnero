@@ -886,8 +886,16 @@ intervalo.
 |---|---|---|
 | GET | `/api/admin/notas-del-dia?desde=&hasta=` | Las notas que existan en el rango (máx. 62 días). Un día sin nota no aparece |
 | PUT | `/api/admin/notas-del-dia/:fecha` | `{ "texto" }`. Crea o cambia la nota; con texto vacío (o solo espacios) la **borra** |
+| PATCH | `/api/admin/notas-del-dia/:fecha/color` | `{ "color": "#rrggbb" \| null }`. Pinta la nota (su prioridad) o le saca el color. 24/9/2026 |
 
-- `PUT` responde `{ "nota": { "fecha", "texto" } }`, o `{ "nota": null }` si borró. Borrar
+- `PUT` responde `{ "nota": { "fecha", "texto", "color" } }`, o `{ "nota": null }` si borró.
+  **No toca el color**: editar el texto lo conserva, borrar la nota se lo lleva.
+- `PATCH …/color` responde `{ "nota": { … } }`. Si ese día no tiene nota →
+  `404 NOTA_NO_ENCONTRADA`: sin texto no hay casilla que pintar, y crear una fila vacía para
+  guardar un color rompería la regla de "no hay filas vacías". Color mal escrito o body sin
+  `color` → `400 PARAMETROS_INVALIDOS`. Es `nullable()` y no `optional()`, igual que el del
+  turno: un body vacío no puede leerse como "sacale el color". **Anota el color en
+  `colores_recientes`**: la paleta es una sola para turnos y notas. Borrar
   la nota de un día que no tenía ninguna no es un error: responde lo mismo.
 - Una sola puerta para crear, cambiar y borrar porque para Ariel es un solo gesto: escribe
   en el renglón y sale. Partirlo obligaría a la pantalla a decidir qué mandar mirando si

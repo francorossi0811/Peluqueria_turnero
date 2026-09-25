@@ -1,11 +1,26 @@
 import { prisma } from '../config/prisma'
 import { fechaDesdeIso, formatearFecha } from '../utils/fechaHora'
+import { registrarColorUsado } from './turnos.service'
 
 /** La nota rápida de un día, como la ve el panel. */
 export interface NotaDelDiaDto {
   /** `YYYY-MM-DD`. */
   fecha: string
   texto: string
+  /** La prioridad que le puso Ariel, como el color de un turno (HU-34). `null` = sin color. */
+  color: string | null
+}
+
+function notaADto(fila: {
+  fecha: Date
+  texto: string
+  color: string | null
+}): NotaDelDiaDto {
+  return {
+    fecha: formatearFecha(fila.fecha),
+    texto: fila.texto,
+    color: fila.color,
+  }
 }
 
 /** Las notas de un rango de días, las que existan. Un día sin nota no aparece: el panel
@@ -19,7 +34,7 @@ export async function listarNotasDelDia(
     where: { fecha: { gte: fechaDesdeIso(desde), lte: fechaDesdeIso(hasta) } },
     orderBy: { fecha: 'asc' },
   })
-  return filas.map((f) => ({ fecha: formatearFecha(f.fecha), texto: f.texto }))
+  return filas.map(notaADto)
 }
 
 /**
@@ -49,5 +64,31 @@ export async function guardarNotaDelDia(
     create: { fecha: dia, texto },
     update: { texto },
   })
-  return { fecha: formatearFecha(fila.fecha), texto: fila.texto }
+  return notaADto(fila)
+}
+
+/**
+ * Pinta la nota de un día, o le saca el color con `null`.
+ *
+ * Devuelve `null` si ese día no tiene nota: sin texto no hay casilla que pintar, y crear una
+ * fila vacía solo para guardar un color rompería la regla de "no hay fila vacía". El `PUT`
+ * del texto no toca el color, así que editar la nota lo conserva; borrarla se lo lleva.
+ *
+ * Comparte la paleta de recientes con los turnos a propósito: si Ariel usa el rojo para
+ * "urgente" en un lado, lo tiene a un toque en el otro.
+ */
+export async function cambiarColorDeNota(
+  fecha: string,
+  color: string | null,
+): Promise<NotaDelDiaDto | null> {
+  const dia = fechaDesdeIso(fecha)
+  const existe = await prisma.notaDelDia.findUnique({ where: { fecha: dia } })
+  if (!existe) return null
+
+  const fila = await prisma.notaDelDia.update({
+    where: { fecha: dia },
+    data: { color },
+  })
+  if (color) await registrarColorUsado(color)
+  return notaADto(fila)
 }

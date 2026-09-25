@@ -52,6 +52,7 @@ import {
 } from '../controllers/feriados.controller'
 import {
   getNotasDelDia,
+  patchColorNota,
   putNotaDelDia,
 } from '../controllers/notasDelDia.controller'
 import {
@@ -197,6 +198,11 @@ adminRouter.patch('/admin/feriados/:id', requireAuth, patchFeriado)
 // HU-32 — La nota rápida de cada día, en la agenda semanal.
 adminRouter.get('/admin/notas-del-dia', requireAuth, getNotasDelDia)
 adminRouter.put('/admin/notas-del-dia/:fecha', requireAuth, putNotaDelDia)
+adminRouter.patch(
+  '/admin/notas-del-dia/:fecha/color',
+  requireAuth,
+  patchColorNota,
+)
 
 adminRouter.get('/admin/bloqueos', requireAuth, getBloqueos)
 adminRouter.post('/admin/bloqueos', requireAuth, postBloqueo)

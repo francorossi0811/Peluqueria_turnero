@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -10,9 +10,8 @@ import {
   cancelarTurnoAdmin,
   cargarTelefonoTurno,
   marcarEstadoTurno,
-  obtenerColoresRecientes,
 } from '../../api/agenda'
-import { tintaSobre } from '../../utils/color'
+import { SelectorColor } from './SelectorColor'
 import {
   esTelefonoValido,
   MENSAJE_TELEFONO_INVALIDO,
@@ -31,11 +30,6 @@ import type { ErrorApi, TurnoAdmin } from '../../types/api'
 //
 // La vista Día no cambia: ahí las acciones están inline en la fila, y ese es el flujo con
 // el que Ariel opera durante la jornada. Meterle un modal en el medio sería más lento.
-
-/** HU-34 — El color que trae el selector cuando el turno todavía no tiene ninguno. Es el
- * ámbar de la marca y no el negro con el que arranca `<input type="color">`, por lo mismo
- * que en las etiquetas: el negro sobre el panel oscuro es un bloque invisible. */
-const COLOR_INICIAL = '#b68235'
 
 const ETIQUETA_ORIGEN: Record<TurnoAdmin['origen'], string> = {
   online: 'Reservó online',
@@ -263,44 +257,12 @@ export function ModalTurno({
 }
 
 /**
- * HU-34 — El color con el que Ariel marca este turno en la grilla semanal.
- *
- * ⚠️ **El color se elige en estado local y se guarda con un botón, nunca en el `onChange`
- * del selector.** Es la lección que costó el bug del color de las etiquetas (4/9/2026): el
- * `<input type="color">` dispara `onChange` **continuo mientras se arrastra el cursor por
- * la rueda**, así que atarlo al servidor mandó 31 PATCH por un solo cambio de color, y los
- * que volvían pisaban lo que Ariel estaba eligiendo.
- *
- * Los colores recientes salen del backend y se tocan de a uno: guardan en el acto, porque
- * ahí no hay arrastre — es un click, un color, un PATCH.
+ * HU-34 — El color con el que Ariel marca este turno en la grilla semanal. La rueda, los
+ * recientes y la regla de guardar con un botón viven en `SelectorColor`, que comparte con la
+ * nota del día.
  */
 function ColorDelTurno({ turno }: { turno: TurnoAdmin }) {
   const queryClient = useQueryClient()
-  const [color, setColor] = useState(turno.color ?? COLOR_INICIAL)
-  const [error, setError] = useState<string | null>(null)
-
-  const recientesQuery = useQuery({
-    queryKey: ['colores-recientes'],
-    queryFn: obtenerColoresRecientes,
-  })
-
-  const mutation = useMutation({
-    mutationFn: (nuevo: string | null) => cambiarColorTurno(turno.id, nuevo),
-    onMutate: () => setError(null),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['agenda'] })
-      void queryClient.invalidateQueries({ queryKey: ['colores-recientes'] })
-    },
-    onError: (err) => {
-      const mensaje = isAxiosError<ErrorApi>(err)
-        ? err.response?.data.error.mensaje
-        : null
-      setError(mensaje ?? 'No pudimos guardar el color.')
-    },
-  })
-
-  const recientes = recientesQuery.data ?? []
-  const guardando = mutation.isPending
 
   return (
     <div className="border-borde border-t pt-4">
@@ -308,70 +270,19 @@ function ColorDelTurno({ turno }: { turno: TurnoAdmin }) {
         Color en la agenda
       </p>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="color"
-          value={color}
-          onChange={(e) => setColor(e.target.value)}
-          aria-label="Color del turno"
-          className="border-borde h-11 w-14 cursor-pointer rounded-md border bg-transparent p-1"
-        />
-        <Button
-          variant="outline"
-          disabled={guardando}
-          onClick={() => mutation.mutate(color)}
-        >
-          {guardando ? 'Guardando…' : 'Poner este color'}
-        </Button>
-        {/* Solo si hay algo que sacar: un botón que no hace nada es ruido en un modal que
-            ya tiene seis acciones. */}
-        {turno.color && (
-          <Button
-            variant="ghost"
-            disabled={guardando}
-            onClick={() => mutation.mutate(null)}
-          >
-            Sin color
-          </Button>
-        )}
-      </div>
-
-      {recientes.length > 0 && (
-        <div className="mt-3">
-          <p className="text-tinta-tenue mb-1 text-xs">Los últimos que usaste</p>
-          <div className="flex flex-wrap gap-2">
-            {recientes.map((c) => (
-              <button
-                key={c}
-                type="button"
-                disabled={guardando}
-                onClick={() => {
-                  setColor(c)
-                  mutation.mutate(c)
-                }}
-                aria-label={`Usar el color ${c}`}
-                title={c}
-                // El tilde encima y no un anillo alrededor: sobre un color elegido por
-                // Ariel, un anillo de color fijo puede desaparecer (es lo que ya pasó con
-                // las insignias de HU-25), y `tintaSobre` contrasta contra cualquiera.
-                className={`border-borde h-8 w-8 rounded-md border text-sm leading-none font-bold ${
-                  turno.color === c ? '' : 'opacity-90'
-                }`}
-                style={{ backgroundColor: c, color: tintaSobre(c) }}
-              >
-                {turno.color === c ? '✓' : ''}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <SelectorColor
+        actual={turno.color}
+        guardar={(nuevo) => cambiarColorTurno(turno.id, nuevo)}
+        alGuardar={() =>
+          void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+        }
+        ariaLabel="Color del turno"
+      />
 
       <p className="text-tinta-tenue mt-2 text-xs">
         Se ve en la vista Semana y te queda aunque llegue el día. Cuando marques
         Realizado o Ausente vuelve el color del estado.
       </p>
-
-      {error && <p className="text-vino mt-2 text-sm">{error}</p>}
     </div>
   )
 }

@@ -966,7 +966,7 @@ export async function cambiarColorDelTurno(
  * elegir un color que ya estaba tiene que **subirlo** en la lista, y eso es una escritura
  * explícita, no un efecto secundario.
  */
-async function registrarColorUsado(color: string): Promise<void> {
+export async function registrarColorUsado(color: string): Promise<void> {
   const normalizado = color.toLowerCase()
   const ahora = new Date()
 

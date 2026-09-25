@@ -452,6 +452,11 @@ lo que tengo que hacer ese día ("traer cambio", "llamar al proveedor") sin sali
   escribiendo. Si la borro entera, la nota desaparece.
 - El texto baja solo de renglón al llegar al borde, y la casilla crece para que la nota se
   lea entera. **Shift+Enter** baja de renglón a mano, para cuando son dos cosas distintas.
+- *(24/9/2026)* **Le puedo poner color a la nota**, igual que a un turno, para marcar la
+  prioridad. El botón aparece solo si la casilla tiene nota, y los colores que ofrece de un
+  toque son los mismos que usé en los turnos. Si borro la nota, se va también el color.
+- *(24/9/2026)* La letra de la nota es **más grande (20 px) y en negrita**, para leerla de
+  un vistazo desde el sillón.
 
 **HU-33 — Que me queden los datos para pagar el turno por adelantado**
 Como cliente, quiero que los datos para transferirle a Ariel me queden en el chat, para poder

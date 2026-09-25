@@ -1126,6 +1126,36 @@ La regla del color está en "Reglas de negocio clave". Lo que conviene saber ac�
   etiquetas (4/9/2026): `<input type="color">` dispara `onChange` mientras se arrastra el
   cursor. Los colores recientes sí guardan al tocarlos: ahí es un click, no un arrastre.
 
+### Color y letra en la nota del día, y el bloque a la vista (24/9/2026) ✅ en `desarrollo`
+
+Dos pedidos de Ariel, uno de cada lado.
+
+- **Del lado del cliente, al elegir horario para un bloque** (HU-31) aparece un recuadro
+  "Tus N turnos" con la hora exacta de cada uno. Algunos clientes leían la hora elegida como
+  la de todos. ⚠️ **No se pintan los chips de la grilla que siguen**, que era la idea obvia:
+  los chips son horas donde puede *arrancar* el bloque, no las de cada turno. Con duraciones
+  mezcladas (Barba 15 + Corte 20) el segundo arranca 10:15, ese chip no existe, y se habría
+  marcado el 10:20. El texto de "¿Cuántos turnos?" pasó a *"Si venís acompañado, podés
+  reservar un turno para cada persona…"*.
+- **La nota del día tiene color** (HU-32 ampliada), con la misma paleta de recientes que los
+  turnos. `notas_del_dia.color` + `PATCH /admin/notas-del-dia/:fecha/color`, que da 404 si
+  el día no tiene nota. El `PUT` del texto no toca el color; borrar la nota se lo lleva.
+- ⚠️ **El selector de color es uno solo** (`components/admin/SelectorColor.tsx`) y lo usan
+  el turno y la nota. Se sacó de `ModalTurno` en vez de copiarlo porque la parte delicada
+  —guardar con un botón y no en el `onChange`— es justo la que una copia se olvida.
+- **La letra de la nota es 20 px en negrita.** ⚠️ Va con `style`, no con `text-xl`: el piso
+  de 16 px del panel pega en `body *` con más peso que cualquier clase de Tailwind.
+- ⚠️ **La migración `20260924120000_color_de_nota` está aplicada SOLO en `desarrollo`.** Es
+  un `ADD COLUMN` y nada más (verificado: no toca `turnos_no_solapamiento`). Tiene que estar
+  en `production` antes de que Render sirva este código, o la agenda semanal pide una
+  columna que no existe.
+- ⚠️ **Defecto viejo que la letra más grande vuelve más visible:** el alto de la casilla se
+  recalcula solo cuando cambia el texto, no cuando cambia el ancho. Si se achica la ventana
+  (o se gira la tablet) con la nota a la vista, la última línea puede quedar tapada hasta que
+  se recargue. Cargando la página ya en ancho de celular no pasa: medido, ninguna cortada.
+- Quedaron datos de prueba **en `desarrollo`**: notas el 30/9 ("Traer cambio", azul) y el
+  1/10 (rojo).
+
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 
 Seña por Mercado Pago al reservar. **No lo pidió Ariel**; queda anotado porque es la continuación natural. Traería cuenta de MP, webhooks de pago, reembolsos al cancelar y qué hacer con un pago pendiente — o sea, trámites externos como los de WhatsApp. También quedaron afuera los pagos parciales, el historial de precios y la facturación.

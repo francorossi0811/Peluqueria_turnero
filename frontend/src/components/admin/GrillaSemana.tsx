@@ -1,7 +1,10 @@
 import { Fragment, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Insignia } from './Insignia'
+import { SelectorColor } from './SelectorColor'
+import { Modal } from '../ui/Modal'
 import {
+  cambiarColorNota,
   guardarNotaDelDia,
   MAX_LARGO_NOTA,
   obtenerNotasDelDia,
@@ -10,6 +13,7 @@ import {
   DIAS_CARGA_HACIA_ATRAS,
   DIAS_CORTOS,
   diaSemana,
+  fechaLegible,
   minutosDeHora as aMinutos,
   sumarDias,
   turnoEnCurso,
@@ -388,7 +392,8 @@ function RenglonNotas({ dias }: { dias: string[] }) {
         Nota
       </div>
       {dias.map((dia) => {
-        const guardado = query.data?.find((n) => n.fecha === dia)?.texto ?? ''
+        const nota = query.data?.find((n) => n.fecha === dia)
+        const guardado = nota?.texto ?? ''
         return (
           // ⚠️ La `key` lleva el texto guardado y no es un descuido: cuando la nota cambia
           // en el servidor la casilla se vuelve a montar con el valor nuevo, en vez de
@@ -398,6 +403,7 @@ function RenglonNotas({ dias }: { dias: string[] }) {
             key={`${dia}-${guardado}`}
             dia={dia}
             guardado={guardado}
+            color={nota?.color ?? null}
             cargando={query.isPending}
           />
         )
@@ -425,15 +431,19 @@ function RenglonNotas({ dias }: { dias: string[] }) {
 function CeldaNota({
   dia,
   guardado,
+  color,
   cargando,
 }: {
   dia: string
   guardado: string
+  /** La prioridad que le puso Ariel (24/9/2026). `null` = el fondo de siempre. */
+  color: string | null
   cargando: boolean
 }) {
   const queryClient = useQueryClient()
   const [texto, setTexto] = useState(guardado)
   const [fallo, setFallo] = useState(false)
+  const [eligiendoColor, setEligiendoColor] = useState(false)
   // Escape tiene que descartar, pero salir de la casilla es lo que guarda: sin esta marca,
   // el `blur` que dispara el propio Escape guardaría justo lo que se quería tirar.
   const descartar = useRef(false)
@@ -479,7 +489,7 @@ function CeldaNota({
   }
 
   return (
-    <div className="bg-agenda-fondo border-agenda-linea border-r-2 p-1 last:border-r-0">
+    <div className="bg-agenda-fondo border-agenda-linea relative border-r-2 p-1 last:border-r-0">
       <textarea
         ref={caja}
         rows={1}
@@ -506,10 +516,61 @@ function CeldaNota({
         title={
           fallo ? 'No se pudo guardar la nota. Tocá y probá de nuevo.' : undefined
         }
-        className={`bg-turno-hoy text-agenda-tinta placeholder:text-agenda-tinta/40 block min-h-full w-full resize-none overflow-hidden rounded border px-2 py-1 leading-snug break-words ${
+        // ⚠️ El tamaño va en línea y no con `text-xl`: el piso de 16 px del panel
+        // (`index.css`) pega en `body *` con más peso que una clase de Tailwind, así que la
+        // clase no haría nada. 20 px lo pidió Ariel el 24/9/2026.
+        //
+        // Con color, el fondo y el texto salen del color elegido —el texto por
+        // `tintaSobre`, igual que en un turno— y no de las clases del tema.
+        style={{
+          fontSize: 20,
+          ...(color ? { backgroundColor: color, color: tintaSobre(color) } : {}),
+        }}
+        className={`${color ? '' : 'bg-turno-hoy text-agenda-tinta'} placeholder:text-agenda-tinta/40 block min-h-full w-full resize-none overflow-hidden rounded border px-2 py-1 leading-snug font-semibold break-words ${
+          guardado ? 'pr-8' : ''
+        } ${
           fallo ? 'border-ausente-fuerte border-2' : 'border-agenda-linea/40'
         } ${mutation.isPending ? 'opacity-60' : ''}`}
       />
+
+      {/* El color es la prioridad de la nota, así que solo existe si hay nota: sin texto
+          no hay casilla que pintar, y el backend respondería 404. La rueda de colores del
+          botón dice "elegí un color" sin ocupar el ancho de una palabra, que en una
+          columna de ~160 px es lo que sobra. */}
+      {guardado && (
+        <button
+          type="button"
+          onClick={() => setEligiendoColor(true)}
+          aria-label={`Color de la nota del ${dia}`}
+          title="Color de la nota"
+          className="absolute top-2 right-2 h-6 w-6 rounded-full border-2"
+          style={{
+            background:
+              'conic-gradient(#c0392b, #f5d020, #14682c, #2f6fb5, #7a3fa0, #c0392b)',
+            borderColor: color ? tintaSobre(color) : 'var(--color-borde)',
+          }}
+        />
+      )}
+
+      {eligiendoColor && (
+        <Modal
+          titulo={`Color de la nota · ${fechaLegible(dia)}`}
+          onClose={() => setEligiendoColor(false)}
+        >
+          <SelectorColor
+            actual={color}
+            guardar={(nuevo) => cambiarColorNota(dia, nuevo)}
+            alGuardar={() => {
+              void queryClient.invalidateQueries({ queryKey: ['notas-del-dia'] })
+              setEligiendoColor(false)
+            }}
+            ariaLabel="Color de la nota"
+          />
+          <p className="text-tinta-tenue mt-3 text-xs">
+            Usalo para marcar la prioridad. Si borrás la nota, se va también el color.
+          </p>
+        </Modal>
+      )}
     </div>
   )
 }

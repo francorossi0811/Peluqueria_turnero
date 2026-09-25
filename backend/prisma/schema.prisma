@@ -509,9 +509,13 @@ model CoexistenceSincronizacion {
 ///   serían dos formas de decir lo mismo.
 /// - `VarChar(200)` y no `String` a secas: es un renglón, no un bloc de notas, y el tope
 ///   tiene que valer también para quien llame a la API sin pasar por la pantalla.
+/// - `color` (`#rrggbb` o `null`, 24/9/2026) es la prioridad que Ariel le da a la nota,
+///   pintando la casilla como pinta un turno (HU-34). Vive en la fila de la nota, así que
+///   borrar el texto se lleva el color: una casilla vacía pintada no dice nada.
 model NotaDelDia {
   fecha     DateTime @id @db.Date
   texto     String   @db.VarChar(200)
+  color     String?  @db.VarChar(7)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("notas_del_dia")

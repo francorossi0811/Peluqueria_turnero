@@ -6,6 +6,8 @@ import { apiClient } from './client'
 export interface NotaDelDia {
   fecha: string // "YYYY-MM-DD"
   texto: string
+  /** La prioridad que le puso Ariel, como el color de un turno. `null` = sin color. */
+  color: string | null
 }
 
 /** El mismo tope que aplica el backend y la columna. Acá solo sirve para cortar el input:
@@ -31,6 +33,19 @@ export async function guardarNotaDelDia(
   const { data } = await apiClient.put<{ nota: NotaDelDia | null }>(
     `/admin/notas-del-dia/${fecha}`,
     { texto },
+  )
+  return data.nota
+}
+
+/** Pinta la nota de un día, o le saca el color con `null`. Si ese día no tiene nota, el
+ * backend responde 404: sin texto no hay casilla que pintar. */
+export async function cambiarColorNota(
+  fecha: string,
+  color: string | null,
+): Promise<NotaDelDia> {
+  const { data } = await apiClient.patch<{ nota: NotaDelDia }>(
+    `/admin/notas-del-dia/${fecha}/color`,
+    { color },
   )
   return data.nota
 }

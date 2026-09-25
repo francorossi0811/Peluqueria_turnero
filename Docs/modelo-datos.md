@@ -494,6 +494,7 @@ La nota rápida de un día, el renglón entre la mañana y la tarde de la agenda
 |---|---|---|
 | `fecha` | `date` | **PK**. Una nota por día como mucho, y la regla vive acá, no en un `if` |
 | `texto` | `varchar(200)` | Un renglón. El tope vale también para quien llame a la API sin pasar por la pantalla |
+| `color` | `varchar(7)` nullable | `#rrggbb`: la prioridad que le pone Ariel, como el color de un turno (24/9/2026). `null` = el fondo de siempre |
 | `updated_at` | `timestamp` | Default `now()` |
 
 - **No hay filas vacías**: guardar un texto vacío borra la fila. "Sin nota" y "nota en
@@ -501,6 +502,7 @@ La nota rápida de un día, el renglón entre la mañana y la tarde de la agenda
 - Sin `id` aparte: la fecha ya identifica la nota, y un `id` obligaría a buscar primero
   para saber si hay que insertar o actualizar. Es un `upsert` por fecha.
 - Migración `20260913120000_notas_del_dia`: solo crea esta tabla, no toca `turnos`.
+- Migración `20260924120000_color_de_nota`: solo agrega `color`, no toca `turnos`.
 
 ### `colores_recientes` — HU-34
 
