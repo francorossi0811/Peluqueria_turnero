@@ -492,8 +492,8 @@ function PasoCuantos({
         ¿Cuántos turnos?
       </h1>
       <p className="font-body text-tinta mb-4 opacity-75">
-        Si venís con más gente, sacá todos los turnos de una. Los agendamos
-        seguidos, uno atrás del otro.
+        Si venís acompañado, podés reservar un turno para cada persona. Quedan
+        agendados en horarios consecutivos.
       </p>
 
       <div className="mb-6 flex flex-wrap gap-2">
@@ -645,13 +645,38 @@ function PasoHorario({
         />
       )}
 
-      {/* Con un bloque, la hora elegida es la de arranque: decir hasta cuándo va evita que
-          alguien reserve tres turnos creyendo que ocupa solo los primeros 20 minutos. */}
+      {/* Con un bloque, la hora elegida es solo la del primero, y eso no se entendía: hubo
+          clientes que la leyeron como la hora de todos. Por eso, apenas elige, se ven los
+          N turnos con su hora, en chips del mismo dorado que el horario elegido.
+
+          ⚠️ No se pintan los chips de la grilla que siguen, que era la idea obvia: la grilla
+          son horas donde puede ARRANCAR el bloque, no las horas de cada turno. Con
+          duraciones mezcladas (Barba 15 + Corte 20) el segundo arranca 10:15 y ese chip no
+          existe; se marcaría el 10:20, que no es de nadie. Y cerca del cierre no queda
+          ningún chip después del elegido. */}
       {varios && hora && (
-        <p className="text-tinta mt-3 text-sm">
-          Quedan de <span className="font-semibold">{hora}</span> a{' '}
-          <span className="font-semibold">{sumarMinutos(hora, total)}</span>.
-        </p>
+        <div className="border-miel bg-destacado mt-1 mb-2 rounded-md border px-3 py-3">
+          <p className="text-tinta-tenue mb-2 text-xs tracking-wide uppercase">
+            Tus {turnos.length} turnos
+          </p>
+          <ul className="flex flex-col gap-2">
+            {horariosDelBloque(turnos, hora).map((h, i) => (
+              <li key={i} className="text-tinta flex items-center gap-3 text-sm">
+                <span className="border-miel bg-miel text-superficie rounded-full border px-3 py-1.5 tabular-nums">
+                  {h}
+                </span>
+                <span>
+                  <span className="font-semibold">{i + 1}°</span> ·{' '}
+                  {turnos[i].servicio.nombre}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-tinta mt-3 text-sm">
+            Terminan a las{' '}
+            <span className="font-semibold">{sumarMinutos(hora, total)}</span>.
+          </p>
+        </div>
       )}
 
       <button
