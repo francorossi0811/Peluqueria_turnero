@@ -1126,7 +1126,7 @@ La regla del color está en "Reglas de negocio clave". Lo que conviene saber ac�
   etiquetas (4/9/2026): `<input type="color">` dispara `onChange` mientras se arrastra el
   cursor. Los colores recientes sí guardan al tocarlos: ahí es un click, no un arrastre.
 
-### Color y letra en la nota del día, y el bloque a la vista (24/9/2026) ✅ en `desarrollo`
+### Color y letra en la nota del día, y el bloque a la vista (24/9/2026) ✅ desplegado
 
 Dos pedidos de Ariel, uno de cada lado.
 
@@ -1145,10 +1145,12 @@ Dos pedidos de Ariel, uno de cada lado.
   —guardar con un botón y no en el `onChange`— es justo la que una copia se olvida.
 - **La letra de la nota es 20 px en negrita.** ⚠️ Va con `style`, no con `text-xl`: el piso
   de 16 px del panel pega en `body *` con más peso que cualquier clase de Tailwind.
-- ⚠️ **La migración `20260924120000_color_de_nota` está aplicada SOLO en `desarrollo`.** Es
-  un `ADD COLUMN` y nada más (verificado: no toca `turnos_no_solapamiento`). Tiene que estar
-  en `production` antes de que Render sirva este código, o la agenda semanal pide una
-  columna que no existe.
+- ✅ **Mergeado a `main` y desplegado el 24/9/2026** (commit `8aa8a6b`, Render y Vercel en
+  vivo). La migración `20260924120000_color_de_nota` se aplicó en las **dos** branches: en
+  `production` **antes** de pushear, por la connection string **directa** (sin `-pooler`), con
+  el SQL leído primero (un `ADD COLUMN` y nada más). Después: `EXCLUDE` en pie, candado de
+  migraciones libre, 126 turnos intactos, y la ruta nueva respondiendo `401` (no `404`) en
+  Render. El build de Render no encontró nada que aplicar y no se colgó.
 - ⚠️ **Defecto viejo que la letra más grande vuelve más visible:** el alto de la casilla se
   recalcula solo cuando cambia el texto, no cuando cambia el ancho. Si se achica la ventana
   (o se gira la tablet) con la nota a la vista, la última línea puede quedar tapada hasta que
