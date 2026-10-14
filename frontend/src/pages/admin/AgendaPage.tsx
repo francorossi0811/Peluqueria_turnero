@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { isAxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '../../components/ui/Button'
@@ -26,6 +26,7 @@ import {
 import { eliminarBloqueo, obtenerBloqueos } from '../../api/bloqueos'
 import { obtenerHorarioLaboral } from '../../api/horarioLaboral'
 import { obtenerFeriados } from '../../api/feriados'
+import { escucharAvisosDelServiceWorker } from '../../lib/push'
 import { useAvisosPendientes } from '../../lib/useAvisosPendientes'
 import { useMinutosAhora } from '../../lib/useMinutosAhora'
 import {
@@ -131,16 +132,19 @@ export function AgendaPage() {
     // HU-17 — Con el panel abierto, los turnos nuevos aparecen solos. Va acá y no como
     // default del QueryClient a propósito: si no, el wizard público también estaría
     // pidiendo disponibilidad cada 30 segundos y quemando el plan gratuito de Render.
-    // `refetchIntervalInBackground` queda en false (default): una pestaña de fondo deja
-    // de pedir, y de paso no mantiene la sesión viva sola para siempre.
-    // Con la pestaña visible, cada 30 s. Oculta, cada 3 minutos en vez de nada: el
+    // Con la pestaña visible, cada 30 s. Oculta, cada 1 minuto en vez de nada: el
     // contador del título y el badge sirven justamente cuando Ariel no está mirando esta
-    // pestaña, así que dejar de pedir del todo los volvía inútiles. Son ~20 requests por
-    // hora de fondo, irrelevante para el plan gratuito de Render.
+    // pestaña, así que dejar de pedir del todo los volvía inútiles. Era cada 3 minutos y
+    // en la compu de Ariel el puntito llegaba hasta 3 minutos después que el WhatsApp
+    // (14/10/2026). Menos de 1 minuto no sirve: Chrome frena los timers de una pestaña
+    // de fondo a una vez por minuto. Lo que llega en el momento es el push, que despierta
+    // esta query por `escucharAvisosDelServiceWorker`; esto es el respaldo para el
+    // dispositivo sin avisos activados. ~60 requests por hora de fondo: no cambia lo que
+    // cuesta, porque con 3 minutos Render y Neon ya no llegaban a dormirse.
     //
     // Efecto que vale nombrar: un panel abierto renueva su sesión para siempre. Es la
     // sesión deslizante que ya decidimos en la v2, no un accidente.
-    refetchInterval: () => (document.hidden ? 180_000 : 30_000),
+    refetchInterval: () => (document.hidden ? 60_000 : 30_000),
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
   })
@@ -239,6 +243,16 @@ export function AgendaPage() {
   // Pestaña, favicon e ícono de la app. Se suman los de más adelante: para Ariel "tengo
   // 3 turnos nuevos" es uno solo aunque estén en semanas distintas.
   useAvisosPendientes(sinVer.length + nuevosMasAdelante)
+
+  // Cuando al dispositivo le llega un push, la agenda se pide en el momento: el puntito y
+  // el contador aparecen junto con la notificación, no en la próxima vuelta de refresco.
+  useEffect(
+    () =>
+      escucharAvisosDelServiceWorker(() => {
+        void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      }),
+    [queryClient],
+  )
 
   return (
     <div>

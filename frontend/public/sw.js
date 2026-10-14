@@ -63,9 +63,22 @@ self.addEventListener('push', (event) => {
       // Punto en el ícono de la app instalada. Sin número: el conteo exacto lo pone el
       // panel cuando se abre, acá solo sabemos que entró algo.
       self.navigator.setAppBadge?.().catch(() => {}),
+      avisarALasPestanas(),
     ]),
   )
 })
+
+// Le avisa a cada pestaña abierta del panel que entró algo, para que vuelva a pedir la
+// agenda en el momento. Sin esto, una pestaña de fondo se enteraba en su próxima vuelta
+// de refresco: en la compu de Ariel el puntito rojo llegaba hasta 3 minutos después que
+// el WhatsApp. Lo escucha `escucharAvisosDelServiceWorker` en `lib/push.ts`.
+async function avisarALasPestanas() {
+  const ventanas = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  })
+  for (const ventana of ventanas) ventana.postMessage({ tipo: 'push-recibido' })
+}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()

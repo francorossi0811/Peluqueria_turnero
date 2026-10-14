@@ -132,3 +132,22 @@ export async function desuscribirse(): Promise<string | null> {
   await suscripcion.unsubscribe()
   return endpoint
 }
+
+/** Llama a `alRecibir` cada vez que al service worker le llega un push (ver
+ * `avisarALasPestanas` en `sw.js`). Devuelve la función que deja de escuchar.
+ *
+ * Es lo que hace que una pestaña de fondo se entere en el momento en vez de esperar su
+ * próxima vuelta de refresco. Solo sirve en un dispositivo que tenga los avisos
+ * activados: sin suscripción no llega ningún push que reenviar. */
+export function escucharAvisosDelServiceWorker(alRecibir: () => void): () => void {
+  if (!('serviceWorker' in navigator)) return () => {}
+
+  const alMensaje = (evento: MessageEvent) => {
+    if ((evento.data as { tipo?: string } | null)?.tipo === 'push-recibido') alRecibir()
+  }
+  navigator.serviceWorker.addEventListener('message', alMensaje)
+  // Con `addEventListener` (a diferencia de `onmessage`) los mensajes quedan encolados
+  // hasta que se llama a esto.
+  navigator.serviceWorker.startMessages()
+  return () => navigator.serviceWorker.removeEventListener('message', alMensaje)
+}
