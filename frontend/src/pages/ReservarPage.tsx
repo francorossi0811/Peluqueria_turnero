@@ -30,7 +30,10 @@ import type { DisponibilidadDia, ErrorApi, Servicio, Turno } from '../types/api'
 
 type Paso = 'servicio' | 'cuantos' | 'horario' | 'datos' | 'confirmacion'
 
-const DIAS_A_MOSTRAR = 14
+// Los próximos 30 días, en un calendario (27/10/2026, pedido de Franco: "que los clientes
+// puedan ver un mes completo"). Eran 14. El backend acepta hasta 31 por pedido y desde el
+// mismo cambio los calcula en una sola vuelta a la base, así que no tarda más que antes.
+const DIAS_A_MOSTRAR = 30
 
 /** HU-31 — Cuántos turnos entran en un bloque. Tiene que ser el mismo número que
  * `MAX_TURNOS_POR_GRUPO` del backend, que es quien lo aplica de verdad: acá solo decide
@@ -642,6 +645,7 @@ function PasoHorario({
           hora={hora}
           onElegirFecha={onElegirFecha}
           onElegirHora={onElegirHora}
+          vista="calendario"
         />
       )}
 

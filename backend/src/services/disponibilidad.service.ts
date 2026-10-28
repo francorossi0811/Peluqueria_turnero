@@ -183,12 +183,10 @@ export function calcularHorariosDelDia(params: ParametrosDia): string[] {
   return horarios
 }
 
-/**
- * Trae de Prisma todo lo que hace falta para UN día (feriado, franjas, bloqueos, turnos
- * activos) y llama a `calcularHorariosDelDia`. Esta es la única función que consulta
- * disponibilidad real — `calcularDisponibilidad` (rango) y `crearTurno` (un día) pasan
- * siempre por acá, tal como pide CU-04.
- */
+/** Opciones del cálculo de un día. La disponibilidad real se decide siempre en
+ * `detalleDelDia`, tal como pide CU-04: `obtenerDetalleDelDia` (un día, el de toda
+ * reserva) y `calcularDisponibilidad` (un rango, lo que ve el cliente) solo le cambian de
+ * dónde salen los datos. */
 export interface OpcionesHorariosDelDia {
   // Para HU-09 (mover un turno): no chocar contra sí mismo en la lista de ocupados.
   excluirTurnoId?: string
@@ -239,32 +237,107 @@ export function franjasSegunFeriado(
   return [primera]
 }
 
+// Qué turnos tapan un rato. `reservado` es obvio; `realizado` entró con HU-08: desde que
+// Ariel puede registrar en el pasado, un turno que ya atendió es un rato ocupado de verdad
+// y pisarlo sería perder uno de los dos.
+//
+// ⚠️ `ausente` NO está, y no es un olvido: marcarlo Ausente libera el rato es el flujo que
+// Ariel usa todos los días (el cliente no vino a los 10 minutos, lo marca y mete a otro).
+// `cancelado` y `reprogramado` tampoco, por lo mismo — ese rato volvió a estar libre. Es la
+// misma lista que el predicado del EXCLUDE en la base.
+const ESTADOS_QUE_OCUPAN = ['reservado', 'realizado'] as const
+
+type FilaFeriado = { fecha: Date; nombre: string | null; modalidad: ModalidadFeriado }
+type FilaFranja = { diaSemana: number; horaInicio: Date; horaFin: Date }
+type FilaBloqueo = {
+  fechaInicio: Date
+  fechaFin: Date
+  horaInicio: Date | null
+  horaFin: Date | null
+  motivo: string | null
+}
+type FilaTurno = { fecha: Date; horaInicio: Date; horaFin: Date }
+
+/** Lo que hace falta leer de la base para calcular UN día. */
+export interface DatosDelDia {
+  feriado: FilaFeriado | null
+  franjasDb: FilaFranja[]
+  bloqueos: FilaBloqueo[]
+  turnos: FilaTurno[]
+}
+
+/** Lo mismo para un rango entero: las filas de todos los días juntas. */
+export interface DatosDelRango {
+  feriados: FilaFeriado[]
+  franjasDb: FilaFranja[]
+  bloqueos: FilaBloqueo[]
+  turnos: FilaTurno[]
+}
+
+/** Las filas de un rango que le tocan a un día. Pura, para poder fijar con tests que el
+ * rango reparte cada fila en el día correcto.
+ *
+ * Compara las fechas como `YYYY-MM-DD` y no por `getTime()`: las columnas son `@db.Date`
+ * y vienen a medianoche UTC, pero así no hay que confiar en eso. */
+export function datosDelDiaEnRango(
+  rango: DatosDelRango,
+  fecha: Date,
+): DatosDelDia {
+  const dia = formatearFecha(fecha)
+  return {
+    feriado: rango.feriados.find((f) => formatearFecha(f.fecha) === dia) ?? null,
+    franjasDb: rango.franjasDb.filter((f) => f.diaSemana === fecha.getUTCDay()),
+    bloqueos: rango.bloqueos.filter(
+      (b) =>
+        formatearFecha(b.fechaInicio) <= dia &&
+        formatearFecha(b.fechaFin) >= dia,
+    ),
+    turnos: rango.turnos.filter((t) => formatearFecha(t.fecha) === dia),
+  }
+}
+
+/** Las cuatro consultas de un rango, una sola vez para todos los días.
+ *
+ * ⚠️ Antes `calcularDisponibilidad` hacía estas cuatro **por cada día** y en fila. El
+ * servidor está en Oregon y la base en São Paulo: cada vuelta cuesta ~200 ms, y 14 días
+ * tardaban 3 segundos en producción (medido el 27/10/2026). Con 30 días eran 6. Ahora es
+ * una sola vuelta, tenga el rango los días que tenga. */
+async function cargarDatosDelRango(
+  desde: Date,
+  hasta: Date,
+): Promise<DatosDelRango> {
+  const [feriados, franjasDb, bloqueos, turnos] = await Promise.all([
+    prisma.feriado.findMany({ where: { fecha: { gte: desde, lte: hasta } } }),
+    prisma.horarioLaboral.findMany(),
+    prisma.bloqueoHorario.findMany({
+      where: { fechaInicio: { lte: hasta }, fechaFin: { gte: desde } },
+    }),
+    prisma.turno.findMany({
+      where: {
+        fecha: { gte: desde, lte: hasta },
+        estado: { in: [...ESTADOS_QUE_OCUPAN] },
+      },
+    }),
+  ])
+  return { feriados, franjasDb, bloqueos, turnos }
+}
+
 export async function obtenerDetalleDelDia(
   servicio: Pick<Servicio, 'duracionMinutos'>,
   fecha: Date,
   ahora: Date,
   opciones: OpcionesHorariosDelDia = {},
 ): Promise<DetalleDia> {
-  const diaSemana = fecha.getUTCDay()
-
   const [feriado, franjasDb, bloqueos, turnos] = await Promise.all([
     prisma.feriado.findUnique({ where: { fecha } }),
-    prisma.horarioLaboral.findMany({ where: { diaSemana } }),
+    prisma.horarioLaboral.findMany({ where: { diaSemana: fecha.getUTCDay() } }),
     prisma.bloqueoHorario.findMany({
       where: { fechaInicio: { lte: fecha }, fechaFin: { gte: fecha } },
     }),
-    // Qué turnos tapan un rato. `reservado` es obvio; `realizado` entró con HU-08: desde
-    // que Ariel puede registrar en el pasado, un turno que ya atendió es un rato ocupado
-    // de verdad y pisarlo sería perder uno de los dos.
-    //
-    // ⚠️ `ausente` NO está, y no es un olvido: marcarlo Ausente libera el rato es el flujo
-    // que Ariel usa todos los días (el cliente no vino a los 10 minutos, lo marca y mete a
-    // otro). `cancelado` y `reprogramado` tampoco, por lo mismo — ese rato volvió a estar
-    // libre. Es la misma lista que el predicado del EXCLUDE en la base.
     prisma.turno.findMany({
       where: {
         fecha,
-        estado: { in: ['reservado', 'realizado'] },
+        estado: { in: [...ESTADOS_QUE_OCUPAN] },
         ...(opciones.excluirTurnoId
           ? { id: { not: opciones.excluirTurnoId } }
           : {}),
@@ -272,6 +345,26 @@ export async function obtenerDetalleDelDia(
     }),
   ])
 
+  return detalleDelDia(
+    servicio,
+    fecha,
+    ahora,
+    { feriado, franjasDb, bloqueos, turnos },
+    opciones,
+  )
+}
+
+/** El cálculo de un día con los datos ya leídos. Es **la** regla de disponibilidad: la
+ * usan el día suelto (`obtenerDetalleDelDia`, que es por donde pasa toda reserva) y el
+ * rango (`calcularDisponibilidad`, que es lo que ve el cliente). Solo cambia de dónde
+ * salen los datos, así que lo que se ofrece y lo que se acepta no pueden divergir. */
+function detalleDelDia(
+  servicio: Pick<Servicio, 'duracionMinutos'>,
+  fecha: Date,
+  ahora: Date,
+  { feriado, franjasDb, bloqueos, turnos }: DatosDelDia,
+  opciones: OpcionesHorariosDelDia,
+): DetalleDia {
   // Este chequeo va primero a propósito, y es lo que hace que la regla del feriado valga
   // "solo los días que Ariel trabaja": un feriado que cae domingo o lunes no cambia nada,
   // porque esos días no tienen franjas y el día ya estaba cerrado.
@@ -425,6 +518,7 @@ export async function calcularDisponibilidad(
     ),
   }
   const ahora = ahoraArgentina()
+  const datos = await cargarDatosDelRango(desde, hasta)
   const resultado: DisponibilidadDia[] = []
 
   for (
@@ -432,7 +526,13 @@ export async function calcularDisponibilidad(
     fecha.getTime() <= hasta.getTime();
     fecha = new Date(fecha.getTime() + 24 * 60 * MINUTO_MS)
   ) {
-    const detalle = await obtenerDetalleDelDia(servicio, fecha, ahora, opciones)
+    const detalle = detalleDelDia(
+      servicio,
+      fecha,
+      ahora,
+      datosDelDiaEnRango(datos, fecha),
+      opciones,
+    )
     resultado.push({ fecha: formatearFecha(fecha), ...detalle })
   }
 

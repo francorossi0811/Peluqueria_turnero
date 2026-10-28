@@ -1158,6 +1158,39 @@ Dos pedidos de Ariel, uno de cada lado.
 - Quedaron datos de prueba **en `desarrollo`**: notas el 30/9 ("Traer cambio", azul) y el
   1/10 (rojo).
 
+### El puntito al ritmo del push, y un mes en calendario (14 y 27/10/2026)
+
+**El puntito de la agenda (14/10, desplegado).** Ariel medía el aviso contra el WhatsApp del
+cliente: 4 y 9 minutos en los celulares, ~3 en la compu. ⚠️ **No es el servidor**: los logs
+de Render muestran el push aceptado por Google 1 a 2 segundos después de cada reserva, y
+`urgency: 'high'` sí viaja como header. Los minutos de los celulares son el ahorro de
+batería de Android y se arreglan en el teléfono (Chrome en "Sin restricciones"). Los 3 de la
+compu eran el refresco de fondo de la agenda, porque **la compu no estaba suscripta a los
+avisos**. Ahora `sw.js` le avisa a las pestañas abiertas cuando llega un push
+(`avisarALasPestanas` → `escucharAvisosDelServiceWorker`) y la agenda se pide en el momento;
+el refresco de fondo bajó de 3 minutos a 1 como respaldo.
+
+**Un mes completo al sacar turno (27/10, en `desarrollo`).** Reservar y reprogramar muestran
+los próximos **30 días** (eran 14) en un calendario mensual (`CalendarioMes`), con flechas
+entre los dos meses que tocan. Los modales de Ariel siguen con la fila de botones: la elige
+la prop `vista` de `GrillaHorarios`, default `'botones'`.
+
+- ⚠️ **Lo que hizo falta de verdad fue el backend.** `calcularDisponibilidad` hacía 4
+  consultas **por día y en fila**, y Render (Oregon) está lejos de Neon (São Paulo): 14 días
+  tardaban **3 s** en producción y 31 tardaban **6 s**. Ahora carga el rango en 4 consultas
+  (`cargarDatosDelRango`) y reparte las filas por día (`datosDelDiaEnRango`, con tests). En
+  local 30 días pasaron a ~0,13 s.
+- ⚠️ **La regla sigue siendo una sola**: el cálculo vive en `detalleDelDia`, y el día suelto
+  de cada reserva (`obtenerDetalleDelDia`) y el rango solo cambian de dónde leen. Verificado
+  contra `desarrollo` comparando los dos caminos en 411 días, con opciones de Ariel, días
+  pasados, feriado de medio día y bloqueos de prueba (de varios días y parcial): 0
+  diferencias.
+- ⚠️ Un defecto encontrado **mirando la pantalla**: al pasar al otro mes, abajo seguían los
+  horarios del día elegido en el mes anterior, y se leían como del mes a la vista. Ahora el
+  calendario pone arriba de los horarios de qué día son.
+- Quedó un turno de prueba en `desarrollo`: "Prueba Calendario", reprogramado del 3/11 al
+  4/11 a las 11:00.
+
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 
 Seña por Mercado Pago al reservar. **No lo pidió Ariel**; queda anotado porque es la continuación natural. Traería cuenta de MP, webhooks de pago, reembolsos al cancelar y qué hacer con un pago pendiente — o sea, trámites externos como los de WhatsApp. También quedaron afuera los pagos parciales, el historial de precios y la facturación.

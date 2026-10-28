@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   calcularHorariosDelDia,
+  datosDelDiaEnRango,
   franjasSegunFeriado,
+  type DatosDelRango,
   type Franja,
   type Intervalo,
 } from './disponibilidad.service'
@@ -443,5 +445,52 @@ describe('franjasSegunFeriado', () => {
     // domingo o lunes no convierte ese día en laborable.
     expect(franjasSegunFeriado([], 'medio_dia')).toEqual([])
     expect(franjasSegunFeriado([], 'dia_completo')).toEqual([])
+  })
+})
+
+describe('datosDelDiaEnRango', () => {
+  const dia = (d: number) => new Date(Date.UTC(2026, 7, d))
+  // Del martes 4 al sábado 8 de agosto de 2026.
+  const RANGO: DatosDelRango = {
+    feriados: [{ fecha: dia(6), nombre: 'Feriado de prueba', modalidad: 'medio_dia' }],
+    franjasDb: [
+      { diaSemana: 2, horaInicio: hora(10), horaFin: hora(13) },
+      { diaSemana: 2, horaInicio: hora(17), horaFin: hora(20) },
+      { diaSemana: 6, horaInicio: hora(9), horaFin: hora(20, 30) },
+    ],
+    bloqueos: [
+      // Un bloqueo de varios días tiene que aparecer en cada uno de ellos.
+      { fechaInicio: dia(5), fechaFin: dia(7), horaInicio: null, horaFin: null, motivo: 'Viaje' },
+    ],
+    turnos: [
+      { fecha: dia(4), horaInicio: hora(10), horaFin: hora(10, 20) },
+      { fecha: dia(8), horaInicio: hora(9), horaFin: hora(9, 30) },
+    ],
+  }
+
+  it('le da a cada día solo sus filas', () => {
+    const martes = datosDelDiaEnRango(RANGO, dia(4))
+    expect(martes.feriado).toBeNull()
+    expect(martes.franjasDb).toHaveLength(2)
+    expect(martes.bloqueos).toEqual([])
+    expect(martes.turnos).toEqual([RANGO.turnos[0]])
+
+    const sabado = datosDelDiaEnRango(RANGO, dia(8))
+    expect(sabado.franjasDb).toEqual([RANGO.franjasDb[2]])
+    expect(sabado.turnos).toEqual([RANGO.turnos[1]])
+    expect(sabado.bloqueos).toEqual([])
+  })
+
+  it('el feriado cae solo en su día', () => {
+    expect(datosDelDiaEnRango(RANGO, dia(6)).feriado).toEqual(RANGO.feriados[0])
+    expect(datosDelDiaEnRango(RANGO, dia(5)).feriado).toBeNull()
+  })
+
+  it('un bloqueo de varios días cubre cada día del medio, con los dos bordes incluidos', () => {
+    expect(datosDelDiaEnRango(RANGO, dia(4)).bloqueos).toEqual([])
+    expect(datosDelDiaEnRango(RANGO, dia(5)).bloqueos).toHaveLength(1)
+    expect(datosDelDiaEnRango(RANGO, dia(6)).bloqueos).toHaveLength(1)
+    expect(datosDelDiaEnRango(RANGO, dia(7)).bloqueos).toHaveLength(1)
+    expect(datosDelDiaEnRango(RANGO, dia(8)).bloqueos).toEqual([])
   })
 })

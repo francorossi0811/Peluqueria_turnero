@@ -24,7 +24,10 @@ import { WHATSAPP_AUTOMATICO } from '../utils/avisos'
 import type { DatosDelTurno, MotivoWhatsapp } from '../utils/mensajesWhatsapp'
 import type { ErrorApi, EstadoTurno } from '../types/api'
 
-const DIAS_A_MOSTRAR = 14
+// Los próximos 30 días, en un calendario (27/10/2026, pedido de Franco: "que los clientes
+// puedan ver un mes completo"). Eran 14. El backend acepta hasta 31 por pedido y desde el
+// mismo cambio los calcula en una sola vuelta a la base, así que no tarda más que antes.
+const DIAS_A_MOSTRAR = 30
 
 const ETIQUETA_ESTADO: Record<EstadoTurno, string> = {
   reservado: 'Reservado',
@@ -246,6 +249,7 @@ export function GestionTurnoPage({ id }: { id: string }) {
               setHoraNueva(null)
             }}
             onElegirHora={setHoraNueva}
+            vista="calendario"
           />
         )}
 

@@ -1,4 +1,5 @@
 import { Chip } from './ui/Chip'
+import { CalendarioMes } from './CalendarioMes'
 import { etiquetaDiaCorta, fechaLegible, yaPaso } from '../utils/fecha'
 import type { DisponibilidadDia } from '../types/api'
 
@@ -24,6 +25,11 @@ interface GrillaHorariosProps {
    * Sin esta prop el componente se dibuja **exactamente** como antes, que es lo que
    * permite seguir compartiéndolo con la reserva del cliente en vez de forkearlo. */
   pasado?: MarcaDePasado
+  /** Cómo se elige el día. `'calendario'` es el del cliente (reservar y reprogramar): con
+   * 30 días a la vista, la fila de botones ocupaba media pantalla del celular. Los modales
+   * de Ariel siguen con `'botones'`, que es el default: ven menos días y la carga manual
+   * marca en ámbar los que ya pasaron, cosa que el calendario no sabe hacer. */
+  vista?: 'botones' | 'calendario'
 }
 
 /** Qué se le dice al cliente cuando el día que eligió no tiene horarios.
@@ -63,6 +69,7 @@ export function GrillaHorarios({
   onElegirFecha,
   onElegirHora,
   pasado,
+  vista = 'botones',
 }: GrillaHorariosProps) {
   const diasConHorarios = dias.filter((d) => d.horarios.length > 0)
 
@@ -72,7 +79,9 @@ export function GrillaHorarios({
       <p className="text-tinta-suave">
         {pasado
           ? 'No hay horarios en este rango.'
-          : 'No hay horarios disponibles en las próximas dos semanas. Escribile a Ariel por WhatsApp y coordinan directamente.'}
+          : vista === 'calendario'
+            ? 'No hay horarios disponibles en el próximo mes. Escribile a Ariel por WhatsApp y coordinan directamente.'
+            : 'No hay horarios disponibles en las próximas dos semanas. Escribile a Ariel por WhatsApp y coordinan directamente.'}
       </p>
     )
   }
@@ -93,37 +102,57 @@ export function GrillaHorarios({
       {/* Se muestran TODOS los días, no solo los que tienen lugar: si el cliente no ve
           el día que le interesa, no puede enterarse de por qué no está. Los que no
           tienen horarios quedan atenuados pero se pueden tocar para leer el motivo. */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {dias.map((d) =>
-          d.horarios.length > 0 ? (
-            <Chip
-              key={d.fecha}
-              selected={d.fecha === fecha}
-              tono={pasado && d.fecha < pasado.hoy ? 'pasado' : 'normal'}
-              title={
-                pasado && d.fecha < pasado.hoy ? 'Este día ya pasó' : undefined
-              }
-              onClick={() => onElegirFecha(d.fecha)}
-            >
-              {etiquetaDiaCorta(d.fecha)}
-            </Chip>
-          ) : (
-            <button
-              key={d.fecha}
-              type="button"
-              onClick={() => onElegirFecha(d.fecha)}
-              title={mensajeDelDia(d, Boolean(pasado))}
-              className={`rounded-full border px-3 py-1.5 text-sm transition ${
-                d.fecha === fecha
-                  ? 'border-tinta-tenue bg-superficie-2 text-tinta-suave'
-                  : 'border-borde-suave text-tinta-tenue hover:border-borde'
-              }`}
-            >
-              {etiquetaDiaCorta(d.fecha)}
-            </button>
-          ),
-        )}
-      </div>
+      {vista === 'calendario' ? (
+        <CalendarioMes
+          dias={dias}
+          fecha={fecha}
+          onElegirFecha={onElegirFecha}
+          motivoDelDia={(d) => mensajeDelDia(d)}
+        />
+      ) : (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {dias.map((d) =>
+            d.horarios.length > 0 ? (
+              <Chip
+                key={d.fecha}
+                selected={d.fecha === fecha}
+                tono={pasado && d.fecha < pasado.hoy ? 'pasado' : 'normal'}
+                title={
+                  pasado && d.fecha < pasado.hoy
+                    ? 'Este día ya pasó'
+                    : undefined
+                }
+                onClick={() => onElegirFecha(d.fecha)}
+              >
+                {etiquetaDiaCorta(d.fecha)}
+              </Chip>
+            ) : (
+              <button
+                key={d.fecha}
+                type="button"
+                onClick={() => onElegirFecha(d.fecha)}
+                title={mensajeDelDia(d, Boolean(pasado))}
+                className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                  d.fecha === fecha
+                    ? 'border-tinta-tenue bg-superficie-2 text-tinta-suave'
+                    : 'border-borde-suave text-tinta-tenue hover:border-borde'
+                }`}
+              >
+                {etiquetaDiaCorta(d.fecha)}
+              </button>
+            ),
+          )}
+        </div>
+      )}
+
+      {/* En el calendario el día elegido puede quedar fuera de la vista: el cliente pasa a
+          noviembre para mirar y abajo siguen los horarios del martes de octubre que tenía
+          elegido. Sin decir de qué día son, se leen como los del mes que está mirando. */}
+      {vista === 'calendario' && diaSeleccionado && horarios.length > 0 && (
+        <p className="text-tinta mb-3 font-medium first-letter:uppercase">
+          {fechaLegible(diaSeleccionado.fecha)}
+        </p>
+      )}
 
       {diaSeleccionado && horarios.length === 0 && (
         <div className="border-borde bg-superficie-2 mb-4 rounded-md border px-3 py-3 text-sm">
@@ -203,7 +232,9 @@ function FranjaHorarios({
       <div className="flex flex-wrap gap-2">
         {horarios.map((h) => {
           const esPasado = Boolean(
-            pasado && fecha && yaPaso(fecha, h, pasado.hoy, pasado.minutosAhora),
+            pasado &&
+            fecha &&
+            yaPaso(fecha, h, pasado.hoy, pasado.minutosAhora),
           )
           return (
             <Chip
