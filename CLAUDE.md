@@ -88,9 +88,10 @@ siguen igual, y el `EXCLUDE turnos_no_solapamiento` sigue en pie. Hay un snapsho
 previo, `antes-de-limpiar-6sep` (`snap-square-math-ackzum9j`), por si algo hubiera que
 recuperar.
 
-⚠️ **De los 10 clientes del sábado, solo 3 tienen ficha** (Mariano Rossi, Esteban Solares y
-Santiago Gastaldi). Los otros 7 —Gregorio, Mónica, Toto, Joni, Felix Gil, Rori y Juan
-fletes— Ariel los cargó **sin teléfono**, y sin teléfono no hay ficha: la identidad de un
+⚠️ **De los 10 clientes del sábado, solo 3 tienen ficha.** (Sin nombres a propósito: el
+repo es público y son clientes reales de Ariel. Quien los necesite los lee de la base.)
+Los otros 7 Ariel los cargó
+**sin teléfono**, y sin teléfono no hay ficha: la identidad de un
 cliente *es* el número normalizado (HU-25). Sus nombres viven en `turnos.cliente_nombre` y
 no se perdieron, pero no aparecen en la sección Clientes. Si se los quiere fichados, hay que
 cargarles el teléfono con `PATCH /admin/turnos/:id/telefono`.
@@ -1071,7 +1072,7 @@ ningún lado. Con este cambio el fallo dejó de ser teórico y el error ahora ca
   propio de la grilla. `tsc -b --force` y `tsc --noEmit` limpios, 206 tests del backend y 20
   del frontend.
 - Quedaron datos de prueba **en `desarrollo`**: turnos "Prueba…" el 16/9, dos notas y tres
-  fotos en la ficha de Mariano Rossi. Producción no se tocó.
+  fotos en una de las fichas reales copiadas de producción. Producción no se tocó.
 
 ### Reservar sin mail y datos para transferir (15/9/2026) ✅ en `desarrollo`
 
