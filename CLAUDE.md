@@ -187,8 +187,13 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
   - ⚠️ **El tope es 23:59 y no 24:00**: `hora_fin` es `TIME`, un turno que termina a las
     24:00 se guarda como `00:00` y el `EXCLUDE` corta con rango invertido (500).
   - ⚠️ **La grilla semanal se estira para mostrarlos** (`extenderConExtras`): sin eso, un
-    turno de 13:20 no caía en ningún tramo y no se dibujaba. Siempre suma un renglón de 20
-    minutos rayado debajo de cada franja, que es donde vive el "+".
+    turno de 13:20 no caía en ningún tramo y no se dibujaba. Cuando estira, suma un
+    renglón de 20 minutos rayado debajo, que es donde vive el "+" de cada día.
+  - ⚠️ **Si la franja no tiene extras en la semana, NO se estira** (pedido de Franco el
+    mismo 10/11): el renglón rayado vacío era espacio muerto todas las semanas. Ahí el "+"
+    es **uno solo, en la celda naranja de la última hora** (columna de horas), y carga
+    **para hoy** — mirando otra semana no hay "+". Con extras vuelve el "+" por día. Lo
+    decide `TramoExtendido.conExtras`; el botón es `BotonMasExtra` en los dos lugares.
   - ⚠️ **El "+" sigue la cadena desde el cierre, no "después del último"** (`proximaHoraExtra`
     en `utils/turnoExtra.ts`, la copia del frontend que solo dibuja). Con extras a las 13:00
     y a las 16:40, "después del último" daba 17:00 = el tope y el botón desaparecía aunque
@@ -1275,7 +1280,7 @@ con el teléfono `351 555 1234` dejó la ventana en "Turno cargado" con el botó
 te confirmo tu turno:" + el link de gestión + alias/CVU/comprobante. En el detalle de ese
 turno, el mismo botón. En un turno sin teléfono no aparece, y aparece apenas se le carga uno
 desde el detalle (`351 555 4321` → `5493515554321`). Quedaron en `desarrollo` "Prueba
-Whatsapp" (13/11 11:00) y la ficha nueva de "Prueba Extra 13:20". También "Prueba Sin351" (`15 555 9876`), "Prueba Local" (`555 4433`), "Prueba Publico" (14/11 11:00, `555 7788`) y el teléfono `15-555-2211` cargado a "Prueba Extra 16:40": los cuatro con ficha `+549351…`. 🚧 Sin probar en un
+Whatsapp" (13/11 11:00) y la ficha nueva de "Prueba Extra 13:20". "Prueba Extra 20:00" y "Prueba Extra 23:39" quedaron **cancelados** a propósito, para ver la tarde de esa semana sin extras. También "Prueba Sin351" (`15 555 9876`), "Prueba Local" (`555 4433`), "Prueba Publico" (14/11 11:00, `555 7788`) y el teléfono `15-555-2211` cargado a "Prueba Extra 16:40": los cuatro con ficha `+549351…`. 🚧 Sin probar en un
 celular de verdad que la app de WhatsApp abra el chat con el texto.
 
 ### Etapa 5 — cobro online (sin empezar, sin pedir)

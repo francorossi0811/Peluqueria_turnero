@@ -128,8 +128,12 @@ function franjasDeLaSemana(
  * Los turnos extra caen después del cierre, o sea **fuera** del tramo, y sin esto la grilla
  * no los dibujaba en ningún lado: `turnosDelTramo` filtra por el rango del tramo. Se estira
  * hasta el final del último extra de la semana y se le suma **un renglón más** de 20
- * minutos, que es donde vive el "+": así el botón queda siempre justo debajo del último
- * horario, haya extras o no.
+ * minutos, que es donde vive el "+" de cada día.
+ *
+ * ⚠️ **Si en la franja no hay ningún extra en la semana, no se estira nada** (pedido de
+ * Franco, 10/11/2026): un renglón rayado vacío debajo de cada franja, todas las semanas,
+ * era espacio muerto. En ese caso el "+" vive en la columna de horas (`conExtras: false`,
+ * ver `TramoGrilla`) y carga para hoy.
  *
  * Nunca pasa del inicio del tramo siguiente (la mañana no se mete en la tarde) ni de la
  * medianoche. El rato agregado se dibuja rayado como cualquier rato en que no se abre:
@@ -137,7 +141,7 @@ function franjasDeLaSemana(
 function extenderConExtras(
   tramos: { inicio: number; fin: number }[],
   turnos: TurnoAdmin[],
-): { inicio: number; fin: number }[] {
+): TramoExtendido[] {
   return tramos.map((tramo, i) => {
     const limite = tramos[i + 1]?.inicio ?? FIN_DEL_DIA_MINUTOS
     const finDeLosExtras = turnos
@@ -149,6 +153,10 @@ function extenderConExtras(
       .filter((t) => t.inicio >= tramo.fin && t.inicio < limite)
       .reduce((max, t) => Math.max(max, t.fin), tramo.fin)
 
+    // Todo turno dura algo, así que un extra siempre termina después del cierre: si el
+    // máximo no se movió, no hay ninguno.
+    if (finDeLosExtras === tramo.fin) return { ...tramo, conExtras: false }
+
     // Redondeado a la grilla de 20 minutos del tramo: cada renglón mide lo mismo, y uno
     // cortado a la mitad dejaría la columna de horas desfasada de las de los días.
     const pasos = Math.ceil(
@@ -157,8 +165,17 @@ function extenderConExtras(
     return {
       inicio: tramo.inicio,
       fin: Math.min(limite, tramo.inicio + pasos * PASO_MINUTOS),
+      conExtras: true,
     }
   })
+}
+
+/** Un tramo de la grilla. `conExtras` dice si se estiró para dibujar turnos fuera de
+ * horario: decide dónde va el "+" (abajo de cada día, o en la columna de horas). */
+interface TramoExtendido {
+  inicio: number
+  fin: number
+  conExtras: boolean
 }
 
 /** Cómo se anuncia el feriado arriba de la columna. `dia_completo` no dice nada: ese día
@@ -354,7 +371,9 @@ export function GrillaSemana({
                     roja de "ahora" termina de ubicarlo. */}
                 <p
                   className={
-                    dia === hoy ? 'font-black underline decoration-2' : 'font-semibold'
+                    dia === hoy
+                      ? 'font-black underline decoration-2'
+                      : 'font-semibold'
                   }
                 >
                   <span className="tracking-wide uppercase">
@@ -562,7 +581,9 @@ function CeldaNota({
         placeholder="Nota"
         aria-label={`Nota del ${dia}`}
         title={
-          fallo ? 'No se pudo guardar la nota. Tocá y probá de nuevo.' : undefined
+          fallo
+            ? 'No se pudo guardar la nota. Tocá y probá de nuevo.'
+            : undefined
         }
         // ⚠️ El tamaño va en línea y no con `text-xl`: el piso de 16 px del panel
         // (`index.css`) pega en `body *` con más peso que una clase de Tailwind, así que la
@@ -572,7 +593,9 @@ function CeldaNota({
         // `tintaSobre`, igual que en un turno— y no de las clases del tema.
         style={{
           fontSize: 20,
-          ...(color ? { backgroundColor: color, color: tintaSobre(color) } : {}),
+          ...(color
+            ? { backgroundColor: color, color: tintaSobre(color) }
+            : {}),
         }}
         className={`${color ? '' : 'bg-turno-hoy text-agenda-tinta'} placeholder:text-agenda-tinta/40 block min-h-full w-full resize-none overflow-hidden rounded border px-2 py-1 leading-snug font-semibold break-words ${
           guardado ? 'pr-8' : ''
@@ -609,13 +632,16 @@ function CeldaNota({
             actual={color}
             guardar={(nuevo) => cambiarColorNota(dia, nuevo)}
             alGuardar={() => {
-              void queryClient.invalidateQueries({ queryKey: ['notas-del-dia'] })
+              void queryClient.invalidateQueries({
+                queryKey: ['notas-del-dia'],
+              })
               setEligiendoColor(false)
             }}
             ariaLabel="Color de la nota"
           />
           <p className="text-tinta-tenue mt-3 text-xs">
-            Usalo para marcar la prioridad. Si borrás la nota, se va también el color.
+            Usalo para marcar la prioridad. Si borrás la nota, se va también el
+            color.
           </p>
         </Modal>
       )}
@@ -624,7 +650,7 @@ function CeldaNota({
 }
 
 interface TramoGrillaProps extends Omit<GrillaSemanaProps, 'dias'> {
-  tramo: { inicio: number; fin: number }
+  tramo: TramoExtendido
   dias: string[]
   separado: boolean
 }
@@ -671,6 +697,22 @@ function TramoGrilla({
     minutosAhora! >= m &&
     minutosAhora! < m + PASO_MINUTOS
 
+  // HU-35 — Sin extras en la semana el tramo no se estira, y el "+" es uno solo: vive en
+  // la columna de horas, debajo de la última hora de la franja, y carga **para hoy**
+  // (pedido de Franco, 10/11/2026). Mirando otra semana no hay "+": desde acá no se
+  // elige el día. Con extras, cada día tiene el suyo abajo de su columna, como siempre.
+  const botonDeHoy =
+    !tramo.conExtras && dias.includes(hoy)
+      ? (botonesExtraDelDia(
+          hoy,
+          franjas.filter((f) => f.diaSemana === diaSemana(hoy)),
+          feriados.find((f) => f.fecha === hoy),
+          turnos.filter((t) => t.fecha === hoy && t.estado !== 'cancelado'),
+          bloqueos,
+        ).find((b) => b.cierre > tramo.inicio && b.cierre <= tramo.fin) ?? null)
+      : null
+  const ultimaMarca = marcas[marcas.length - 1]
+
   return (
     <div
       className={`grid ${separado ? 'border-agenda-linea border-t-4' : ''}`}
@@ -695,6 +737,13 @@ function TramoGrilla({
             style={{ height: ALTO_PASO_PX, paddingTop: 4 }}
           >
             {aHora(m)}
+            {m === ultimaMarca && botonDeHoy && (
+              <BotonMasExtra
+                boton={botonDeHoy}
+                onClick={() => onAgregarExtra(hoy, botonDeHoy)}
+                className="mx-auto mt-2"
+              />
+            )}
           </div>
         ))}
       </div>
@@ -713,7 +762,10 @@ function TramoGrilla({
         // como huecos libres y clickeables con la peluquería cerrada.
         const todasLasFranjas = franjas
           .filter((f) => f.diaSemana === diaSemana(dia))
-          .map((f) => ({ inicio: aMinutos(f.horaInicio), fin: aMinutos(f.horaFin) }))
+          .map((f) => ({
+            inicio: aMinutos(f.horaInicio),
+            fin: aMinutos(f.horaFin),
+          }))
           .sort((a, b) => a.inicio - b.inicio)
 
         // El feriado recorta el día igual que lo hace el backend en
@@ -841,7 +893,9 @@ function TramoGrilla({
             )}
 
             {bloqueosDelDia.map((b) => {
-              const inicio = b.horaInicio ? aMinutos(b.horaInicio) : tramo.inicio
+              const inicio = b.horaInicio
+                ? aMinutos(b.horaInicio)
+                : tramo.inicio
               const fin = b.horaFin ? aMinutos(b.horaFin) : tramo.fin
               const desde = Math.max(inicio, tramo.inicio)
               const hasta = Math.min(fin, tramo.fin)
@@ -870,72 +924,69 @@ function TramoGrilla({
               )
             })}
 
-            {repartirEnColumnas(turnosDelTramo).map(({
-              turno: t,
-              columna,
-              columnas,
-            }) => {
-              const inicio = aMinutos(t.hora)
+            {repartirEnColumnas(turnosDelTramo).map(
+              ({ turno: t, columna, columnas }) => {
+                const inicio = aMinutos(t.hora)
 
-              // El turno que está ocurriendo justo ahora. Misma función que usa la vista
-              // Día, para que las dos coincidan.
-              const enCurso = turnoEnCurso(t, dia, hoy, minutosAhora)
+                // El turno que está ocurriendo justo ahora. Misma función que usa la vista
+                // Día, para que las dos coincidan.
+                const enCurso = turnoEnCurso(t, dia, hoy, minutosAhora)
 
-              // HU-34 — El color propio del turno, cuando lo tiene y sigue pendiente.
-              const propio = colorElegido(t)
+                // HU-34 — El color propio del turno, cuando lo tiene y sigue pendiente.
+                const propio = colorElegido(t)
 
-              // El alto sale solo de la duración. No se redondea al paso de 20 minutos:
-              // si se redondeara, un turno de 35 se vería igual que uno de 40 y Ariel
-              // perdería justamente el dato que la planilla no le podía dar.
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => onElegirTurno(t)}
-                  title={`${t.cliente?.apodo || t.clienteNombre} · ${t.servicio.nombre} · ${t.hora}${enCurso ? ' · en curso' : ''}${
-                    // HU-27 — La marca del cobro es un glifo de 10 px; el tooltip la dice
-                    // con palabras para el que no la tiene aprendida.
-                    t.estado === 'realizado'
-                      ? t.medioPago
-                        ? ' · cobrado'
-                        : ' · sin cobro registrado'
-                      : ''
-                  }`}
-                  // `rounded-md` + `shadow-sm`: el relieve mínimo que despega el bloque del
-                  // fondo sin que parezca una tarjeta. El `shadow` se refuerza a `md` solo
-                  // en el turno en curso, junto con el borde grueso.
-                  className={`border-agenda-linea absolute overflow-hidden rounded-md border-2 text-left shadow-sm transition hover:brightness-110 ${
-                    // Con color propio no van las clases de estado: pintarían el fondo con
-                    // una clase y el color iría por estilo, y ganaría el estilo igual. Que
-                    // solo una de las dos cosas escriba el fondo es lo que hace que esto se
-                    // pueda leer sin saber qué le gana a qué.
-                    propio
-                      ? ''
-                      : clasesDeEstado(
-                          t.estado,
-                          // Strings ISO `YYYY-MM-DD`, que se ordenan solos. Nunca
-                          // `new Date(dia)`: lo parsearía en UTC y en Argentina correría el
-                          // borde un día.
-                          dia <= hoy,
-                        )
-                  } ${enCurso ? CLASES_EN_CURSO : ''}`}
-                  style={{
-                    top: (inicio - tramo.inicio) / MINUTOS_POR_PX,
-                    height: t.servicio.duracionMinutos / MINUTOS_POR_PX,
-                    // HU-34 — El texto lo decide el color elegido, no el tema: sobre un
-                    // color claro va negro y sobre uno oscuro blanco (ver `tintaSobre`).
-                    ...(propio && {
-                      backgroundColor: propio,
-                      color: tintaSobre(propio),
-                    }),
-                    // El reparto en columnas (ver `repartirEnColumnas`). Los 2 px de
-                    // cada lado son los mismos que antes daban `left-0.5 right-0.5`,
-                    // así que un turno solo —el caso normal— queda idéntico a como
-                    // estaba; lo que cambia es solo el turno que comparte el rato.
-                    left: `calc(${(columna / columnas) * 100}% + 2px)`,
-                    width: `calc(${100 / columnas}% - 4px)`,
-                  }}
-                >
-                  {/* HU-17 — El cartel "NUEVO", pegado al borde de arriba y de lado a
+                // El alto sale solo de la duración. No se redondea al paso de 20 minutos:
+                // si se redondeara, un turno de 35 se vería igual que uno de 40 y Ariel
+                // perdería justamente el dato que la planilla no le podía dar.
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => onElegirTurno(t)}
+                    title={`${t.cliente?.apodo || t.clienteNombre} · ${t.servicio.nombre} · ${t.hora}${enCurso ? ' · en curso' : ''}${
+                      // HU-27 — La marca del cobro es un glifo de 10 px; el tooltip la dice
+                      // con palabras para el que no la tiene aprendida.
+                      t.estado === 'realizado'
+                        ? t.medioPago
+                          ? ' · cobrado'
+                          : ' · sin cobro registrado'
+                        : ''
+                    }`}
+                    // `rounded-md` + `shadow-sm`: el relieve mínimo que despega el bloque del
+                    // fondo sin que parezca una tarjeta. El `shadow` se refuerza a `md` solo
+                    // en el turno en curso, junto con el borde grueso.
+                    className={`border-agenda-linea absolute overflow-hidden rounded-md border-2 text-left shadow-sm transition hover:brightness-110 ${
+                      // Con color propio no van las clases de estado: pintarían el fondo con
+                      // una clase y el color iría por estilo, y ganaría el estilo igual. Que
+                      // solo una de las dos cosas escriba el fondo es lo que hace que esto se
+                      // pueda leer sin saber qué le gana a qué.
+                      propio
+                        ? ''
+                        : clasesDeEstado(
+                            t.estado,
+                            // Strings ISO `YYYY-MM-DD`, que se ordenan solos. Nunca
+                            // `new Date(dia)`: lo parsearía en UTC y en Argentina correría el
+                            // borde un día.
+                            dia <= hoy,
+                          )
+                    } ${enCurso ? CLASES_EN_CURSO : ''}`}
+                    style={{
+                      top: (inicio - tramo.inicio) / MINUTOS_POR_PX,
+                      height: t.servicio.duracionMinutos / MINUTOS_POR_PX,
+                      // HU-34 — El texto lo decide el color elegido, no el tema: sobre un
+                      // color claro va negro y sobre uno oscuro blanco (ver `tintaSobre`).
+                      ...(propio && {
+                        backgroundColor: propio,
+                        color: tintaSobre(propio),
+                      }),
+                      // El reparto en columnas (ver `repartirEnColumnas`). Los 2 px de
+                      // cada lado son los mismos que antes daban `left-0.5 right-0.5`,
+                      // así que un turno solo —el caso normal— queda idéntico a como
+                      // estaba; lo que cambia es solo el turno que comparte el rato.
+                      left: `calc(${(columna / columnas) * 100}% + 2px)`,
+                      width: `calc(${100 / columnas}% - 4px)`,
+                    }}
+                  >
+                    {/* HU-17 — El cartel "NUEVO", pegado al borde de arriba y de lado a
                       lado. Antes esto era un anillo alrededor del bloque, que decía lo
                       mismo pero había que saberlo de antemano: un cartel que dice la
                       palabra no hay que aprendérselo.
@@ -948,12 +999,12 @@ function TramoGrilla({
                       dos veces que no entra (las insignias de HU-25 y la marca de cobro de
                       HU-27). Entra ahora porque el renglón pasó a 72 px, y se mide en el
                       DOM — no se da por hecho. */}
-                  {!t.vistoPorAdmin && (
-                    <span className="bg-nuevo text-sobre-estado block w-full text-center leading-tight font-bold">
-                      Nuevo
-                    </span>
-                  )}
-                  {/* El texto **hereda** el color del bloque (blanco sobre el verde y el
+                    {!t.vistoPorAdmin && (
+                      <span className="bg-nuevo text-sobre-estado block w-full text-center leading-tight font-bold">
+                        Nuevo
+                      </span>
+                    )}
+                    {/* El texto **hereda** el color del bloque (blanco sobre el verde y el
                       rojo fuertes, negro sobre el bloque claro de lo que viene) en vez de
                       fijar `text-tinta`. Antes iba siempre al color de la tinta del tema
                       porque los tres fondos eran pasteles; ahora dos de los tres son
@@ -965,31 +1016,31 @@ function TramoGrilla({
 
                       Se muestra el apodo si la ficha tiene uno (HU-25): Ariel piensa a
                       esa persona como "Flaco", no como el nombre que tipeó al reservar. */}
-                  {/* HU-25 — Las insignias van en el mismo renglón que el nombre, no
+                    {/* HU-25 — Las insignias van en el mismo renglón que el nombre, no
                       abajo. Se probó abajo primero y en pantalla se veía el defecto: un
                       turno de 20 minutos mide 34 píxeles, en los que entran dos renglones
                       y no tres, así que los círculos quedaban cortados por el borde del
                       bloque. Acá siempre entran, porque el que cede espacio es el nombre
                       (que ya se recorta con puntos suspensivos). */}
-                  {/* El `px-1` bajó del botón a cada renglón: el cartel "NUEVO" tiene que
+                    {/* El `px-1` bajó del botón a cada renglón: el cartel "NUEVO" tiene que
                       llegar de borde a borde, y con el padding en el botón quedaba
                       flotando con dos franjas del color del bloque a los costados. */}
-                  <span className="flex items-start gap-1 px-1">
-                    <span className="min-w-0 flex-1 truncate leading-tight font-bold uppercase">
-                      {t.cliente?.apodo || t.clienteNombre}
-                    </span>
-                    {t.cliente && t.cliente.etiquetas.length > 0 && (
-                      <span className="flex shrink-0 items-center gap-1 pt-0.5">
-                        {t.cliente.etiquetas.map((e) => (
-                          <Insignia key={e.id} etiqueta={e} />
-                        ))}
+                    <span className="flex items-start gap-1 px-1">
+                      <span className="min-w-0 flex-1 truncate leading-tight font-bold uppercase">
+                        {t.cliente?.apodo || t.clienteNombre}
                       </span>
-                    )}
-                  </span>
-                  {/* El servicio, en el mismo color heredado que el nombre. Se distingue
+                      {t.cliente && t.cliente.etiquetas.length > 0 && (
+                        <span className="flex shrink-0 items-center gap-1 pt-0.5">
+                          {t.cliente.etiquetas.map((e) => (
+                            <Insignia key={e.id} etiqueta={e} />
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                    {/* El servicio, en el mismo color heredado que el nombre. Se distingue
                       del nombre por el peso (normal contra negrita) y no por el tamaño:
                       con el piso de 16 px del panel, los dos renglones miden lo mismo. */}
-                  {/* HU-27 — La marca del cobro va acá, pegada al servicio, y **no como
+                    {/* HU-27 — La marca del cobro va acá, pegada al servicio, y **no como
                       un color del bloque**: el color del bloque dice el estado y nada más
                       (HU-23), y meterle un segundo eje encima sería volver al problema de
                       la planilla, donde un mismo color quería decir dos cosas.
@@ -1002,36 +1053,38 @@ function TramoGrilla({
                       Va en el renglón del servicio y no en uno propio por lo mismo que
                       las insignias de HU-25: un turno de 20 minutos son 34 píxeles y el
                       tercer renglón queda cortado. */}
-                  <span className="flex items-baseline gap-1 px-1">
-                    <span className="min-w-0 flex-1 truncate leading-tight">
-                      {t.servicio.nombre}
+                    <span className="flex items-baseline gap-1 px-1">
+                      <span className="min-w-0 flex-1 truncate leading-tight">
+                        {t.servicio.nombre}
+                      </span>
+                      {t.estado === 'realizado' &&
+                        (t.medioPago ? (
+                          // Cobrado: hereda el blanco del bloque y se calla.
+                          <span aria-hidden className="shrink-0 leading-tight">
+                            $
+                          </span>
+                        ) : (
+                          // Falta cobrar: ámbar relleno. Antes era texto ámbar, que sobre el
+                          // verde fuerte del realizado no se despega — y es justo la marca
+                          // que tiene que llamar la atención.
+                          <span
+                            aria-hidden
+                            className="bg-alerta text-sobre-estado shrink-0 rounded px-1 leading-tight font-bold"
+                          >
+                            $?
+                          </span>
+                        ))}
                     </span>
-                    {t.estado === 'realizado' &&
-                      (t.medioPago ? (
-                        // Cobrado: hereda el blanco del bloque y se calla.
-                        <span aria-hidden className="shrink-0 leading-tight">
-                          $
-                        </span>
-                      ) : (
-                        // Falta cobrar: ámbar relleno. Antes era texto ámbar, que sobre el
-                        // verde fuerte del realizado no se despega — y es justo la marca
-                        // que tiene que llamar la atención.
-                        <span
-                          aria-hidden
-                          className="bg-alerta text-sobre-estado shrink-0 rounded px-1 leading-tight font-bold"
-                        >
-                          $?
-                        </span>
-                      ))}
-                  </span>
-                </button>
-              )
-            })}
+                  </button>
+                )
+              },
+            )}
 
             {/* HU-35 — El "+" del turno fuera de horario, justo debajo del último horario
                 de la franja (o del último extra que ya cargó, así puede seguir sumando).
                 Solo el de esta franja: el de la noche vive en el tramo de la tarde. */}
-            {cargable &&
+            {tramo.conExtras &&
+              cargable &&
               botonesExtraDelDia(
                 dia,
                 franjas.filter((f) => f.diaSemana === diaSemana(dia)),
@@ -1046,27 +1099,15 @@ function TramoGrilla({
                     b.hora < tramo.fin,
                 )
                 .map((b) => (
-                  <button
+                  <BotonMasExtra
                     key={`extra-${b.cierre}`}
-                    type="button"
+                    boton={b}
                     onClick={() => onAgregarExtra(dia, b)}
-                    title={`Turno fuera de horario · ${aHoraTexto(b.hora)}`}
-                    aria-label={`Agregar un turno fuera de horario a las ${aHoraTexto(b.hora)}`}
-                    // Círculo negro sobre el naranja: es el mismo contraste que las líneas de
-                    // la grilla, y se despega del rayado que tiene abajo. Va centrado en la
-                    // columna y apenas por debajo de la hora, para que se lea como "a esta
-                    // hora, uno más".
-                    className="bg-agenda-tinta text-agenda-fondo border-agenda-linea absolute left-1/2 z-10 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border-2 leading-none font-black shadow-md transition hover:scale-110"
-                    // ⚠️ El tamaño del "+" va con `style` y no con `text-2xl`: el piso de
-                    // 16 px del panel pega en `body *` con más peso que cualquier clase de
-                    // Tailwind (mismo motivo que la letra de la nota del día).
-                    style={{
-                      top: (b.hora - tramo.inicio) / MINUTOS_POR_PX + 6,
-                      fontSize: 28,
-                    }}
-                  >
-                    +
-                  </button>
+                    // Centrado en la columna y apenas por debajo de la hora, para que se
+                    // lea como "a esta hora, uno más".
+                    className="absolute left-1/2 z-10 -translate-x-1/2"
+                    top={(b.hora - tramo.inicio) / MINUTOS_POR_PX + 6}
+                  />
                 ))}
 
             {/* La línea de ahora, como en Google Calendar: ubica sin tener que leer.
@@ -1083,5 +1124,38 @@ function TramoGrilla({
         )
       })}
     </div>
+  )
+}
+
+/** HU-35 — El "+" redondo del turno fuera de horario. Lo usan los dos lugares donde
+ * aparece: abajo de cada día (cuando la franja ya tiene extras) y en la columna de horas
+ * (cuando no tiene, y carga para hoy). */
+function BotonMasExtra({
+  boton,
+  onClick,
+  className,
+  top,
+}: {
+  boton: BotonExtra
+  onClick: () => void
+  className: string
+  top?: number
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Turno fuera de horario · ${aHoraTexto(boton.hora)}`}
+      aria-label={`Agregar un turno fuera de horario a las ${aHoraTexto(boton.hora)}`}
+      // Círculo negro sobre el naranja: es el mismo contraste que las líneas de la
+      // grilla, y se despega del rayado que tiene abajo.
+      className={`bg-agenda-tinta text-agenda-fondo border-agenda-linea flex h-10 w-10 items-center justify-center rounded-full border-2 leading-none font-black shadow-md transition hover:scale-110 ${className}`}
+      // ⚠️ El tamaño del "+" va con `style` y no con `text-2xl`: el piso de 16 px del
+      // panel pega en `body *` con más peso que cualquier clase de Tailwind (mismo motivo
+      // que la letra de la nota del día).
+      style={{ top, fontSize: 28 }}
+    >
+      +
+    </button>
   )
 }

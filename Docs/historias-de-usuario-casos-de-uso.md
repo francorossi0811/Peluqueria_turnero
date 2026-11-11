@@ -527,8 +527,13 @@ necesita anotarse algo que el sistema no sabe.
 Como Ariel, quiero agregar un turno después del cierre de la mañana o de la noche, solo para
 ese día, para registrar al cliente que atiendo fuera de mi horario sin tener que cambiar el
 horario de la peluquería. *(Pedido del 10/11/2026.)*
-- Debajo del último horario de cada franja hay un **botón redondo con un "+"**, en la columna
-  de cada día de la **vista Semana**.
+- En la **vista Semana**, debajo del último horario de cada franja, hay un **botón redondo
+  con un "+"**:
+  - Si esa semana la franja **no tiene ningún turno fuera de horario**, el "+" es uno solo,
+    en la columna de las horas, debajo de la última hora, y carga el turno **para hoy**. No
+    se agrega ningún renglón a la grilla. Mirando otra semana no aparece.
+  - Si ya cargué alguno, la grilla suma el rato de los extras y el "+" aparece **abajo de
+    cada día**, para seguir sumando en cualquiera de ellos.
 - ⚠️ **Solo se carga desde la Semana** (pedido de Franco, 10/11/2026). En la **vista Día** no
   hay "+": ahí el turno extra aparece recién cuando ya lo cargué, como cualquier otro turno.
   La primera versión tenía un botón también en la vista Día y se sacó.
