@@ -8,7 +8,9 @@
 // El backend rechaza esos números y las pantallas muestran su mensaje pegado al campo.
 
 const CARACTERES_PERMITIDOS_TELEFONO = /^[+()\d\s-]+$/
-const MIN_DIGITOS = 8
+// 7 y no 8: un número local de Córdoba sin el 351 (`555 1234`) también entra, porque el
+// backend le asume la característica (`aE164`).
+const MIN_DIGITOS = 7
 const MAX_DIGITOS = 15
 
 export function esTelefonoValido(valor: string): boolean {
@@ -23,7 +25,7 @@ export function esTelefonoValido(valor: string): boolean {
 // Mismo texto que el del backend: el error cambiaba de redacción según si lo atajaba el
 // navegador o el servidor, para la misma regla.
 export const MENSAJE_TELEFONO_INVALIDO =
-  'El teléfono no parece válido. Poné el número con característica, ej: 351 459 3325.'
+  'El teléfono no parece válido. Revisá los números, ej: 351 459 3325.'
 
 /** Letras, espacios, apóstrofes y guiones. El comentario largo está en el backend, que es
  * el que manda; acá se repite para poder mostrar el error en el campo al instante.

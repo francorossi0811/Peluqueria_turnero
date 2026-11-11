@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { FichaCliente } from './FichaCliente'
+import { BotonWhatsappAlCliente } from './WhatsappAlCliente'
 import {
   cambiarColorTurno,
   cambiarNombreDeTurno,
@@ -174,6 +175,13 @@ export function ModalTurno({
             <FichaCliente clienteId={turno.cliente.id} conHistorial={false} />
           ) : (
             <SinFicha turno={turno} />
+          )}
+          {/* HU-36 — Mandarle (o reenviarle) el link al cliente. Solo con ficha, que es la
+              prueba de que el número sirve, y solo mientras el turno está pendiente: el link
+              sirve para reprogramar o cancelar, y uno cerrado ya no se gestiona. Aparece
+              también apenas se le carga el teléfono a un turno que no lo tenía. */}
+          {esReservado && turno.cliente && (
+            <BotonWhatsappAlCliente turnos={[turno]} className="mt-4" />
           )}
         </div>
 

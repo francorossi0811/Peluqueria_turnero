@@ -13,9 +13,10 @@ import { aE164 } from './telefono'
 const CARACTERES_PERMITIDOS = /^[+()\d\s-]+$/
 
 /** Un celular argentino sin el 0 ni el 15 son 10 dígitos (ej. 351 459 3325). El mínimo
- * de 8 deja pasar un fijo viejo sin característica; el máximo de 15 es el largo máximo
- * de un número de teléfono según E.164, así que cubre cualquier internacional. */
-const MIN_DIGITOS = 8
+ * de 7 es un número local de Córdoba sin característica (`555 1234`), que `aE164` completa
+ * con el 351; el máximo de 15 es el largo máximo de un número de teléfono según E.164, así
+ * que cubre cualquier internacional. */
+const MIN_DIGITOS = 7
 const MAX_DIGITOS = 15
 
 export function esTelefonoValido(valor: string): boolean {
@@ -29,7 +30,7 @@ export function esTelefonoValido(valor: string): boolean {
 }
 
 export const MENSAJE_TELEFONO_INVALIDO =
-  'El teléfono no parece válido. Poné el número con característica, ej: 351 459 3325.'
+  'El teléfono no parece válido. Revisá los números, ej: 351 459 3325.'
 
 /** ¿Este teléfono **sirve** para lo que lo necesitamos, además de estar bien escrito?
  *

@@ -37,13 +37,55 @@ export function aE164(
   valor: string,
   opciones: { conNueve?: boolean } = {},
 ): string | null {
-  const numero = parsePhoneNumberFromString(valor, 'AR')
-  if (!numero || !numero.isValid()) return null
+  const numero = interpretar(valor)
+  if (!numero) return null
 
   if (opciones.conNueve === false) return sinNueveDeCelular(numero)
 
   // `.number` viene como `+549...`; WhatsApp quiere los dígitos pelados.
   return (conNueveDeCelular(numero) ?? numero).number.slice(1)
+}
+
+/** La característica que se asume cuando el número viene sin ella. Es la de Córdoba,
+ * donde está la peluquería: el cliente que no la escribe es, casi siempre, de acá. */
+export const CARACTERISTICA_POR_DEFECTO = '351'
+
+/** Lee el número tal como vino y, si así no es válido, prueba con la característica de
+ * Córdoba adelante.
+ *
+ * ⚠️ **El orden importa: primero tal cual, después con 351.** Un número que ya es válido
+ * nunca se reinterpreta, así que `11 4555 1234` sigue siendo de Buenos Aires y lo único
+ * que cambia es que lo que antes se rechazaba ahora tiene una segunda oportunidad.
+ *
+ * Solo se intenta con las dos formas en que se escribe un número local de Córdoba sin
+ * característica: **7 dígitos** (`555 1234`) o **9 empezando con `15`** (`15 555 1234`).
+ * Cualquier otro largo es otra cosa y no se adivina — un `4555 1234` (8 dígitos, un fijo
+ * porteño sin el 11) daría 11 dígitos con el 351 y se rechaza igual que antes.
+ *
+ * Con `+` adelante tampoco: el que escribe el prefijo internacional ya dijo de dónde es.
+ *
+ * El riesgo, asumido (HU-25): un cliente de otra ciudad cargado sin su característica
+ * queda con un número cordobés que no es el suyo. Es el mismo número que antes se
+ * rechazaba, y la regla la pidió Franco porque Ariel tipea los números como le salen. */
+function interpretar(valor: string): PhoneNumber | null {
+  const numero = parsePhoneNumberFromString(valor, 'AR')
+  if (numero?.isValid()) return numero
+
+  const conCaracteristica = conCaracteristicaPorDefecto(valor)
+  if (!conCaracteristica) return null
+  const local = parsePhoneNumberFromString(conCaracteristica, 'AR')
+  return local?.isValid() ? local : null
+}
+
+function conCaracteristicaPorDefecto(valor: string): string | null {
+  const limpio = valor.trim()
+  if (limpio.startsWith('+')) return null
+  const digitos = limpio.replace(/\D/g, '')
+  const esLocal =
+    digitos.length === 7 || (digitos.length === 9 && digitos.startsWith('15'))
+  // Con el `0` adelante, que es como se marca de larga distancia: así la librería
+  // reconoce el `15` que viene después y lo saca.
+  return esLocal ? `0${CARACTERISTICA_POR_DEFECTO}${digitos}` : null
 }
 
 /** El `9` que la librería sola no pone.

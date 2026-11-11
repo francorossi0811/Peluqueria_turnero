@@ -1,4 +1,4 @@
-# Frontend — Turnero Peluquería Ariel
+# Frontend — Turnero Peluquería
 
 React + Vite + TypeScript + Tailwind CSS.
 

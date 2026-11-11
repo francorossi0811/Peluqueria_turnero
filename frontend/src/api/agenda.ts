@@ -37,6 +37,15 @@ export async function cargarTurnoManual(
   return data
 }
 
+/** HU-35 — Un turno fuera de horario: después del cierre de la mañana o de la noche. Mismo
+ * body que la carga manual; la ruta es la que dice que la hora va fuera del horario. */
+export async function cargarTurnoExtra(
+  datos: NuevoTurnoManual,
+): Promise<TurnoAdmin> {
+  const { data } = await apiClient.post<TurnoAdmin>('/admin/turnos/extra', datos)
+  return data
+}
+
 /** HU-31 — El bloque de turnos seguidos, del lado de Ariel. Ruta aparte de la pública: es
  * la ruta la que dice quién crea el turno. */
 export async function cargarTurnosEnGrupoManual(

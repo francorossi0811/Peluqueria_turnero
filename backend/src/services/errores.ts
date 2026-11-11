@@ -41,3 +41,8 @@ export class FueraDeHorizonteError extends Error {}
 export class ImagenInvalidaError extends Error {}
 export class ImagenDemasiadoGrandeError extends Error {}
 export class ImagenNoEncontradaError extends Error {}
+// HU-35 — Un turno fuera de horario que no cae en ningún rato extra: o arranca antes del
+// cierre (ahí va por la carga normal), o se pasa del tope (la franja siguiente, o la
+// medianoche), o el día está cerrado o bloqueado. Es distinto de `HorarioNoDisponibleError`
+// porque "ese horario se acaba de ocupar" sería mentira: nadie lo ocupó.
+export class FueraDeHuecoExtraError extends Error {}

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  mensajeDeArielConfirmando,
   mensajeDeTurno,
   mensajeDeTurnosConfirmados,
+  whatsappDeArielConfirmando,
   type DatosDelTurno,
 } from './mensajesWhatsapp'
 
@@ -107,5 +109,45 @@ describe('los datos para pagar', () => {
 
   it('no deja dos renglones en blanco seguidos', () => {
     expect(mensajeDeTurno('confirmado', ANA)).not.toContain('\n\n\n')
+  })
+})
+
+describe('mensajeDeArielConfirmando', () => {
+  it('habla Ariel: saluda al cliente por su nombre, no se presenta como él', () => {
+    const msg = mensajeDeArielConfirmando([ANA])
+    expect(msg.startsWith('Hola Ana, te confirmo tu turno:')).toBe(true)
+    expect(msg).not.toContain('Hola Ariel')
+    expect(msg).not.toContain('soy Ana')
+  })
+
+  it('lleva lo mismo que el mensaje del cliente: turno, link y datos para pagar', () => {
+    const msg = mensajeDeArielConfirmando([ANA])
+    const delCliente = mensajeDeTurno('confirmado', ANA)
+    // Todo lo que viene después del saludo es idéntico al del cliente.
+    expect(msg.split('\n').slice(1)).toEqual(delCliente.split('\n').slice(1))
+    expect(msg).toContain('https://turnero.test/turno/aaa')
+    expect(msg).toContain('POR FAVOR MANDAR COMPROBANTE')
+  })
+
+  it('con varios turnos los nombra a todos y lleva el link de cada uno', () => {
+    const msg = mensajeDeArielConfirmando([ANA, TOTO, LUCA])
+    expect(msg.startsWith('Hola Ana, te confirmo los 3 turnos:')).toBe(true)
+    expect(msg).toContain('Luca · Barba')
+    expect(msg).toContain('Toto: https://turnero.test/turno/bbb')
+    expect(msg.match(/POR FAVOR MANDAR COMPROBANTE/g)).toHaveLength(1)
+  })
+
+  it('no deja dos renglones en blanco seguidos', () => {
+    expect(mensajeDeArielConfirmando([ANA])).not.toContain('\n\n\n')
+    expect(mensajeDeArielConfirmando([ANA, TOTO])).not.toContain('\n\n\n')
+  })
+})
+
+describe('whatsappDeArielConfirmando', () => {
+  it('abre el chat del número de la ficha, sin el + y con el mensaje codificado', () => {
+    const url = whatsappDeArielConfirmando('+5493514593325', [ANA])
+    expect(url.startsWith('https://api.whatsapp.com/send?phone=5493514593325&text=')).toBe(true)
+    const texto = decodeURIComponent(url.split('&text=')[1])
+    expect(texto).toBe(mensajeDeArielConfirmando([ANA]))
   })
 })

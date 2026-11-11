@@ -237,6 +237,74 @@ export function franjasSegunFeriado(
   return [primera]
 }
 
+/** HU-35 — Hasta dónde llega el día cuando Ariel se queda después de hora: 23:59. Es un
+ * límite técnico y no una regla de negocio ("a la noche no hay límite", pidió Franco).
+ *
+ * ⚠️ Es 23:59 y **no** 24:00 a propósito. `hora_fin` es `TIME`, y un turno que termina a
+ * las 24:00 se guarda como `00:00` del mismo día: el `EXCLUDE` arma
+ * `tsrange(fecha + hora_inicio, fecha + hora_fin)` con el fin antes del inicio y Postgres
+ * corta con un error, o sea un 500. Visto razonando el borde antes de probarlo. */
+export const FIN_DEL_DIA_MINUTOS = 24 * 60 - 1
+
+/** HU-35 — Un rato después de una franja donde Ariel puede meter turnos fuera de horario.
+ * En minutos desde la medianoche: `desde` es el cierre de la franja, `hasta` el tope. */
+export interface HuecoExtra {
+  desde: number
+  hasta: number
+}
+
+export function minutosDelDia(hora: Date): number {
+  return hora.getUTCHours() * 60 + hora.getUTCMinutes()
+}
+
+/** HU-35 — Los ratos fuera de horario de un día: uno después de cada franja abierta.
+ *
+ * El tope es **el inicio de la franja siguiente del horario laboral** (pedido de Franco:
+ * "en la mañana máximo hasta las 17", que es cuando abre la tarde), y la medianoche para
+ * la última del día ("en el turno de la noche no hay límite").
+ *
+ * Recibe dos listas a propósito:
+ * - `franjasAbiertas` son las de ese día después del feriado (`franjasSegunFeriado`).
+ *   Solo después de una franja **abierta** hay un rato extra: si un feriado se comió la
+ *   tarde, no tiene sentido ofrecer quedarse después de un turno que no se atiende.
+ * - `franjasDelHorario` son las del horario laboral sin recortar, y de ahí sale el tope.
+ *   Un feriado de medio día no corre el tope de la mañana a la medianoche: la tarde sigue
+ *   siendo la tarde, aunque ese día no se atienda.
+ *
+ * Pura y separada para fijar con tests los dos topes sin base de datos. La duplica el
+ * frontend para dibujar el botón "+" (`utils/turnoExtra.ts`): allá dibuja, acá manda. */
+export function huecosExtraDelDia(
+  franjasDelHorario: Franja[],
+  franjasAbiertas: Franja[],
+): HuecoExtra[] {
+  const inicios = franjasDelHorario.map((f) => minutosDelDia(f.horaInicio))
+
+  return franjasAbiertas
+    .map((f) => minutosDelDia(f.horaFin))
+    .sort((a, b) => a - b)
+    .map((desde) => ({
+      desde,
+      hasta: Math.min(
+        FIN_DEL_DIA_MINUTOS,
+        ...inicios.filter((inicio) => inicio >= desde),
+      ),
+    }))
+    .filter((h) => h.hasta > h.desde)
+}
+
+/** HU-35 — ¿Un turno de `duracionMinutos` que arranca a `inicio` entra entero en alguno de
+ * los ratos fuera de horario? Mismo criterio que el cierre de CU-04: el que termina justo
+ * en el tope entra, el que se pasa un minuto no. */
+export function entraComoTurnoExtra(
+  huecos: HuecoExtra[],
+  inicio: number,
+  duracionMinutos: number,
+): boolean {
+  return huecos.some(
+    (h) => inicio >= h.desde && inicio + duracionMinutos <= h.hasta,
+  )
+}
+
 // Qué turnos tapan un rato. `reservado` es obvio; `realizado` entró con HU-08: desde que
 // Ariel puede registrar en el pasado, un turno que ya atendió es un rato ocupado de verdad
 // y pisarlo sería perder uno de los dos.

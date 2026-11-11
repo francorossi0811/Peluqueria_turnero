@@ -19,6 +19,12 @@ import {
   turnoEnCurso,
 } from '../../utils/fecha'
 import { tintaSobre } from '../../utils/color'
+import {
+  aHoraTexto,
+  botonesExtraDelDia,
+  FIN_DEL_DIA_MINUTOS,
+  type BotonExtra,
+} from '../../utils/turnoExtra'
 import type {
   Bloqueo,
   Feriado,
@@ -80,6 +86,8 @@ interface GrillaSemanaProps {
   /** Abre el bloqueo para editarlo o levantarlo. Mismo gesto que tocar un turno: en la
    * grilla, todo lo que ocupa un rato se toca y se abre. */
   onElegirBloqueo: (bloqueo: Bloqueo) => void
+  /** HU-35 — El "+" de abajo de cada franja: un turno fuera de horario ese día. */
+  onAgregarExtra: (fecha: string, boton: BotonExtra) => void
 }
 
 function aHora(minutos: number): string {
@@ -113,6 +121,44 @@ function franjasDeLaSemana(
     }
   }
   return unificados
+}
+
+/** HU-35 — Estira cada tramo para que entren los turnos fuera de horario, más un renglón.
+ *
+ * Los turnos extra caen después del cierre, o sea **fuera** del tramo, y sin esto la grilla
+ * no los dibujaba en ningún lado: `turnosDelTramo` filtra por el rango del tramo. Se estira
+ * hasta el final del último extra de la semana y se le suma **un renglón más** de 20
+ * minutos, que es donde vive el "+": así el botón queda siempre justo debajo del último
+ * horario, haya extras o no.
+ *
+ * Nunca pasa del inicio del tramo siguiente (la mañana no se mete en la tarde) ni de la
+ * medianoche. El rato agregado se dibuja rayado como cualquier rato en que no se abre:
+ * no es horario para tocar un hueco, solo para el "+" y los turnos que ya están. */
+function extenderConExtras(
+  tramos: { inicio: number; fin: number }[],
+  turnos: TurnoAdmin[],
+): { inicio: number; fin: number }[] {
+  return tramos.map((tramo, i) => {
+    const limite = tramos[i + 1]?.inicio ?? FIN_DEL_DIA_MINUTOS
+    const finDeLosExtras = turnos
+      .filter((t) => t.estado !== 'cancelado' && t.estado !== 'reprogramado')
+      .map((t) => ({
+        inicio: aMinutos(t.hora),
+        fin: aMinutos(t.hora) + t.servicio.duracionMinutos,
+      }))
+      .filter((t) => t.inicio >= tramo.fin && t.inicio < limite)
+      .reduce((max, t) => Math.max(max, t.fin), tramo.fin)
+
+    // Redondeado a la grilla de 20 minutos del tramo: cada renglón mide lo mismo, y uno
+    // cortado a la mitad dejaría la columna de horas desfasada de las de los días.
+    const pasos = Math.ceil(
+      (finDeLosExtras + PASO_MINUTOS - tramo.inicio) / PASO_MINUTOS,
+    )
+    return {
+      inicio: tramo.inicio,
+      fin: Math.min(limite, tramo.inicio + pasos * PASO_MINUTOS),
+    }
+  })
 }
 
 /** Cómo se anuncia el feriado arriba de la columna. `dia_completo` no dice nada: ese día
@@ -255,8 +301,9 @@ export function GrillaSemana({
   onElegirHueco,
   onElegirTurno,
   onElegirBloqueo,
+  onAgregarExtra,
 }: GrillaSemanaProps) {
-  const tramos = franjasDeLaSemana(franjas)
+  const tramos = extenderConExtras(franjasDeLaSemana(franjas), turnos)
 
   if (tramos.length === 0) {
     return (
@@ -347,6 +394,7 @@ export function GrillaSemana({
               onElegirHueco={onElegirHueco}
               onElegirTurno={onElegirTurno}
               onElegirBloqueo={onElegirBloqueo}
+              onAgregarExtra={onAgregarExtra}
               // El corte entre la mañana y la tarde: en la planilla es una franja verde, y
               // es lo que Ariel usa para no confundir un hueco de las 11 con uno de las 18.
               separado={i > 0}
@@ -593,6 +641,7 @@ function TramoGrilla({
   onElegirHueco,
   onElegirTurno,
   onElegirBloqueo,
+  onAgregarExtra,
   separado,
 }: TramoGrillaProps) {
   const duracion = tramo.fin - tramo.inicio
@@ -978,6 +1027,47 @@ function TramoGrilla({
                 </button>
               )
             })}
+
+            {/* HU-35 — El "+" del turno fuera de horario, justo debajo del último horario
+                de la franja (o del último extra que ya cargó, así puede seguir sumando).
+                Solo el de esta franja: el de la noche vive en el tramo de la tarde. */}
+            {cargable &&
+              botonesExtraDelDia(
+                dia,
+                franjas.filter((f) => f.diaSemana === diaSemana(dia)),
+                feriado,
+                delDia,
+                bloqueos,
+              )
+                .filter(
+                  (b) =>
+                    b.cierre > tramo.inicio &&
+                    b.cierre <= tramo.fin &&
+                    b.hora < tramo.fin,
+                )
+                .map((b) => (
+                  <button
+                    key={`extra-${b.cierre}`}
+                    type="button"
+                    onClick={() => onAgregarExtra(dia, b)}
+                    title={`Turno fuera de horario · ${aHoraTexto(b.hora)}`}
+                    aria-label={`Agregar un turno fuera de horario a las ${aHoraTexto(b.hora)}`}
+                    // Círculo negro sobre el naranja: es el mismo contraste que las líneas de
+                    // la grilla, y se despega del rayado que tiene abajo. Va centrado en la
+                    // columna y apenas por debajo de la hora, para que se lea como "a esta
+                    // hora, uno más".
+                    className="bg-agenda-tinta text-agenda-fondo border-agenda-linea absolute left-1/2 z-10 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border-2 leading-none font-black shadow-md transition hover:scale-110"
+                    // ⚠️ El tamaño del "+" va con `style` y no con `text-2xl`: el piso de
+                    // 16 px del panel pega en `body *` con más peso que cualquier clase de
+                    // Tailwind (mismo motivo que la letra de la nota del día).
+                    style={{
+                      top: (b.hora - tramo.inicio) / MINUTOS_POR_PX + 6,
+                      fontSize: 28,
+                    }}
+                  >
+                    +
+                  </button>
+                ))}
 
             {/* La línea de ahora, como en Google Calendar: ubica sin tener que leer.
                 Comparte el color con el turno en curso — las dos cosas dicen "ahora". */}

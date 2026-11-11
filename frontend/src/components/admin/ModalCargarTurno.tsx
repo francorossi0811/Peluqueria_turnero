@@ -7,12 +7,9 @@ import { GrillaHorarios } from '../GrillaHorarios'
 import { obtenerServicios } from '../../api/servicios'
 import { obtenerDisponibilidadAdmin } from '../../api/disponibilidad'
 import { cargarTurnoManual, cargarTurnosEnGrupoManual } from '../../api/agenda'
-import { elegirContacto, soportaElegirContacto } from '../../lib/contactos'
+import { CamposClienteManual } from './CamposClienteManual'
+import { PasoTurnoCargado } from './WhatsappAlCliente'
 import { useMinutosAhora } from '../../lib/useMinutosAhora'
-import {
-  esTelefonoValido,
-  MENSAJE_TELEFONO_INVALIDO,
-} from '../../utils/validaciones'
 import {
   DIAS_CARGA_HACIA_ATRAS,
   fechaLegible,
@@ -20,7 +17,12 @@ import {
   sumarDias,
   yaPaso,
 } from '../../utils/fecha'
-import type { ErrorApi, OrigenManual, Servicio } from '../../types/api'
+import type {
+  ErrorApi,
+  OrigenManual,
+  Servicio,
+  TurnoAdmin,
+} from '../../types/api'
 
 /** Días hacia adelante, contando hoy. Hacia atrás manda `DIAS_CARGA_HACIA_ATRAS`. */
 const DIAS_A_MOSTRAR = 14
@@ -78,6 +80,9 @@ export function ModalCargarTurno({
   const [clienteEmail, setClienteEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [errorTelefono, setErrorTelefono] = useState<string | null>(null)
+  // HU-36 — Los turnos recién cargados, cuando quedaron con ficha: la ventana no se cierra
+  // y ofrece mandarle el link al cliente por WhatsApp.
+  const [cargados, setCargados] = useState<TurnoAdmin[] | null>(null)
 
   const hoy = hoyIso()
   const minutosAhora = useMinutosAhora()
@@ -147,9 +152,12 @@ export function ModalCargarTurno({
         turnos: turnos.map((t) => ({ servicioId: t.servicio.id })),
       })
     },
-    onSuccess: () => {
+    onSuccess: (creados) => {
       void queryClient.invalidateQueries({ queryKey: ['agenda'] })
-      onClose()
+      // Sin ficha (no se cargó teléfono) no hay a quién mandarle nada: se cierra como
+      // siempre.
+      if (creados[0]?.cliente) setCargados(creados)
+      else onClose()
     },
     onError: (err) => {
       const datos = isAxiosError<ErrorApi>(err)
@@ -180,22 +188,6 @@ export function ModalCargarTurno({
     },
   })
 
-  async function completarDesdeContactos() {
-    try {
-      const contacto = await elegirContacto()
-      if (!contacto) return
-      if (contacto.telefono) setClienteTelefono(contacto.telefono)
-      // El nombre solo se completa si Ariel todavía no escribió uno, para no pisarle lo
-      // que ya venía tipeando.
-      if (contacto.nombre && !clienteNombre.trim()) {
-        setClienteNombre(contacto.nombre)
-      }
-    } catch {
-      // Cancelar el selector nativo también entra por acá. No es un error que valga la
-      // pena mostrar: el campo se puede tipear igual.
-    }
-  }
-
   // Cuando el modal se abre desde un hueco de la grilla ya sabemos qué día y qué hora
   // quiere Ariel, pero **la hora no se puede dar por buena**: la disponibilidad depende
   // de la duración del servicio, y el servicio se elige después. Un corte de 20 min entra
@@ -216,6 +208,14 @@ export function ModalCargarTurno({
     turnos.length > 0 && fecha && hora && Boolean(clienteNombre.trim())
   const varios = turnos.length > 1
   const horasDelBloque = hora ? horariosDelBloque(turnos, hora) : []
+
+  if (cargados) {
+    return (
+      <Modal titulo="Turno cargado" onClose={onClose}>
+        <PasoTurnoCargado turnos={cargados} onClose={onClose} />
+      </Modal>
+    )
+  }
 
   return (
     <Modal
@@ -335,114 +335,32 @@ export function ModalCargarTurno({
           <>
             {/* Un campo, tenga el bloque un turno o seis. Con varios el label lo dice y
                 debajo van los horarios, para que se vea que el nombre es de todos. */}
-            <label className="flex flex-col gap-1">
-              <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-                {varios
+            <CamposClienteManual
+              nombre={clienteNombre}
+              onNombre={setClienteNombre}
+              etiquetaNombre={
+                varios
                   ? `Nombre (para los ${turnos.length} turnos)`
-                  : 'Nombre y apellido'}
-              </span>
-              <input
-                required
-                autoFocus
-                value={clienteNombre}
-                onChange={(e) => setClienteNombre(e.target.value)}
-                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
-              />
-              {varios && (
-                <span className="text-tinta-tenue text-xs">
-                  {turnos
-                    .map((t, i) => `${horasDelBloque[i]} ${t.servicio.nombre}`)
-                    .join(' · ')}
-                  . Después podés cambiarle el nombre a cada uno desde la
-                  agenda.
-                </span>
-              )}
-            </label>
-            <label className="flex flex-col gap-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-                  Teléfono (opcional)
-                </span>
-                {/* Solo aparece donde funciona de verdad: Chrome en Android. En la
-                    computadora del mostrador ni se renderiza, así que no hay un botón
-                    que no haga nada. */}
-                {soportaElegirContacto() && (
-                  <button
-                    type="button"
-                    onClick={completarDesdeContactos}
-                    className="text-miel text-xs font-medium hover:opacity-80"
-                  >
-                    Elegir de mis contactos
-                  </button>
-                )}
-              </div>
-              <input
-                type="tel"
-                value={clienteTelefono}
-                onChange={(e) => {
-                  setErrorTelefono(null)
-                  setClienteTelefono(e.target.value)
-                }}
-                placeholder="Si no lo sabés, dejalo vacío"
-                className={`bg-superficie text-tinta rounded-md border px-3 py-2 outline-none ${
-                  errorTelefono
-                    ? 'border-vino'
-                    : 'border-borde focus:border-miel'
-                }`}
-              />
-              {errorTelefono ? (
-                <span className="text-vino text-xs">{errorTelefono}</span>
-              ) : (
-                // Chequeo laxo local, solo para el caso obvio (letras, muy corto). El de
-                // verdad lo hace el backend: saber si una característica existe necesita
-                // metadata que no vale traer al bundle.
-                clienteTelefono.trim() !== '' &&
-                !esTelefonoValido(clienteTelefono) && (
-                  <span className="text-vino text-xs">
-                    {MENSAJE_TELEFONO_INVALIDO}
-                  </span>
-                )
-              )}
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-tinta-tenue text-xs tracking-wide uppercase">
-                Email (opcional)
-              </span>
-              <input
-                type="email"
-                value={clienteEmail}
-                onChange={(e) => setClienteEmail(e.target.value)}
-                placeholder="Si te lo dicta, le llega la confirmación"
-                className="border-borde bg-superficie text-tinta focus:border-miel rounded-md border px-3 py-2 outline-none"
-              />
-            </label>
-            <div>
-              <span className="text-tinta-tenue mb-2 block text-xs tracking-wide uppercase">
-                Origen
-              </span>
-              <div className="flex gap-2">
-                {(
-                  [
-                    ['presencial', 'Presencial'],
-                    ['llamada', 'Llamada'],
-                    ['whatsapp', 'WhatsApp'],
-                  ] as const
-                ).map(([valor, etiqueta]) => (
-                  <button
-                    key={valor}
-                    type="button"
-                    onClick={() => setOrigen(valor)}
-                    className={`flex-1 rounded-md border px-3 py-2 text-sm transition ${
-                      origen === valor
-                        ? 'border-vino bg-vino-suave text-vino'
-                        : 'border-borde text-tinta-suave'
-                    }`}
-                  >
-                    {etiqueta}
-                  </button>
-                ))}
-              </div>
-            </div>
+                  : 'Nombre y apellido'
+              }
+              ayudaNombre={
+                varios
+                  ? `${turnos
+                      .map((t, i) => `${horasDelBloque[i]} ${t.servicio.nombre}`)
+                      .join(' · ')}. Después podés cambiarle el nombre a cada uno desde la agenda.`
+                  : undefined
+              }
+              telefono={clienteTelefono}
+              onTelefono={(v) => {
+                setErrorTelefono(null)
+                setClienteTelefono(v)
+              }}
+              errorTelefono={errorTelefono}
+              email={clienteEmail}
+              onEmail={setClienteEmail}
+              origen={origen}
+              onOrigen={setOrigen}
+            />
           </>
         )}
 

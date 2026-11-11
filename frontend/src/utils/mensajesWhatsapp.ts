@@ -15,6 +15,7 @@ import {
   ALIAS_PAGO,
   CVU_PAGO,
   TITULAR_PAGO,
+  whatsappAlCliente,
   whatsappCon,
 } from './contacto'
 
@@ -179,4 +180,52 @@ export function mensajeDeTurnosConfirmados(turnos: DatosDelTurno[]): string {
 /** El link de WhatsApp de una reserva en grupo, listo para un `href`. */
 export function whatsappDeTurnosConfirmados(turnos: DatosDelTurno[]): string {
   return whatsappCon(mensajeDeTurnosConfirmados(turnos))
+}
+
+/** HU-36 — El mensaje que **Ariel** le manda al cliente cuando le carga el turno a mano.
+ *
+ * Es el mismo contenido que el que el cliente le manda a Ariel al reservar por la web
+ * (`mensajeDeTurnosConfirmados`) —servicio, día y hora, el link de gestión y los datos para
+ * pagar— pero **en la voz de Ariel**: el de la web empieza con "Hola Ariel, soy Juan", y
+ * mandado desde el teléfono de Ariel eso sería decirle al cliente que él es Juan. Lo eligió
+ * Franco (10/11/2026) entre esto y el texto literal.
+ *
+ * Para qué sirve: el cliente que Ariel carga a mano nunca pasó por la web, así que no tiene
+ * su link. Este mensaje es la forma de que lo tenga, y le queda guardado en su chat igual
+ * que al que reservó solo. Mismo efecto con el alias (HU-33).
+ *
+ * Con un turno y con varios (el bloque que carga Ariel, HU-31) — el plural sigue el mismo
+ * molde que el del cliente, cada turno con su link. */
+export function mensajeDeArielConfirmando(turnos: DatosDelTurno[]): string {
+  const [primero] = turnos
+  const varios = turnos.length > 1
+
+  const lineas = [
+    varios
+      ? `Hola ${primero.nombre}, te confirmo los ${turnos.length} turnos:`
+      : `Hola ${primero.nombre}, te confirmo tu turno:`,
+  ]
+  for (const t of turnos) {
+    lineas.push('')
+    // Con uno solo el nombre ya está en el saludo; con varios es lo que los distingue.
+    lineas.push(varios ? `${t.nombre} · ${t.servicio}` : t.servicio)
+    lineas.push(`${fechaLegible(t.fecha)} · ${t.hora}`)
+  }
+  lineas.push('', '¡Nos vemos!')
+  if (varios) {
+    lineas.push('', LINEA_DE_LOS_LINKS)
+    for (const t of turnos) lineas.push(`${t.nombre}: ${t.link}`)
+  } else {
+    lineas.push('', LINEA_DEL_LINK, primero.link)
+  }
+  lineas.push('', ...LINEAS_PARA_PAGAR)
+  return lineas.join('\n')
+}
+
+/** HU-36 — El link al chat del cliente con `mensajeDeArielConfirmando` ya escrito. */
+export function whatsappDeArielConfirmando(
+  telefonoDeLaFicha: string,
+  turnos: DatosDelTurno[],
+): string {
+  return whatsappAlCliente(telefonoDeLaFicha, mensajeDeArielConfirmando(turnos))
 }

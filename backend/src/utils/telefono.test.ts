@@ -50,6 +50,34 @@ describe('aE164', () => {
     expect(aE164('+55 11 91234 5678')).toBe('5511912345678')
   })
 
+  it('asume 351 cuando el número viene sin característica', () => {
+    // Ariel tipea los números como le salen, y el de un cliente de acá muchas veces sin
+    // el 351. Las dos formas locales: 7 dígitos, y 9 con el 15 adelante.
+    expect(aE164('555 1234')).toBe('5493515551234')
+    expect(aE164('5551234')).toBe('5493515551234')
+    expect(aE164('555-1234')).toBe('5493515551234')
+    expect(aE164('15 555 1234')).toBe('5493515551234')
+    expect(aE164('155551234')).toBe('5493515551234')
+    expect(aE164('15-555-1234')).toBe('5493515551234')
+  })
+
+  it('no reinterpreta un número que ya era válido tal como vino', () => {
+    // El 351 es una segunda oportunidad, no una preferencia: otra provincia sigue siendo
+    // otra provincia.
+    expect(aE164('11 4555 1234')).toBe('5491145551234')
+    expect(aE164('261 555 1234')).toBe('5492615551234')
+    expect(aE164('2954 15 456789')).toBe('5492954456789')
+  })
+
+  it('no adivina con largos que no son un número local', () => {
+    // 8 dígitos: un fijo porteño sin el 11. Con el 351 serían 11 dígitos, que no existen.
+    expect(aE164('4555 1234')).toBeNull()
+    // 9 dígitos que no empiezan con 15.
+    expect(aE164('455 512 345')).toBeNull()
+    // Con `+` ya dijo de dónde es.
+    expect(aE164('+5551234')).toBeNull()
+  })
+
   it('devuelve null cuando no hay número que mandar', () => {
     expect(aE164('')).toBeNull()
     expect(aE164('   ')).toBeNull()
@@ -58,7 +86,7 @@ describe('aE164', () => {
   })
 
   it('devuelve null para lo que esTelefonoValido dejaría pasar pero no es un número real', () => {
-    // `esTelefonoValido` solo cuenta dígitos (8 a 15): valida la *forma*, no la existencia.
+    // `esTelefonoValido` solo cuenta dígitos (7 a 15): valida la *forma*, no la existencia.
     // Este pasa esa validación y aun así no hay a dónde mandarle nada, y por eso la rama de
     // WhatsApp tiene que caer al mail en vez de asumir que siempre hay destino.
     expect(aE164('00000000')).toBeNull()

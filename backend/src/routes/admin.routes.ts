@@ -13,6 +13,7 @@ import {
   postCancelarTurnoAdmin,
   postMarcarVistos,
   postTurnoManual,
+  postTurnoExtra,
   postTurnosEnGrupoManual,
 } from '../controllers/turnos.controller'
 import {
@@ -134,6 +135,9 @@ adminRouter.get(
   getColoresRecientes,
 )
 adminRouter.post('/admin/turnos', requireAuth, postTurnoManual)
+// HU-35 — El turno fuera de horario. Solo del panel: la web pública no tiene ninguna ruta
+// que llegue a `crearTurnoExtra`, y es eso lo que garantiza que el cliente no lo pueda sacar.
+adminRouter.post('/admin/turnos/extra', requireAuth, postTurnoExtra)
 // HU-31 — El bloque de turnos seguidos, del lado de Ariel. Ruta aparte de la pública: es la
 // ruta la que dice quién crea el turno, y de ahí cuelgan sus tres asimetrías (sin topes, sin
 // antelación mínima, con los 7 días para atrás).

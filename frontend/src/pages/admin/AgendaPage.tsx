@@ -13,6 +13,7 @@ import { ModalEditarTurno } from '../../components/admin/ModalEditarTurno'
 import { ModalTurno } from '../../components/admin/ModalTurno'
 import { ModalCobro } from '../../components/admin/ModalCobro'
 import { ModalCargarTurno } from '../../components/admin/ModalCargarTurno'
+import { ModalTurnoExtra } from '../../components/admin/ModalTurnoExtra'
 import { ModalBloquear } from '../../components/admin/ModalBloquear'
 import { ModalBuscarTurno } from '../../components/admin/ModalBuscarTurno'
 import { ModalExportar } from '../../components/admin/ModalExportar'
@@ -36,6 +37,7 @@ import {
   domingoDeLaSemana,
   turnoEnCurso,
 } from '../../utils/fecha'
+import type { BotonExtra } from '../../utils/turnoExtra'
 import type { Bloqueo, ErrorApi, TurnoAdmin } from '../../types/api'
 
 type Vista = 'dia' | 'semana'
@@ -107,6 +109,11 @@ export function AgendaPage() {
   const [huecoElegido, setHuecoElegido] = useState<{
     fecha: string
     hora: string
+  } | null>(null)
+  // HU-35 — El "+" que se tocó: un turno fuera de horario en ese día y ese rato.
+  const [extraElegido, setExtraElegido] = useState<{
+    fecha: string
+    boton: BotonExtra
   } | null>(null)
 
   // Qué días trabaja Ariel, según lo que tenga cargado en "Horarios y servicios".
@@ -435,6 +442,7 @@ export function AgendaPage() {
           onElegirHueco={(f, h) => setHuecoElegido({ fecha: f, hora: h })}
           onElegirTurno={setTurnoDetalle}
           onElegirBloqueo={setBloqueoEditar}
+          onAgregarExtra={(f, boton) => setExtraElegido({ fecha: f, boton })}
         />
       )}
 
@@ -581,6 +589,18 @@ export function AgendaPage() {
           fechaInicial={huecoElegido.fecha}
           horaInicial={huecoElegido.hora}
           onClose={() => setHuecoElegido(null)}
+        />
+      )}
+      {/* HU-35 — El turno fuera de horario, desde el "+" de la grilla semanal. En la vista
+          Día no hay "+" (pedido de Franco): ahí el turno extra se ve como cualquier otro una
+          vez cargado, pero se carga solo desde la Semana. */}
+      {extraElegido && (
+        <ModalTurnoExtra
+          fecha={extraElegido.fecha}
+          cierre={extraElegido.boton.cierre}
+          tope={extraElegido.boton.tope}
+          horaSugerida={extraElegido.boton.hora}
+          onClose={() => setExtraElegido(null)}
         />
       )}
       {modalBloquear && (

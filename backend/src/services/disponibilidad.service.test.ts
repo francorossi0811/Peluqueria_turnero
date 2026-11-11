@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   calcularHorariosDelDia,
   datosDelDiaEnRango,
+  entraComoTurnoExtra,
+  FIN_DEL_DIA_MINUTOS,
   franjasSegunFeriado,
+  huecosExtraDelDia,
   type DatosDelRango,
   type Franja,
   type Intervalo,
@@ -492,5 +495,76 @@ describe('datosDelDiaEnRango', () => {
     expect(datosDelDiaEnRango(RANGO, dia(6)).bloqueos).toHaveLength(1)
     expect(datosDelDiaEnRango(RANGO, dia(7)).bloqueos).toHaveLength(1)
     expect(datosDelDiaEnRango(RANGO, dia(8)).bloqueos).toEqual([])
+  })
+})
+
+// HU-35 — Los turnos fuera de horario. Con las franjas reales (10-13 y 17-20): a la mañana
+// se puede seguir hasta las 17, que es cuando abre la tarde; a la noche, hasta la medianoche.
+describe('huecosExtraDelDia', () => {
+  it('pone un rato después de cada franja: hasta la siguiente, y la última hasta la medianoche', () => {
+    expect(huecosExtraDelDia(FRANJAS, FRANJAS)).toEqual([
+      { desde: 13 * 60, hasta: 17 * 60 },
+      { desde: 20 * 60, hasta: FIN_DEL_DIA_MINUTOS },
+    ])
+  })
+
+  it('no depende del orden en que vienen las franjas de la base', () => {
+    const alReves = [...FRANJAS].reverse()
+    expect(huecosExtraDelDia(alReves, alReves)).toEqual(
+      huecosExtraDelDia(FRANJAS, FRANJAS),
+    )
+  })
+
+  it('en un feriado de medio día solo hay rato después de la mañana, y el tope sigue siendo las 17', () => {
+    const abiertas = franjasSegunFeriado(FRANJAS, 'medio_dia')
+    expect(huecosExtraDelDia(FRANJAS, abiertas)).toEqual([
+      { desde: 13 * 60, hasta: 17 * 60 },
+    ])
+  })
+
+  it('un día sin franjas abiertas no tiene rato extra', () => {
+    expect(huecosExtraDelDia(FRANJAS, [])).toEqual([])
+    expect(huecosExtraDelDia([], [])).toEqual([])
+  })
+
+  it('dos franjas pegadas no dejan rato extra entre ellas', () => {
+    const pegadas: Franja[] = [
+      { horaInicio: hora(10), horaFin: hora(13) },
+      { horaInicio: hora(13), horaFin: hora(16) },
+    ]
+    expect(huecosExtraDelDia(pegadas, pegadas)).toEqual([
+      { desde: 16 * 60, hasta: FIN_DEL_DIA_MINUTOS },
+    ])
+  })
+})
+
+describe('entraComoTurnoExtra', () => {
+  const huecos = huecosExtraDelDia(FRANJAS, FRANJAS)
+
+  it('acepta el turno pegado al cierre, a la mañana y a la noche', () => {
+    expect(entraComoTurnoExtra(huecos, 13 * 60, 20)).toBe(true)
+    expect(entraComoTurnoExtra(huecos, 20 * 60, 30)).toBe(true)
+  })
+
+  it('el que termina justo a las 17 entra; el que se pasa un minuto, no', () => {
+    expect(entraComoTurnoExtra(huecos, 16 * 60 + 40, 20)).toBe(true)
+    expect(entraComoTurnoExtra(huecos, 16 * 60 + 41, 20)).toBe(false)
+  })
+
+  it('a la noche no hay tope salvo las 23:59', () => {
+    expect(entraComoTurnoExtra(huecos, 23 * 60 + 39, 20)).toBe(true)
+    // ⚠️ Terminar a las 24:00 se guardaría como 00:00 y el EXCLUDE de la base daría error.
+    expect(entraComoTurnoExtra(huecos, 23 * 60 + 40, 20)).toBe(false)
+  })
+
+  it('rechaza un turno que arranca dentro del horario o que lo cruza', () => {
+    // Dentro de la mañana: eso va por la carga normal, con su disponibilidad.
+    expect(entraComoTurnoExtra(huecos, 12 * 60 + 40, 20)).toBe(false)
+    // Arranca antes del cierre y termina después: cruza el borde.
+    expect(entraComoTurnoExtra(huecos, 12 * 60 + 50, 20)).toBe(false)
+    // Dentro de la tarde.
+    expect(entraComoTurnoExtra(huecos, 17 * 60, 20)).toBe(false)
+    // Antes de abrir: no hay rato extra a la mañana temprano.
+    expect(entraComoTurnoExtra(huecos, 9 * 60, 20)).toBe(false)
   })
 })

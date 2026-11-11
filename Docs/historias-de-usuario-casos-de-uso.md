@@ -260,6 +260,15 @@ observaciones, para dejar de llevar eso en la planilla y tenerlo al lado del tur
 - **La misma persona se reconoce sola por el teléfono.** Dos turnos con el mismo número
   son el mismo cliente, sin que yo tenga que unir nada. El nombre no sirve para eso: el
   mismo cliente escribe "Juan", "juan perez" y "Juan P." según el día.
+  - El número se reconoce **escrito como sea**: con o sin espacios, guiones, paréntesis,
+    el `0`, el `15` o el `+54`. ⚠️ **Ampliación del 10/11/2026:** si viene **sin
+    característica** (`555 1234` o `15 555 1234`), se asume **351**, la de Córdoba. Lo
+    pidió Franco porque Ariel tipea los números como le salen, con el cliente enfrente.
+    Vale igual en las tres puertas (la reserva web, la carga de Ariel y cargarle el
+    teléfono a un turno después). Un número que ya es válido tal como vino nunca se
+    reinterpreta: `11 4555 1234` sigue siendo de Buenos Aires. El costo asumido: un
+    cliente de otra ciudad cargado sin su característica queda con un número cordobés que
+    no es el suyo — el mismo número que antes se rechazaba.
 - Le pongo **mi apodo**: en la planilla anoto "Flaco", "Jubilado bici", "Roja". Ese apodo
   es el que veo después en la agenda.
 - Le pongo **etiquetas**, que son insignias que armo yo: un círculo del color que elijo
@@ -513,6 +522,59 @@ tablet del mostrador.
 *El color dice lo que Ariel quiera, y eso no contradice a HU-23:* el color del **estado**
 sigue mandando en cuanto el turno se cierra. Lo que se abre es el pendiente, que es donde él
 necesita anotarse algo que el sistema no sabe.
+
+**HU-35 — Quedarme después de hora para atender a uno más**
+Como Ariel, quiero agregar un turno después del cierre de la mañana o de la noche, solo para
+ese día, para registrar al cliente que atiendo fuera de mi horario sin tener que cambiar el
+horario de la peluquería. *(Pedido del 10/11/2026.)*
+- Debajo del último horario de cada franja hay un **botón redondo con un "+"**, en la columna
+  de cada día de la **vista Semana**.
+- ⚠️ **Solo se carga desde la Semana** (pedido de Franco, 10/11/2026). En la **vista Día** no
+  hay "+": ahí el turno extra aparece recién cuando ya lo cargué, como cualquier otro turno.
+  La primera versión tenía un botón también en la vista Día y se sacó.
+- Al tocarlo, el turno se propone **pegado a lo anterior**: al cierre si todavía no agregué
+  ninguno, o al final del último que agregué seguido. Elijo el servicio y la duración sale
+  de ahí. La hora la puedo correr si hace falta.
+- Puedo **agregar más de uno**: después de cargar un turno, el "+" baja y queda debajo.
+- **A la mañana, hasta que abre la tarde** (hoy, las 17:00). **A la noche no hay límite**,
+  salvo que el turno tiene que terminar a las 23:59 como mucho.
+- **Los clientes no ven ese rato ni pueden reservarlo** por la web. Es mío.
+- Una vez cargado es **un turno normal**: lo marco Realizado o Ausente, lo cobro, aparece en
+  Cobros y en el Excel, y si le cargo el teléfono tiene ficha.
+- Valen las reglas de siempre del panel: el nombre libre, el teléfono opcional, y puedo
+  registrar uno de hasta 7 días para atrás (HU-08).
+- Si el día está cerrado (por un feriado o un bloqueo), no hay "+".
+
+*Por qué no se estira el horario de ese día:* habría sido la forma más corta, y es justo la
+que no sirve — un horario más largo se le ofrece también al cliente en la web. El turno extra
+se valida aparte, contra el rato de después del cierre, y la disponibilidad pública no se
+tocó.
+
+*Por qué el "+" sigue la cadena y no "el último":* si agrego uno a las 13:00 y otro a las
+16:40, el último ya llega al tope y el botón desaparecería, aunque de 13:20 a 16:40 está todo
+libre. El "+" propone el primer momento libre después del cierre.
+
+**HU-36 — Mandarle el link al cliente que cargué a mano**
+Como Ariel, quiero que cuando cargo un turno a mano con el teléfono del cliente se me abra su
+chat de WhatsApp con el mensaje ya escrito, para mandarle el link con el que puede
+reprogramar o cancelar sin tener que escribirle yo. *(Pedido del 10/11/2026.)*
+- El teléfono sigue siendo **opcional** al cargar (HU-08). Si lo cargo, se crea la ficha como
+  siempre (HU-25).
+- Si el turno quedó con ficha, después de cargarlo la ventana **no se cierra**: dice "Turno
+  cargado" y me ofrece **"Mandarle el link por WhatsApp"**. Si no cargué teléfono, se cierra
+  como siempre. Vale también para el turno fuera de horario (HU-35).
+- El mismo botón está en el **detalle del turno** (tocándolo en la vista Semana) mientras
+  esté pendiente, para reenviarlo o para mandarlo después de cargarle el teléfono.
+- El mensaje tiene **el mismo contenido** que el que me manda el cliente cuando reserva por
+  la web —servicio, día y hora, el link y los datos para pagar por adelantado (HU-33)— pero
+  **escrito por mí**: "Hola Juan, te confirmo tu turno:". El de la web empieza con "Hola Ariel,
+  soy Juan", y mandado desde mi teléfono diría que yo soy él.
+- Si cargué un bloque (HU-31), sale un solo mensaje con todos los turnos y el link de cada uno.
+- El botón abre el chat; el mensaje lo mando yo. El sistema no manda nada solo.
+
+*Por qué mira la ficha y no el teléfono que se escribió:* el teléfono del turno queda como lo
+tipeé ("351 555 1234") y a WhatsApp le falta el `54` y el `9` de celular. La ficha ya lo
+tiene normalizado, y que exista es la prueba de que el número sirve.
 
 **HU-31 — Reservar para mí y para los míos en una sola vez**
 Como clienta que viene con los hijos, quiero sacar los turnos de todos de una sola pasada y seguidos, para no tener que cargar mis datos tres veces ni que nos toquen horarios sueltos.

@@ -283,6 +283,40 @@ campo del body, la que dice quién está creando el turno. Con un flag, cualquie
 mandarlo y saltearse los dos topes. Es el mismo reparto que ya existía entre `POST /api/turnos`
 y `POST /api/admin/turnos`.
 
+### `POST /api/admin/turnos/extra` — HU-35
+
+🔒 Un turno **fuera de horario**: Ariel se queda después del cierre de la mañana o de la
+noche para atender a uno más, solo ese día. Mismo body que `POST /api/admin/turnos`
+(`servicioId`, `fecha`, `hora`, `clienteNombre`, `clienteTelefono?`, `clienteEmail?`,
+`origen`) y responde `201` con el turno en formato admin.
+
+Lo que cambia es **qué horas valen**. No se valida contra la disponibilidad (CU-04), que solo
+recorre el horario laboral, sino contra el rato de después de cada franja abierta ese día:
+
+- arranca a la hora del cierre o después;
+- termina antes de que abra la franja siguiente (con el horario actual, **17:00** para la
+  mañana) o, si es la última del día, **a las 23:59 como mucho**;
+- ese día no está cerrado (sin franjas, o feriado `cerrado`) y ningún bloqueo tapa ese rato.
+  Un bloqueo sin hora llega hasta los bordes del día entero, no del horario: unas vacaciones
+  tapan también la noche.
+
+Si no se cumple → `409 HORARIO_EXTRA_INVALIDO`. Si choca con otro turno → `409
+HORARIO_NO_DISPONIBLE`, que lo decide el `EXCLUDE` como siempre. Más de `DIAS_PASADOS_ADMIN`
+días atrás → `400`, igual que la carga manual.
+
+⚠️ **El tope es 23:59 y no 24:00.** `hora_fin` es `TIME`: un turno que terminara a las 24:00
+se guardaría como `00:00` del mismo día, y el `EXCLUDE` (`tsrange(fecha + hora_inicio,
+fecha + hora_fin)`) cortaría con un error de rango invertido, o sea un `500`.
+
+**Por qué ninguna ruta pública llega acá:** la disponibilidad pública (`GET /api/disponibilidad`)
+y la reserva (`POST /api/turnos`) no se tocaron, así que el rato extra nunca se le ofrece al
+cliente ni lo puede reservar. Estirar el horario de ese día lo habría abierto para todos.
+Verificado: con turnos extra cargados, la disponibilidad pública del día sigue siendo la de
+siempre y un `POST /api/turnos` a esa hora da `409`.
+
+Una vez creado es un turno **normal**: no hay columna que lo distinga. Se marca, se cobra, se
+reprograma, entra en Cobros y en el Excel.
+
 **POST `/api/turnos/:id/cancelar`** — sin body. Response `409` si faltan menos de 60
 minutos:
 ```json

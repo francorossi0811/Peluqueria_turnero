@@ -74,6 +74,13 @@
      blanco da 5.9:1, o sea que el texto pasa WCAG AA. */
   --color-rojo: #c0392b;
 
+  /* HU-36 — El botón con el que Ariel le manda el link al cliente por WhatsApp. Un verde de
+     WhatsApp **oscurecido**: el oficial (#25d366) con texto blanco da ~2:1 y no se lee. Es
+     parecido a `realizado` y se declara aparte igual, por la regla de esta paleta: el
+     verde del estado dice "ya se hizo" y no tiene por qué moverse si algún día se retoca
+     el del botón. No cambia con el tema: es una marca, no un fondo. */
+  --color-whatsapp: #11704a;
+
   /* Estado "ausente" (HU-12): rojo. Es el mismo rojo que `ahora` a propósito y no por
      descuido — no hay dos rojos en la paleta. No se confunden porque aparecen en formas
      distintas: `ahora` es una línea de 2 px y una hora del margen, `ausente` es un bloque

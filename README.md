@@ -1,4 +1,4 @@
-# Turnero — La Peluquería de Ariel Enrique
+# Turnero — Peluquería
 
 Turnero web para una peluquería unisex de un solo peluquero. Reemplaza la gestión de
 turnos por WhatsApp/papel sin reemplazar WhatsApp como canal de contacto.
@@ -59,13 +59,13 @@ apuntan al mismo repo, cada uno con su carpeta como raíz.
 Los tres pasos del build, en orden: `npm install` dispara el `postinstall` que corre
 `prisma generate`; `migrate:deploy` aplica las migraciones (sin esto la base queda sin
 tablas y, sobre todo, sin el `EXCLUDE` que impide la doble reserva); y `seed` crea los
-cuatro servicios, el horario laboral y la cuenta de Ariel.
+cuatro servicios, el horario laboral y la cuenta del peluquero.
 
 **El seed va en el build a propósito**, y no como paso manual: el plan gratuito de Render
 no da acceso a shell, así que no hay dónde correrlo a mano. Es seguro que se repita en
 cada deploy porque `prisma/seed.ts` es idempotente — cada bloque comprueba si el dato ya
 existe antes de crearlo. En particular, **el administrador solo se crea si no existe**, así
-que si Ariel cambia su contraseña desde el panel, un redeploy no se la revierte.
+que si el peluquero cambia su contraseña desde el panel, un redeploy no se la revierte.
 
 > Si preferís no atar el deploy al seed, la alternativa es correrlo una sola vez desde tu
 > máquina apuntando a la base de producción:
@@ -80,7 +80,7 @@ Variables de entorno (las mismas de `backend/.env.example`):
 - `FRONTEND_URL` — **la URL de Vercel, sin barra final.** Si falta, cae al default
   `http://localhost:5173` y los mails de confirmación salen con links a localhost, que no
   le sirven a ningún cliente
-- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — para el push a Ariel. Las
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — para el push al peluquero. Las
   tres van juntas; si faltan, el push queda apagado y el resto anda igual
 - `BREVO_API_KEY`, `MAIL_FROM`, `MAIL_FROM_NOMBRE` — envío de mail. Sin la key, el mail se
   imprime por consola en vez de enviarse
@@ -89,7 +89,7 @@ Variables de entorno (las mismas de `backend/.env.example`):
 #### Cómo generar los secretos
 
 **`JWT_SECRET`** — firma los tokens de sesión del panel. Cualquiera que lo tenga puede
-fabricarse un token válido y entrar como Ariel, así que tiene que ser largo y aleatorio,
+fabricarse un token válido y entrar como el peluquero, así que tiene que ser largo y aleatorio,
 distinto del de desarrollo, y no salir nunca del panel de variables de Render:
 
 ```bash
@@ -109,7 +109,7 @@ Imprime una pública y una privada: van en `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_K
 problema con los envíos.
 
 Generá un par nuevo para producción y **no lo cambies después**: las suscripciones que
-Ariel ya tenga están firmadas contra la clave pública vigente, y si la reemplazás el
+el peluquero ya tenga están firmadas contra la clave pública vigente, y si la reemplazás el
 celular deja de recibir avisos hasta volver a activarlos desde "Mi cuenta".
 
 ### 2. Frontend (Vercel → Add New Project)
@@ -145,7 +145,7 @@ solo reescribe lo que no encuentra.
   `ADMIN_PASSWORD`
 - Reservar un turno de prueba con email y confirmar que el mail llega con un link de la
   URL de Vercel, no de localhost — es el error más fácil de cometer
-- Desde el celular de Ariel: **Mi cuenta → Activar avisos en este dispositivo → Enviar
+- Desde el celular del peluquero: **Mi cuenta → Activar avisos en este dispositivo → Enviar
   prueba**
 - Cambiar la contraseña del admin desde el panel, ya que la del seed viajó por una
   variable de entorno

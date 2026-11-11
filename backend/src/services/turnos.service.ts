@@ -2,6 +2,11 @@ import { prisma } from '../config/prisma'
 import {
   DIAS_FUTURO_PUBLICO,
   DIAS_PASADOS_ADMIN,
+  entraComoTurnoExtra,
+  FIN_DEL_DIA_MINUTOS,
+  franjasSegunFeriado,
+  huecosExtraDelDia,
+  minutosDelDia,
   obtenerHorariosDelDia,
   obtenerServicioActivo,
 } from './disponibilidad.service'
@@ -12,6 +17,7 @@ import {
 } from './clientes.service'
 import {
   FueraDeHorizonteError,
+  FueraDeHuecoExtraError,
   FueraDeVentanaError,
   HorarioNoDisponibleError,
   LimiteSemanalError,
@@ -393,6 +399,113 @@ export async function crearTurno(
     // Flujo alternativo de CU-01: otro cliente reservó ese horario en el medio. La
     // validación de arriba tiene una ventana de carrera de milisegundos — el EXCLUDE
     // constraint de la base es la que realmente lo impide.
+    if (esViolacionDeSolapamiento(err)) throw new HorarioNoDisponibleError()
+    throw err
+  }
+}
+
+/** HU-35 — Lo que hace falta para un turno fuera de horario. Es `DatosNuevoTurno` con el
+ * `origen` obligatorio: solo lo carga Ariel, nunca el cliente. */
+export type DatosTurnoExtra = DatosNuevoTurno & { origen: OrigenTurno }
+
+/**
+ * HU-35 — Un turno **fuera de horario**: Ariel se queda después del cierre de la mañana o
+ * de la tarde para atender a uno más, solo ese día.
+ *
+ * ⚠️ **No pasa por `obtenerHorariosDelDia`, y es el punto.** Ese cálculo solo recorre las
+ * franjas de `horario_laboral`, y por eso este rato nunca se le ofrece al cliente: la web no
+ * puede ni verlo ni reservarlo sin que haya que escribir una sola línea del lado público. En
+ * vez de estirar el horario de ese día (que sí abriría el rato para todos), el rato extra lo
+ * valida `entraComoTurnoExtra`: arranca en o después del cierre de una franja abierta, y
+ * termina antes de que abra la siguiente — o antes de la medianoche si es la última.
+ *
+ * Vive al lado de `crearTurno` y **no la toca**, con el mismo criterio que
+ * `crearTurnosEnGrupo`: la carga de siempre no pasa por una línea nueva.
+ *
+ * Una vez creado es un turno **normal** en todo: se marca, se cobra, se reprograma, entra en
+ * Cobros y en el Excel. Nada lo distingue en la base, así que no hay columna nueva: que es
+ * "extra" se ve en que cae fuera del horario de ese día.
+ *
+ * Que no se pise con otro turno lo decide el `EXCLUDE`, igual que siempre.
+ */
+export async function crearTurnoExtra(
+  input: DatosTurnoExtra,
+): Promise<TurnoConCliente> {
+  const servicio = await obtenerServicioActivo(input.servicioId)
+
+  // Red del controller, que ya lo explica con un 400 (mismo reparto que `crearTurno`).
+  if (!fechaCargableComoAdmin(input.fecha, ahoraArgentina())) {
+    throw new FueraDeHuecoExtraError()
+  }
+
+  const [feriado, franjasDb, bloqueos] = await Promise.all([
+    prisma.feriado.findUnique({ where: { fecha: input.fecha } }),
+    prisma.horarioLaboral.findMany({
+      where: { diaSemana: input.fecha.getUTCDay() },
+    }),
+    prisma.bloqueoHorario.findMany({
+      where: { fechaInicio: { lte: input.fecha }, fechaFin: { gte: input.fecha } },
+    }),
+  ])
+
+  const franjasDelHorario = franjasDb.map((f) => ({
+    horaInicio: f.horaInicio,
+    horaFin: f.horaFin,
+  }))
+  // Feriado cerrado: no queda ninguna franja abierta, así que tampoco ningún rato extra.
+  const franjasAbiertas =
+    feriado?.modalidad === 'cerrado'
+      ? []
+      : franjasSegunFeriado(franjasDelHorario, feriado?.modalidad ?? null)
+
+  const horaInicio = horaDesdeString(input.hora)
+  const inicio = minutosDelDia(horaInicio)
+  const fin = inicio + servicio.duracionMinutos
+  const huecos = huecosExtraDelDia(franjasDelHorario, franjasAbiertas)
+  if (!entraComoTurnoExtra(huecos, inicio, servicio.duracionMinutos)) {
+    throw new FueraDeHuecoExtraError()
+  }
+
+  // Un bloqueo también tapa el rato extra. Las horas en null se leen hasta los bordes del
+  // día entero —no del horario, como en `detalleDelDia`—: un bloqueo "desde las 18" o unas
+  // vacaciones dicen que Ariel no está, y eso vale también después del cierre.
+  const bloqueado = bloqueos.some((b) => {
+    const desde = b.horaInicio ? minutosDelDia(b.horaInicio) : 0
+    const hasta = b.horaFin ? minutosDelDia(b.horaFin) : FIN_DEL_DIA_MINUTOS
+    return inicio < hasta && desde < fin
+  })
+  if (bloqueado) throw new FueraDeHuecoExtraError()
+
+  const horaFin = new Date(
+    horaInicio.getTime() + servicio.duracionMinutos * 60_000,
+  )
+
+  const clienteId = await vincularCliente(
+    input.clienteTelefono,
+    input.clienteNombre,
+  )
+
+  try {
+    return await prisma.turno.create({
+      include: INCLUDE_CLIENTE,
+      data: {
+        clienteNombre: input.clienteNombre,
+        clienteTelefono: input.clienteTelefono,
+        clienteEmail: input.clienteEmail,
+        clienteId,
+        servicioId: servicio.id,
+        servicioNombreSnapshot: servicio.nombre,
+        servicioDuracionSnapshot: servicio.duracionMinutos,
+        fecha: input.fecha,
+        horaInicio,
+        horaFin,
+        origen: input.origen,
+        // HU-17 — Lo tipeó Ariel: nace visto, como toda carga manual.
+        vistoPorAdmin: true,
+      },
+    })
+  } catch (err) {
+    // Otro turno ya ocupa ese rato (se cargó en el medio, o Ariel eligió una hora pisada).
     if (esViolacionDeSolapamiento(err)) throw new HorarioNoDisponibleError()
     throw err
   }

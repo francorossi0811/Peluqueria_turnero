@@ -10,6 +10,7 @@ import {
   coloresRecientes,
   idsNuevosDespuesDe,
   crearTurno,
+  crearTurnoExtra,
   crearTurnosEnGrupo,
   editarTurno,
   esCobrable,
@@ -28,6 +29,7 @@ import {
 import { clienteDto, type TurnoConCliente } from '../services/clientes.service'
 import {
   FueraDeHorizonteError,
+  FueraDeHuecoExtraError,
   FueraDeVentanaError,
   HorarioNoDisponibleError,
   LimiteSemanalError,
@@ -446,6 +448,18 @@ function manejarErroresComunes(err: unknown, res: Response): boolean {
     })
     return true
   }
+  // HU-35 — El turno fuera de horario que no cae en ningún rato extra. El mensaje dice la
+  // regla entera porque Ariel puede haber tocado la hora a mano.
+  if (err instanceof FueraDeHuecoExtraError) {
+    res.status(409).json({
+      error: {
+        codigo: 'HORARIO_EXTRA_INVALIDO',
+        mensaje:
+          'Un turno fuera de horario va después del cierre y tiene que terminar antes de que abra la tarde (o antes de la medianoche, a la noche). Ese día tampoco puede estar cerrado ni bloqueado.',
+      },
+    })
+    return true
+  }
   // HU-27
   if (err instanceof TurnoNoCobrableError) {
     res.status(409).json({
@@ -684,6 +698,65 @@ export async function postTurnoManual(req: Request, res: Response) {
 
     // También cuando lo carga Ariel: si el cliente le dictó un mail, merece la
     // confirmación con su link igual que si hubiera reservado él mismo por la web.
+    void enviarConfirmacionDeTurno(turno)
+  } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+/** HU-35 — El turno fuera de horario: Ariel se queda después del cierre para uno más.
+ *
+ * Ruta propia y no un flag en `POST /admin/turnos` por el criterio de siempre: la ruta dice
+ * qué se está pidiendo. Ese endpoint valida contra la disponibilidad (el horario laboral) y
+ * este contra el rato de después del cierre, y son dos reglas que no se pueden mezclar en un
+ * `if` sin que una termine aflojando a la otra.
+ *
+ * El body es el mismo que la carga manual (`bodyManualSchema`): mismo nombre libre, mismo
+ * teléfono opcional, mismo origen. Lo único que cambia es qué horas valen. */
+export async function postTurnoExtra(req: Request, res: Response) {
+  const parsed = bodyManualSchema.safeParse(req.body)
+  if (!parsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      parsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  const {
+    servicioId,
+    fecha,
+    hora,
+    clienteNombre,
+    clienteTelefono,
+    clienteEmail,
+    origen,
+  } = parsed.data
+
+  // HU-08 — Mismo tope hacia atrás que cualquier carga de Ariel, explicado acá por el mismo
+  // motivo que en `postTurnoManual`.
+  if (!fechaCargableComoAdmin(fechaDesdeIso(fecha), ahoraArgentina())) {
+    respondErrorParametrosInvalidos(
+      res,
+      `No se pueden cargar turnos de más de ${DIAS_PASADOS_ADMIN} días atrás.`,
+    )
+    return
+  }
+
+  try {
+    const turno = await crearTurnoExtra({
+      servicioId,
+      fecha: fechaDesdeIso(fecha),
+      hora,
+      clienteNombre,
+      clienteTelefono,
+      clienteEmail,
+      origen,
+    })
+    res.status(201).json(turnoAdminDto(turno))
+
+    // Igual que la carga manual: si el cliente le dictó un mail, se lleva su confirmación.
     void enviarConfirmacionDeTurno(turno)
   } catch (err) {
     if (manejarErroresComunes(err, res)) return

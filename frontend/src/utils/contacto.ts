@@ -47,6 +47,20 @@ export function whatsappCon(mensaje: string): string {
   return `https://api.whatsapp.com/send?phone=549${TELEFONO_LEGIBLE}&text=${encodeURIComponent(mensaje)}`
 }
 
+/** HU-36 — El chat con **un cliente**, con el mensaje ya escrito. Es el camino inverso de
+ * `whatsappCon`: ahí el cliente le escribe a Ariel, acá Ariel le escribe al cliente.
+ *
+ * Recibe el teléfono de la **ficha** (`cliente.telefono`, `+549…`), nunca el que se tipeó en
+ * el turno: ese viene como lo escribió la persona ("351 459 3325") y le falta justo lo que
+ * WhatsApp necesita, el `54` y el `9` de celular. La ficha ya lo trae normalizado por el
+ * backend (`aE164`, con `libphonenumber-js`), que es la única traducción en la que confiar.
+ *
+ * Por `api.whatsapp.com` y no por `wa.me` por lo mismo que `whatsappCon`: el 👇 del mensaje. */
+export function whatsappAlCliente(telefonoDeLaFicha: string, mensaje: string): string {
+  const numero = telefonoDeLaFicha.replace(/\D/g, '')
+  return `https://api.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(mensaje)}`
+}
+
 /** La casilla a la que se escribe por datos personales (política de privacidad y pedido
  * de eliminación, Ley 25.326).
  *

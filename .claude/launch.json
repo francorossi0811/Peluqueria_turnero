@@ -14,6 +14,20 @@
       "runtimeArgs": [".claude/dev-backend.sh"],
       "port": 3000,
       "autoPort": false
+    },
+    {
+      "name": "backend-3100",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "PORT=3100 exec /bin/bash .claude/dev-backend.sh"],
+      "port": 3100,
+      "autoPort": false
+    },
+    {
+      "name": "frontend-5180",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "export PATH=/Users/francorossi/.nvm/versions/node/v24.18.1/bin:$PATH; cd frontend && VITE_API_URL=http://localhost:3100/api exec npx vite --port 5180 --strictPort"],
+      "port": 5180,
+      "autoPort": false
     }
   ]
 }

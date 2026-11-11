@@ -173,6 +173,29 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
 - ⚠️ **Un 401 solo cierra la sesión si corresponde al token que está guardado AHORA** (`debeCerrarSesion` en `api/client.ts`, 3/9/2026). Sin esa guarda, un request que salió con un token viejo y llegó tarde mata la sesión **nueva**, y el síntoma es "me logueo y a los segundos me desloguea": el panel arranca con la sesión vencida y dispara sus requests → `RequireAuth` manda al login → Ariel entra y se guarda un token nuevo → los 401 de aquellos requests llegan **después** y lo borran. El camino de **éxito** ya tenía esta guarda (para que una respuesta vieja no reviva una sesión cerrada) y el de **error** no: se arregló uno sin mirar su espejo. Hay tests que fijan los dos lados.
 - ⚠️ **Un `X-Token-Renovado` no se guarda solo porque vino en un header** (`debeGuardarRenovacion` en `api/client.ts`, 4/9/2026). El síntoma era "entro con cualquier cuenta, toco cualquier cosa y me echa", **en una sola computadora** — nunca en incógnito ni en el celular. El rastro, capturado en el navegador: el login guardaba un token válido y 7 segundos después otro `setToken` lo pisaba con un token **de otra cuenta, emitido 16 días antes y vencido hacía 9**; `RequireAuth` leía ese y rebotaba al login. **No hubo ni un 401**: la respuesta era un 200 servido desde la **caché HTTP del navegador**. La cadena, medida contra producción y no deducida: las respuestas del panel viajaban con `ETag` y **sin `Cache-Control`**, así que el navegador las guardaba en disco con el `X-Token-Renovado` adentro —que es una credencial—; sin **`Vary: Authorization`** esa copia no quedaba atada a la sesión; y al revalidar, el `304` no reenvía el header, así que por las reglas de HTTP el navegador **conserva el de la copia vieja** y se lo entrega a la app como si fuera de ahora. La causa raíz se tapó en el backend (`Cache-Control: no-store` en `requireAuth`, antes de cualquier `return` para que cubra también los 401), pero la guarda del cliente se queda igual por dos motivos: las copias ya cacheadas siguen vivas en los navegadores hasta que caduquen, y **un token es lo único que decide quién sos** — no puede depender de que ningún intermediario se porte bien. Son cuatro condiciones y ninguna sobra: el request salió con el token guardado hoy (la guarda vieja, la de `debeCerrarSesion`), el renovado se puede leer y **no está vencido**, es de la **misma cuenta** (`sub` — sin esto una respuesta cacheada te cambia de identidad en silencio), y su **`iat` es estrictamente mayor** — esta última es la que ataja el caso que las otras dejan pasar: un token viejo que todavía no venció, que se ve sano y solo acorta la sesión sin que nada lo delate. ⚠️ De paso el `no-store` tapa un agujero de privacidad que estaba al lado: la agenda cacheada de una cuenta se le podía servir a otra en el mismo navegador, porque la entrada de caché se indexa por URL y no por quién la pidió. Hay 9 tests sobre `debeGuardarRenovacion` y se verificó en el navegador por los dos lados: con el backend mandando el header envenenado en **cada** respuesta el panel navega entero sin perder la sesión, y un token a mitad de vida se sigue renovando.
 - ⚠️ **Cuando la sesión vence, el login dice por qué.** Una pantalla de login sin explicación se lee como "la app me echó" — el mismo malentendido que ya había causado la flechita de atrás de Chrome. El aviso viaja por `sessionStorage` (no por la URL: no tiene por qué quedar en el historial) y **se consume al entrar, no al leerlo**: con `StrictMode` React monta, desmonta y vuelve a montar, así que consumirlo en el render o en un `useEffect` de montaje hace que no se vea nunca. Es un bug que no aparece compilando, solo mirando la pantalla.
+- ⚠️ **Ariel puede cargar turnos FUERA DE HORARIO** (HU-35, 10/11/2026), con el "+" redondo
+  que hay debajo del último horario de cada franja, **solo en la vista Semana**. ⚠️ En la
+  vista Día no hay "+" (Franco lo pidió sacar el mismo día): ahí el turno extra se ve recién
+  cuando ya se cargó, como cualquier otro. Van por
+  `POST /api/admin/turnos/extra` → `crearTurnoExtra`, que **no pasa por la disponibilidad**:
+  la valida `entraComoTurnoExtra` contra `huecosExtraDelDia` (después del cierre de una
+  franja abierta, hasta que abre la siguiente — 17:00 a la mañana — o hasta las **23:59**
+  la última). **Por eso el cliente no los ve**: la disponibilidad pública y `POST /api/turnos`
+  no se tocaron. Estirar el horario de ese día habría abierto el rato para todos.
+  - **Sin columna nueva ni migración**: un turno extra es un turno normal que cae fuera del
+    horario del día. Se marca, se cobra, se reprograma, entra en Cobros y en el Excel.
+  - ⚠️ **El tope es 23:59 y no 24:00**: `hora_fin` es `TIME`, un turno que termina a las
+    24:00 se guarda como `00:00` y el `EXCLUDE` corta con rango invertido (500).
+  - ⚠️ **La grilla semanal se estira para mostrarlos** (`extenderConExtras`): sin eso, un
+    turno de 13:20 no caía en ningún tramo y no se dibujaba. Siempre suma un renglón de 20
+    minutos rayado debajo de cada franja, que es donde vive el "+".
+  - ⚠️ **El "+" sigue la cadena desde el cierre, no "después del último"** (`proximaHoraExtra`
+    en `utils/turnoExtra.ts`, la copia del frontend que solo dibuja). Con extras a las 13:00
+    y a las 16:40, "después del último" daba 17:00 = el tope y el botón desaparecía aunque
+    13:20–16:40 estaba libre. Visto en pantalla.
+  - Los campos del cliente de la carga manual viven en `CamposClienteManual`, que usan
+    `ModalCargarTurno` y `ModalTurnoExtra`: las reglas del teléfono opcional tienen que ser
+    una sola.
 - ⚠️ **Ariel le puede poner color a un turno, y ese color le gana al del día** (HU-34, 15/9/2026). Vive en `turnos.color` (`#rrggbb` o `null`) y **solo se mira mientras el turno está `reservado`**: ahí gana sobre el corte de "hoy o antes" de la grilla —un turno coloreado **no pasa a blanco al llegar el día**, que es justo lo que se pidió— y al marcarlo Realizado o Ausente vuelven el verde y el rojo del estado. ⚠️ **El color no se borra al marcar**, a propósito: sacarle el Ausente a alguien devuelve el turno a su color. `cambiarColorDelTurno` **rechaza un turno ya marcado** (409 `TURNO_NO_MODIFICABLE`), porque guardar un color que no se ve en ningún lado se parece demasiado a un color que no se guardó. El texto del bloque lo decide `tintaSobre` (luminancia WCAG, corte en 0,179), no el tema: el fondo lo eligió Ariel y puede ser cualquier cosa. ⚠️ **La paleta de colores recientes es una tabla propia (`colores_recientes`), no una consulta sobre `turnos.color`** — corregido el mismo día: deducirla de los turnos hacía que tocar "Sin color" en el único turno con ese color lo borrara **también de la paleta**, o sea que sacarle el color a un turno le borraba el color de la lista. Se anota en cada elección (`upsert` sobre el color en minúscula) y sacarle el color a un turno no la toca. Vive en la base para que sea la misma en el celular y en la tablet.
 - ⚠️ **En la grilla semanal el pendiente se parte por CUÁNDO, y el corte es "hoy o antes"** (`clasesDeEstado` en `GrillaSemana.tsx`, 23/8/2026): blanco lo que está **abierto** —hoy, o un día que ya pasó y Ariel nunca cerró—, mostaza lo que **todavía va a pasar**. Hasta esa fecha el corte era `dia === hoy`, y un `reservado` de ayer volvía a mostaza: se veía **igual que uno de la semana que viene**, o sea que la fila que hay que ir a marcar Realizado o Ausente era justo la que quedaba disfrazada de futuro. ⚠️ La comparación es de **strings ISO** (`dia <= hoy`), nunca `new Date(dia)`: `YYYY-MM-DD` se parsea en UTC y en Argentina correría el borde un día. **La vista Día no se tocó** — su `ESTILO_ESTADO` tiene escrito por qué ahí el chip `reservado` es siempre mostaza: la vista ya está parada en un día, así que "es de hoy" no distingue nada. El re-render a medianoche ya estaba cubierto por `useMinutosAhora` + el `hoyIso()` que se llama en el JSX.
 - ⚠️ **Las fotos que sube Ariel viven en Postgres** (`imagenes.datos`, HU-29, 16/8/2026), comprimidas **en el navegador** a ~150 KB antes de subir. No fue preferencia: no había ningún lugar donde un archivo subido sobreviviera —`frontend/public` se hornea en el build de Vercel y el disco de Render es efímero— y un bucket traía cuenta nueva y trámite externo, lo mismo que tiene frenado a WhatsApp. **El techo es real**: Neon free son 0,5 GB. ⚠️ **Eran dos los números que lo sostenían y desde el 23/8/2026 queda uno solo**: Franco pidió sacar el tope de **5 fotos por ficha** (Ariel sabe que ocupan y prefiere cuidarlo él antes de que el sistema le corte en la mitad de un trabajo), así que lo único que queda es la compresión a ~150 KB. El techo dejó de ser estructural y pasó a depender de que alguien mire un número — por eso el medidor de "Mi cuenta" **dejó de ser informativo** y ahora muestra el uso contra `PRESUPUESTO_DE_FOTOS` (400 MB, no los 500 de Neon: la misma base guarda turnos y clientes). Mudarse a un bucket después no toca ninguna pantalla, porque el frontend solo ve `/api/imagenes/<id>`.
@@ -187,8 +210,9 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
 - La sesión del admin dura 7 días y se renueva sola mientras use el panel; cambiar la contraseña invalida los tokens emitidos antes (HU-15, HU-16).
 - **Se entra al panel con el email, no con un usuario** (HU-26). `administradores.usuario` es solo el nombre que se muestra. Hay dos roles: `super_admin` (Franco) y `admin` (Ariel); **la única diferencia es administrar cuentas**, todo lo demás lo puede el `admin`.
 - ⚠️ **El cliente reserva SIN email** (15/9/2026, pedido de Franco). Era opcional, pero el campo se leía como "hay que mandar algo por mail" y confundía a Ariel y a los clientes. Se sacó **también del backend**: `bodySchema` y `grupoSchema` ya no declaran `clienteEmail` (zod lo descarta si llega, así que un bundle viejo no da 400), y `POST /api/turnos/:id/enviar-confirmacion` —con `guardarEmailDelCliente` y `TurnoYaTieneEmailError`— se borró. **El mail sigue vivo en la carga de Ariel**: `bodyManualSchema` y `grupoManualSchema` lo declaran aparte (`emailOpcionalSchema`), y con email cargado sale la confirmación con link y `.ics` como siempre. La columna `turnos.cliente_email` no se tocó: sin migración.
-- El **teléfono se valida en dos niveles**, y desde el 14/8/2026 los dos corren en las **tres** puertas (reserva pública, carga manual y `PATCH …/telefono`): `esTelefonoValido` mira cómo está escrito (8 a 15 dígitos, con espacios/guiones/paréntesis y un `+` inicial) y `esTelefonoUtilizable` mira si el número **puede existir** (`aE164`, metadata `max` de `libphonenumber-js`). **Es obligatorio cuando reserva un cliente por la web** (es el único dato con el que Ariel lo ubica) y **opcional cuando el turno lo carga Ariel a mano**, porque no se sabe los números de memoria; si escribió algo, tiene que pasar las dos reglas. La diferencia se hace sobrescribiendo el campo en `bodyManualSchema`, no aflojando `bodySchema`.
+- El **teléfono se valida en dos niveles**, y desde el 14/8/2026 los dos corren en las **tres** puertas (reserva pública, carga manual y `PATCH …/telefono`): `esTelefonoValido` mira cómo está escrito (7 a 15 dígitos, con espacios/guiones/paréntesis y un `+` inicial) y `esTelefonoUtilizable` mira si el número **puede existir** (`aE164`, metadata `max` de `libphonenumber-js`). **Es obligatorio cuando reserva un cliente por la web** (es el único dato con el que Ariel lo ubica) y **opcional cuando el turno lo carga Ariel a mano**, porque no se sabe los números de memoria; si escribió algo, tiene que pasar las dos reglas. La diferencia se hace sobrescribiendo el campo en `bodyManualSchema`, no aflojando `bodySchema`.
   - ⚠️ **Por qué la segunda regla está en las tres y no solo en el PATCH, que era donde vivía:** un número bien escrito pero inexistente (`2954123456`) entraba en la reserva, `vincularCliente` no lo podía normalizar y el turno quedaba **sin ficha**; cuando Ariel lo quería completar a mano, el PATCH sí lo rechazaba y le decía "inválido" sobre un número que el sistema ya había aceptado. Una regla decidía si entraba y otra distinta si servía, en momentos distintos, y el que se comía el problema era el que ya no podía corregirlo. Hay un test que fija la diferencia entre las dos reglas.
+  - ⚠️ **Sin característica se asume 351** (10/11/2026, pedido de Franco): Ariel tipea los números como le salen. Vive en `interpretar` de `utils/telefono.ts`, o sea dentro de `aE164`, así que lo heredan las tres puertas, la ficha y los avisos sin tocar a ninguno. **Solo es una segunda oportunidad**: primero se lee el número tal cual y el 351 se prueba únicamente si así no es válido, con **7 dígitos** (`555 1234`) o **9 que empiecen con `15`** (`15 555 1234`), y nunca con `+` adelante. Por eso el mínimo de `esTelefonoValido` bajó de 8 a 7, en las dos copias. Un `4555 1234` (fijo porteño sin el 11) se sigue rechazando. Lo guardado no cambia: `cliente_telefono` queda como lo tipeó Ariel. Verificado por las tres puertas contra `desarrollo`.
   - ⚠️ La copia del frontend (`utils/validaciones.ts`) tiene **solo la primera**: la segunda necesita la metadata de `libphonenumber-js`, cara para el bundle público. El backend rechaza y las dos pantallas muestran su mensaje **pegado al campo** — en `ReservarPage` eso además implica **quedarse en el paso de datos**, porque antes rebotaba al paso del horario con un mensaje genérico.
 - **En un feriado Ariel trabaja medio día por defecto** (la primera franja del día). Puede pasarlo a día completo o a cerrado desde el panel. Vive en `feriados.modalidad` (enum de tres, default `medio_dia`), y solo tiene efecto en los días que trabaja. Los feriados se cargan solos desde Nager.Date, y la sincronización **nunca pisa la modalidad** que eligió Ariel.
 - **Un cliente es un teléfono normalizado** (HU-25), no un nombre: dos turnos con el mismo número son la misma persona. La ficha se crea sola dentro de `crearTurno`; un turno sin teléfono no tiene ficha hasta que se lo cargan. El **apodo** que le pone Ariel manda sobre el nombre con el que reservó el cliente, en toda la interfaz.
@@ -1191,6 +1215,68 @@ la prop `vista` de `GrillaHorarios`, default `'botones'`.
   calendario pone arriba de los horarios de qué día son.
 - Quedó un turno de prueba en `desarrollo`: "Prueba Calendario", reprogramado del 3/11 al
   4/11 a las 11:00.
+
+### Turnos fuera de horario (10/11/2026) — HU-35 ✅ en `desarrollo`
+
+La regla está en "Reglas de negocio clave". **Sin migraciones**, así que pasar a `main` no
+necesita el ritual contra producción.
+
+**Verificado de verdad** sobre la base `desarrollo` (el jueves 12/11, que no tenía turnos):
+- Por API: 13:00 y 13:20 seguidos → `201`; 13:10 pisando → `409 HORARIO_NO_DISPONIBLE`;
+  12:40 (dentro de la mañana), 12:50 (cruza el cierre), 16:50 de 30 min (se pasa de las 17),
+  17:30 (dentro de la tarde), 23:40 de 20 min (24:00) y un domingo → `409
+  HORARIO_EXTRA_INVALIDO`; 16:40 que termina 17:00 justo y 23:39 que termina 23:59 → `201`;
+  un día de hace más de 7 → `400`; sin token → `401`.
+- El cliente no lo ve: la disponibilidad pública del día siguió siendo 10:00–12:40 y
+  17:00–19:40, y un `POST /api/turnos` a las 13:50 dio `409`. La carga manual de siempre
+  también lo rechaza: el rato extra solo se carga por su ruta.
+- Un extra marcado Realizado con cobro aparece en `GET /admin/cobros`.
+- En pantalla: el "+" debajo de las 12:40 en los cinco días y corrido a 13:50 en el jueves;
+  cargar desde el modal lo baja a 14:20; el choque se avisa en el modal sin borrar el
+  nombre; el aviso del tope ("terminaría a las 17:20 y a las 17:00 abre la tarde") apaga el
+  botón. `ModalCargarTurno` sigue igual después de sacarle los campos.
+- La vista Día **no tiene "+"**: tuvo uno ("Turno fuera de horario · 20:30", entre los
+  turnos) y se sacó a pedido de Franco. Verificado después de sacarlo: cero botones en la
+  vista Día del jueves, los seis extras listados como turnos comunes, y los diez "+" de la
+  Semana intactos.
+- ⚠️ **Los servidores que suelen estar en 3000 y 5173 en esta máquina son de otro proyecto**
+  (Confluens), no de este. Para probar sin pisarlos, `.claude/launch.json` tiene
+  `backend-3100` y `frontend-5180` (el frontend apunta solo a `localhost:3100/api` por
+  `VITE_API_URL` en el entorno, que le gana al `.env`).
+- ⚠️ Para firmar el JWT de prueba con `node -e`, `dotenv` 17 imprime un aviso por stdout que
+  se pega adelante del token: usar `config({ quiet: true })`. Síntoma: `400` con cuerpo vacío
+  en todas las rutas autenticadas.
+- Quedaron turnos de prueba en `desarrollo` el 12/11: "Prueba Extra …" (13:00 realizado y
+  cobrado, 13:20, 16:40, 20:00, 23:39) y "Prueba Pantalla" 13:50.
+
+### Link por WhatsApp al cliente cargado a mano (10/11/2026) — HU-36 ✅ en `desarrollo`
+
+Si el turno quedó con ficha, `ModalCargarTurno` y `ModalTurnoExtra` no se cierran al guardar:
+muestran `PasoTurnoCargado` con "Mandarle el link por WhatsApp". El mismo botón está en
+`ModalTurno` mientras el turno está `reservado`. Todo vive en
+`components/admin/WhatsappAlCliente.tsx`. Puro frontend, sin migraciones ni endpoints.
+
+- ⚠️ **El mensaje es `mensajeDeArielConfirmando`, en la voz de Ariel** ("Hola Juan, te
+  confirmo tu turno:"), no el del cliente: aquel empieza "Hola Ariel, soy Juan" y mandado
+  desde el teléfono de Ariel diría que Ariel es Juan. Franco eligió esto entre las dos
+  opciones. Después del saludo es **idéntico** al del cliente (link, alias, comprobante), y
+  hay un test que lo fija renglón por renglón.
+- ⚠️ **El número sale de la ficha (`cliente.telefono`, `+549…`), nunca de
+  `clienteTelefono`**, que está como lo tipeó Ariel y le falta el `54` y el `9`. Sin ficha no
+  hay botón. `whatsappAlCliente` va por `api.whatsapp.com` y no por `wa.me`, por el 👇.
+- Es un `<a target="_blank">`, no `location.href`: el toque es directo (no hay mutación en el
+  medio), y así el panel queda donde estaba.
+- El verde del botón es un token propio (`--color-whatsapp`, oscurecido para que el texto
+  blanco se lea), aparte de `realizado` aunque se parezcan.
+
+**Verificado en el navegador** contra `desarrollo`: cargar una Barba el viernes 13 a las 11:00
+con el teléfono `351 555 1234` dejó la ventana en "Turno cargado" con el botón, apuntando a
+`api.whatsapp.com/send?phone=5493515551234` (con el `9`) y con el texto "Hola Prueba Whatsapp,
+te confirmo tu turno:" + el link de gestión + alias/CVU/comprobante. En el detalle de ese
+turno, el mismo botón. En un turno sin teléfono no aparece, y aparece apenas se le carga uno
+desde el detalle (`351 555 4321` → `5493515554321`). Quedaron en `desarrollo` "Prueba
+Whatsapp" (13/11 11:00) y la ficha nueva de "Prueba Extra 13:20". También "Prueba Sin351" (`15 555 9876`), "Prueba Local" (`555 4433`), "Prueba Publico" (14/11 11:00, `555 7788`) y el teléfono `15-555-2211` cargado a "Prueba Extra 16:40": los cuatro con ficha `+549351…`. 🚧 Sin probar en un
+celular de verdad que la app de WhatsApp abra el chat con el texto.
 
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 

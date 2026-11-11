@@ -28,9 +28,9 @@ describe('esTelefonoValido', () => {
     expect(esTelefonoValido('---')).toBe(false)
   })
 
-  it('exige al menos 8 dígitos', () => {
-    expect(esTelefonoValido('1234567')).toBe(false)
-    expect(esTelefonoValido('12345678')).toBe(true)
+  it('exige al menos 7 dígitos: un número local de Córdoba sin característica', () => {
+    expect(esTelefonoValido('123456')).toBe(false)
+    expect(esTelefonoValido('1234567')).toBe(true)
   })
 
   it('no acepta más de 15 dígitos (máximo de E.164)', () => {

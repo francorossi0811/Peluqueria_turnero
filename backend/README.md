@@ -1,4 +1,4 @@
-# Backend — Turnero Peluquería Ariel
+# Backend — Turnero Peluquería
 
 Node + Express + TypeScript + Prisma (PostgreSQL).
 
