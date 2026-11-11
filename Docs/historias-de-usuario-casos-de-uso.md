@@ -527,13 +527,17 @@ necesita anotarse algo que el sistema no sabe.
 Como Ariel, quiero agregar un turno después del cierre de la mañana o de la noche, solo para
 ese día, para registrar al cliente que atiendo fuera de mi horario sin tener que cambiar el
 horario de la peluquería. *(Pedido del 10/11/2026.)*
-- En la **vista Semana**, debajo del último horario de cada franja, hay un **botón redondo
-  con un "+"**:
-  - Si esa semana la franja **no tiene ningún turno fuera de horario**, el "+" es uno solo,
-    en la columna de las horas, debajo de la última hora, y carga el turno **para hoy**. No
-    se agrega ningún renglón a la grilla. Mirando otra semana no aparece.
-  - Si ya cargué alguno, la grilla suma el rato de los extras y el "+" aparece **abajo de
-    cada día**, para seguir sumando en cualquiera de ellos.
+- En la **vista Semana** hay un **botón redondo con un "+"**:
+  - En la columna de las horas, en la **última hora** de cada franja, siempre y en
+    cualquier semana. Como no está debajo de ningún día, al tocarlo **elijo el día** entre
+    los de esa semana; no viene ninguno marcado, ni siquiera hoy, y el resto del formulario
+    aparece cuando elijo.
+  - Debajo de cada día, **solo si ese día ya tiene un turno fuera de horario** en esa
+    franja: queda debajo del último, para seguir sumando, y abre directo con ese día.
+  - Si la franja no tiene ningún turno fuera de horario en la semana, no se agrega ningún
+    renglón a la grilla; si tiene, la grilla suma el rato de los extras.
+  *(Ajustado el 11/11/2026: antes el "+" de las horas cargaba solo para hoy y había uno
+  debajo de cada día aunque no tuviera extras.)*
 - ⚠️ **Solo se carga desde la Semana** (pedido de Franco, 10/11/2026). En la **vista Día** no
   hay "+": ahí el turno extra aparece recién cuando ya lo cargué, como cualquier otro turno.
   La primera versión tenía un botón también en la vista Día y se sacó.
@@ -580,6 +584,36 @@ reprogramar o cancelar sin tener que escribirle yo. *(Pedido del 10/11/2026.)*
 *Por qué mira la ficha y no el teléfono que se escribió:* el teléfono del turno queda como lo
 tipeé ("351 555 1234") y a WhatsApp le falta el `54` y el `9` de celular. La ficha ya lo
 tiene normalizado, y que exista es la prueba de que el número sirve.
+
+**HU-37 — Avisarle al cliente que le cancelé el turno**
+Como Ariel, quiero que cuando cancelo a mano el turno de un cliente fichado se me ofrezca
+avisarle por WhatsApp con el mensaje ya escrito, para que no venga en vano sin que yo tenga
+que redactarlo. *(Pedido del 11/11/2026.)*
+- Vale para las dos formas de cancelar desde el panel: el botón "Cancelar" de la vista Día y
+  "Cancelar turno" en el detalle del turno de la vista Semana.
+- Después de confirmar, si el turno tiene ficha (o sea teléfono, HU-25), aparece un cartel
+  **"Turno cancelado"** con un botón verde **"Notificar por WhatsApp"** que abre el chat del
+  cliente, y un "Listo" para cerrar sin mandar nada. Sin ficha no aparece nada: no hay a quién
+  escribirle.
+- El mensaje va **en mi voz** y en singular, como el de HU-36:
+
+  ```
+  Hola Juan, tuve que cancelar tu turno:
+
+  Corte clásico
+  jueves 19 de noviembre · 13:00
+
+  Disculpá las molestias. Si quieres puedes sacar otro turno aquí:
+  <la web del turnero>
+
+  o respondeme por acá y lo arreglamos.
+  ```
+- **No lleva el link del turno**: un turno cancelado ya no se gestiona. Lleva el de la web,
+  para sacar otro. Tampoco los datos para pagar (HU-33): no hay nada que pagar.
+- El botón abre el chat; el mensaje lo mando yo. El sistema no manda nada solo.
+
+*Lo que queda afuera:* la cancelación en masa al bloquear un horario (CU-03) no abre este
+cartel —podrían ser muchos clientes de una— y sigue avisando como hasta ahora.
 
 **HU-31 — Reservar para mí y para los míos en una sola vez**
 Como clienta que viene con los hijos, quiero sacar los turnos de todos de una sola pasada y seguidos, para no tener que cargar mis datos tres veces ni que nos toquen horarios sueltos.

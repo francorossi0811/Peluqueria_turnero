@@ -24,6 +24,7 @@ import {
   botonesExtraDelDia,
   FIN_DEL_DIA_MINUTOS,
   type BotonExtra,
+  type OpcionExtra,
 } from '../../utils/turnoExtra'
 import type {
   Bloqueo,
@@ -86,8 +87,10 @@ interface GrillaSemanaProps {
   /** Abre el bloqueo para editarlo o levantarlo. Mismo gesto que tocar un turno: en la
    * grilla, todo lo que ocupa un rato se toca y se abre. */
   onElegirBloqueo: (bloqueo: Bloqueo) => void
-  /** HU-35 — El "+" de abajo de cada franja: un turno fuera de horario ese día. */
-  onAgregarExtra: (fecha: string, boton: BotonExtra) => void
+  /** HU-35 — El "+" de un turno fuera de horario. Lleva los días que ofrece (uno solo si
+   * es el de abajo de un día; todos los de la semana si es el de la columna de horas) y
+   * cuál arranca elegido: `null` es "que elija", y la ventana muestra el selector. */
+  onAgregarExtra: (opciones: OpcionExtra[], fechaInicial: string | null) => void
 }
 
 function aHora(minutos: number): string {
@@ -132,8 +135,8 @@ function franjasDeLaSemana(
  *
  * ⚠️ **Si en la franja no hay ningún extra en la semana, no se estira nada** (pedido de
  * Franco, 10/11/2026): un renglón rayado vacío debajo de cada franja, todas las semanas,
- * era espacio muerto. En ese caso el "+" vive en la columna de horas (`conExtras: false`,
- * ver `TramoGrilla`) y carga para hoy.
+ * era espacio muerto. El "+" de la columna de horas (ver `TramoGrilla`) está siempre, en
+ * el renglón de la última hora normal (`cierre`), estire o no.
  *
  * Nunca pasa del inicio del tramo siguiente (la mañana no se mete en la tarde) ni de la
  * medianoche. El rato agregado se dibuja rayado como cualquier rato en que no se abre:
@@ -155,7 +158,8 @@ function extenderConExtras(
 
     // Todo turno dura algo, así que un extra siempre termina después del cierre: si el
     // máximo no se movió, no hay ninguno.
-    if (finDeLosExtras === tramo.fin) return { ...tramo, conExtras: false }
+    if (finDeLosExtras === tramo.fin)
+      return { ...tramo, cierre: tramo.fin, conExtras: false }
 
     // Redondeado a la grilla de 20 minutos del tramo: cada renglón mide lo mismo, y uno
     // cortado a la mitad dejaría la columna de horas desfasada de las de los días.
@@ -165,6 +169,7 @@ function extenderConExtras(
     return {
       inicio: tramo.inicio,
       fin: Math.min(limite, tramo.inicio + pasos * PASO_MINUTOS),
+      cierre: tramo.fin,
       conExtras: true,
     }
   })
@@ -175,6 +180,8 @@ function extenderConExtras(
 interface TramoExtendido {
   inicio: number
   fin: number
+  /** Dónde termina el horario normal del tramo, antes de estirarlo por los extras. */
+  cierre: number
   conExtras: boolean
 }
 
@@ -697,21 +704,25 @@ function TramoGrilla({
     minutosAhora! >= m &&
     minutosAhora! < m + PASO_MINUTOS
 
-  // HU-35 — Sin extras en la semana el tramo no se estira, y el "+" es uno solo: vive en
-  // la columna de horas, debajo de la última hora de la franja, y carga **para hoy**
-  // (pedido de Franco, 10/11/2026). Mirando otra semana no hay "+": desde acá no se
-  // elige el día. Con extras, cada día tiene el suyo abajo de su columna, como siempre.
-  const botonDeHoy =
-    !tramo.conExtras && dias.includes(hoy)
-      ? (botonesExtraDelDia(
-          hoy,
-          franjas.filter((f) => f.diaSemana === diaSemana(hoy)),
-          feriados.find((f) => f.fecha === hoy),
-          turnos.filter((t) => t.fecha === hoy && t.estado !== 'cancelado'),
-          bloqueos,
-        ).find((b) => b.cierre > tramo.inicio && b.cierre <= tramo.fin) ?? null)
-      : null
-  const ultimaMarca = marcas[marcas.length - 1]
+  // HU-35 — El "+" de la columna de horas, en el renglón de la **última hora normal** del
+  // tramo (como al principio), estire o no la grilla por los extras. Como desde ahí no se
+  // señala un día, ofrece **todos** los de la semana a la vista donde se puede cargar, y
+  // la ventana **siempre** pregunta cuál, sin ninguno marcado: antes cargaba solo para
+  // hoy, y Franco pidió (11/11/2026) que se elija siempre. Aparece en cualquier semana.
+  const opcionesDeLaColumna: OpcionExtra[] = dias
+    .filter((d) => d >= sumarDias(hoy, -DIAS_CARGA_HACIA_ATRAS))
+    .flatMap((d) => {
+      const boton = botonesExtraDelDia(
+        d,
+        franjas.filter((f) => f.diaSemana === diaSemana(d)),
+        feriados.find((f) => f.fecha === d),
+        turnos.filter((t) => t.fecha === d && t.estado !== 'cancelado'),
+        bloqueos,
+      ).find((b) => b.cierre > tramo.inicio && b.cierre <= tramo.fin)
+      return boton ? [{ fecha: d, boton }] : []
+    })
+  // La última hora del horario normal, no la del renglón rayado de los extras.
+  const marcaDelMas = marcas.filter((m) => m < tramo.cierre).at(-1)
 
   return (
     <div
@@ -737,10 +748,10 @@ function TramoGrilla({
             style={{ height: ALTO_PASO_PX, paddingTop: 4 }}
           >
             {aHora(m)}
-            {m === ultimaMarca && botonDeHoy && (
+            {m === marcaDelMas && opcionesDeLaColumna.length > 0 && (
               <BotonMasExtra
-                boton={botonDeHoy}
-                onClick={() => onAgregarExtra(hoy, botonDeHoy)}
+                boton={opcionesDeLaColumna[0].boton}
+                onClick={() => onAgregarExtra(opcionesDeLaColumna, null)}
                 className="mx-auto mt-2"
               />
             )}
@@ -1080,9 +1091,11 @@ function TramoGrilla({
               },
             )}
 
-            {/* HU-35 — El "+" del turno fuera de horario, justo debajo del último horario
-                de la franja (o del último extra que ya cargó, así puede seguir sumando).
-                Solo el de esta franja: el de la noche vive en el tramo de la tarde. */}
+            {/* HU-35 — El "+" del día, justo debajo del último extra que ya cargó, para
+                seguir sumando. **Solo en los días que ya tienen un extra en esta franja**
+                (pedido de Franco, 11/11/2026): en los demás no hay nada que continuar, y
+                para empezar está el "+" de la columna de horas. Solo el de esta franja: el
+                de la noche vive en el tramo de la tarde. */}
             {tramo.conExtras &&
               cargable &&
               botonesExtraDelDia(
@@ -1096,13 +1109,19 @@ function TramoGrilla({
                   (b) =>
                     b.cierre > tramo.inicio &&
                     b.cierre <= tramo.fin &&
-                    b.hora < tramo.fin,
+                    b.hora < tramo.fin &&
+                    delDia.some((t) => {
+                      const inicio = aMinutos(t.hora)
+                      return inicio >= b.cierre && inicio < b.tope
+                    }),
                 )
                 .map((b) => (
                   <BotonMasExtra
                     key={`extra-${b.cierre}`}
                     boton={b}
-                    onClick={() => onAgregarExtra(dia, b)}
+                    onClick={() =>
+                      onAgregarExtra([{ fecha: dia, boton: b }], dia)
+                    }
                     // Centrado en la columna y apenas por debajo de la hora, para que se
                     // lea como "a esta hora, uno más".
                     className="absolute left-1/2 z-10 -translate-x-1/2"
@@ -1129,7 +1148,7 @@ function TramoGrilla({
 
 /** HU-35 — El "+" redondo del turno fuera de horario. Lo usan los dos lugares donde
  * aparece: abajo de cada día (cuando la franja ya tiene extras) y en la columna de horas
- * (cuando no tiene, y carga para hoy). */
+ * (siempre, y ofrece los días de la semana a la vista). */
 function BotonMasExtra({
   boton,
   onClick,

@@ -1,5 +1,9 @@
 import { fechaLegible } from '../../utils/fecha'
-import { whatsappDeArielConfirmando } from '../../utils/mensajesWhatsapp'
+import {
+  whatsappDeArielCancelando,
+  whatsappDeArielConfirmando,
+} from '../../utils/mensajesWhatsapp'
+import { Modal } from '../ui/Modal'
 import type { TurnoAdmin } from '../../types/api'
 
 /** HU-36 — El link al chat del cliente con la confirmación ya escrita, o `null` si el turno
@@ -72,15 +76,19 @@ export function PasoTurnoCargado({
     <div className="flex flex-col gap-4">
       <div className="border-realizado bg-superficie-2 rounded-md border-2 px-3 py-2">
         <p className="font-semibold">
-          ✓ {turnos.length > 1 ? `${turnos.length} turnos cargados` : 'Turno cargado'}
+          ✓{' '}
+          {turnos.length > 1
+            ? `${turnos.length} turnos cargados`
+            : 'Turno cargado'}
         </p>
         <p className="text-tinta-suave text-sm">
-          {primero.clienteNombre} · {fechaLegible(primero.fecha)} · {primero.hora}
+          {primero.clienteNombre} · {fechaLegible(primero.fecha)} ·{' '}
+          {primero.hora}
         </p>
       </div>
       <p className="text-tinta-suave text-sm">
-        Mandale el link para que pueda reprogramar o cancelar. Se abre su chat con el
-        mensaje ya escrito.
+        Mandale el link para que pueda reprogramar o cancelar. Se abre su chat
+        con el mensaje ya escrito.
       </p>
       <BotonWhatsappAlCliente turnos={turnos} />
       <button
@@ -91,5 +99,67 @@ export function PasoTurnoCargado({
         Listo
       </button>
     </div>
+  )
+}
+
+/** HU-37 — El cartel que sale después de que Ariel cancela a mano un turno **con ficha**:
+ * "Notificar por WhatsApp" abre el chat del cliente con la cancelación ya escrita.
+ *
+ * Lo dibuja `AgendaPage` y no el que canceló, porque cancelar se hace desde dos lugares
+ * (el detalle de la grilla y la fila de la vista Día) y en la vista Día la fila desaparece
+ * apenas el turno queda cancelado: el cartel no tendría dónde vivir.
+ *
+ * Sin ficha no se abre (mismo criterio que `linkDeWhatsappAlCliente`): no hay número en
+ * el que confiar. El link para reservar otro es el `origin` del panel, que es la web del
+ * cliente. */
+export function ModalTurnoCancelado({
+  turno,
+  onClose,
+}: {
+  turno: TurnoAdmin
+  onClose: () => void
+}) {
+  const telefono = turno.cliente?.telefono
+  if (!telefono) return null
+  const href = whatsappDeArielCancelando(
+    telefono,
+    {
+      nombre: turno.clienteNombre,
+      servicio: turno.servicio.nombre,
+      fecha: turno.fecha,
+      hora: turno.hora,
+    },
+    window.location.origin,
+  )
+  return (
+    <Modal titulo="Turno cancelado" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <div className="border-vino bg-superficie-2 rounded-md border-2 px-3 py-2">
+          <p className="font-semibold">✕ Turno cancelado</p>
+          <p className="text-tinta-suave text-sm">
+            {turno.clienteNombre} · {fechaLegible(turno.fecha)} · {turno.hora}
+          </p>
+        </div>
+        <p className="text-tinta-suave text-sm">
+          Avisale que no lo esperás. Se abre su chat con el mensaje ya escrito.
+        </p>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onClose}
+          className="bg-whatsapp text-sobre-estado flex items-center justify-center gap-2 rounded-md px-4 py-3 text-center text-base font-semibold transition hover:brightness-110"
+        >
+          Notificar por WhatsApp
+        </a>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-tinta-suave hover:text-tinta py-2 text-base font-semibold"
+        >
+          Listo
+        </button>
+      </div>
+    </Modal>
   )
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  mensajeDeArielCancelando,
   mensajeDeArielConfirmando,
   mensajeDeTurno,
   mensajeDeTurnosConfirmados,
@@ -102,7 +103,11 @@ describe('los datos para pagar', () => {
   // Los dos casos en que ofrecer el alias sería ruido, o peor: un turno cancelado no se
   // paga, y el que reprograma ya lo tenía reservado (y ya recibió los datos al sacarlo).
   it('no van en el mensaje de cancelación ni en el de reprogramación', () => {
-    for (const motivo of ['cancelado', 'reprogramado', 'pedirReprogramar'] as const) {
+    for (const motivo of [
+      'cancelado',
+      'reprogramado',
+      'pedirReprogramar',
+    ] as const) {
       expect(mensajeDeTurno(motivo, ANA)).not.toContain('Alias:')
     }
   })
@@ -146,8 +151,31 @@ describe('mensajeDeArielConfirmando', () => {
 describe('whatsappDeArielConfirmando', () => {
   it('abre el chat del número de la ficha, sin el + y con el mensaje codificado', () => {
     const url = whatsappDeArielConfirmando('+5493514593325', [ANA])
-    expect(url.startsWith('https://api.whatsapp.com/send?phone=5493514593325&text=')).toBe(true)
+    expect(
+      url.startsWith('https://api.whatsapp.com/send?phone=5493514593325&text='),
+    ).toBe(true)
     const texto = decodeURIComponent(url.split('&text=')[1])
     expect(texto).toBe(mensajeDeArielConfirmando([ANA]))
+  })
+})
+
+describe('mensajeDeArielCancelando', () => {
+  const msg = mensajeDeArielCancelando(ANA, 'https://turnero.test')
+
+  it('habla Ariel, en singular, y dice qué turno se cayó', () => {
+    expect(msg.startsWith(`Hola Ana, tuve que cancelar tu turno:`)).toBe(true)
+    expect(msg).toContain(ANA.servicio)
+    expect(msg).toContain(ANA.hora)
+  })
+
+  it('lleva el link de la web para reservar otro, nunca el de gestión del turno', () => {
+    expect(msg).toContain(
+      'Si quieres puedes sacar otro turno aquí:\nhttps://turnero.test',
+    )
+    expect(msg).not.toContain(ANA.link)
+  })
+
+  it('no lleva el alias para pagar: no hay turno que pagar', () => {
+    expect(msg).not.toMatch(/alias/i)
   })
 })

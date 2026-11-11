@@ -51,6 +51,8 @@ interface ModalTurnoProps {
   onMarcarAusente: () => void
   /** Si hay una marca en curso sobre este turno, para no dispararla dos veces. */
   marcando: boolean
+  /** HU-37 — Avisa que el turno quedó cancelado, para ofrecer notificar al cliente. */
+  onCancelado: (turno: TurnoAdmin) => void
 }
 
 export function ModalTurno({
@@ -60,6 +62,7 @@ export function ModalTurno({
   onCobrar,
   onMarcarAusente,
   marcando,
+  onCancelado,
 }: ModalTurnoProps) {
   const queryClient = useQueryClient()
   const [confirmandoCancelar, setConfirmandoCancelar] = useState(false)
@@ -69,6 +72,7 @@ export function ModalTurno({
     mutationFn: () => cancelarTurnoAdmin(turno.id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      onCancelado(turno)
       onClose()
     },
     onError: (err) => {
@@ -196,9 +200,7 @@ export function ModalTurno({
             Reservado, "sí vino" es Realizado y abre el cobro, como desde un reservado. */}
         {turno.estado === 'ausente' && (
           <div className="border-borde flex flex-wrap items-center gap-2 border-t pt-4">
-            <p className="text-tinta-suave mr-auto text-sm">
-              ¿Sacar ausente?
-            </p>
+            <p className="text-tinta-suave mr-auto text-sm">¿Sacar ausente?</p>
             <Button
               variant="outline"
               disabled={reservadoMutation.isPending}

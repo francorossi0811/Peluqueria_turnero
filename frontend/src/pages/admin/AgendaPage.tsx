@@ -14,6 +14,7 @@ import { ModalTurno } from '../../components/admin/ModalTurno'
 import { ModalCobro } from '../../components/admin/ModalCobro'
 import { ModalCargarTurno } from '../../components/admin/ModalCargarTurno'
 import { ModalTurnoExtra } from '../../components/admin/ModalTurnoExtra'
+import { ModalTurnoCancelado } from '../../components/admin/WhatsappAlCliente'
 import { ModalBloquear } from '../../components/admin/ModalBloquear'
 import { ModalBuscarTurno } from '../../components/admin/ModalBuscarTurno'
 import { ModalExportar } from '../../components/admin/ModalExportar'
@@ -37,7 +38,7 @@ import {
   domingoDeLaSemana,
   turnoEnCurso,
 } from '../../utils/fecha'
-import type { BotonExtra } from '../../utils/turnoExtra'
+import type { OpcionExtra } from '../../utils/turnoExtra'
 import type { Bloqueo, ErrorApi, TurnoAdmin } from '../../types/api'
 
 type Vista = 'dia' | 'semana'
@@ -112,8 +113,8 @@ export function AgendaPage() {
   } | null>(null)
   // HU-35 — El "+" que se tocó: un turno fuera de horario en ese día y ese rato.
   const [extraElegido, setExtraElegido] = useState<{
-    fecha: string
-    boton: BotonExtra
+    opciones: OpcionExtra[]
+    fechaInicial: string | null
   } | null>(null)
 
   // Qué días trabaja Ariel, según lo que tenga cargado en "Horarios y servicios".
@@ -177,10 +178,21 @@ export function AgendaPage() {
     staleTime: 60 * 60 * 1000,
   })
 
+  // HU-37 — El turno con ficha que Ariel acaba de cancelar, para ofrecerle avisarle al
+  // cliente por WhatsApp. Lo llenan los dos caminos de cancelar: la fila de la vista Día
+  // y el detalle de la grilla.
+  const [canceladoAvisar, setCanceladoAvisar] = useState<TurnoAdmin | null>(
+    null,
+  )
+  const avisarSiTieneFicha = (t: TurnoAdmin) => {
+    if (t.cliente) setCanceladoAvisar(t)
+  }
+
   const cancelarMutation = useMutation({
-    mutationFn: (id: string) => cancelarTurnoAdmin(id),
-    onSuccess: () => {
+    mutationFn: (turno: TurnoAdmin) => cancelarTurnoAdmin(turno.id),
+    onSuccess: (_, turno) => {
       void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      avisarSiTieneFicha(turno)
     },
   })
 
@@ -442,7 +454,9 @@ export function AgendaPage() {
           onElegirHueco={(f, h) => setHuecoElegido({ fecha: f, hora: h })}
           onElegirTurno={setTurnoDetalle}
           onElegirBloqueo={setBloqueoEditar}
-          onAgregarExtra={(f, boton) => setExtraElegido({ fecha: f, boton })}
+          onAgregarExtra={(opciones, fechaInicial) =>
+            setExtraElegido({ opciones, fechaInicial })
+          }
         />
       )}
 
@@ -510,7 +524,7 @@ export function AgendaPage() {
                         turno={t!}
                         enCurso={turnoEnCurso(t, dia, hoyIso(), minutosAhora)}
                         onEditar={() => setTurnoEditar(t)}
-                        onCancelar={() => cancelarMutation.mutate(t.id)}
+                        onCancelar={() => cancelarMutation.mutate(t!)}
                         // HU-27 — "Realizado" abre el cobro y desde ahí se guardan las dos
                         // cosas juntas; "Ausente" no pasa por ningún modal, porque un
                         // ausente no paga.
@@ -525,7 +539,7 @@ export function AgendaPage() {
                         }
                         cancelando={
                           cancelarMutation.isPending &&
-                          cancelarMutation.variables === t.id
+                          cancelarMutation.variables?.id === t.id
                         }
                         marcando={
                           marcarMutation.isPending &&
@@ -546,6 +560,7 @@ export function AgendaPage() {
       {turnoAbierto && (
         <ModalTurno
           turno={turnoAbierto}
+          onCancelado={avisarSiTieneFicha}
           onClose={() => setTurnoDetalle(null)}
           onReprogramar={() => {
             setTurnoEditar(turnoAbierto)
@@ -594,12 +609,17 @@ export function AgendaPage() {
       {/* HU-35 — El turno fuera de horario, desde el "+" de la grilla semanal. En la vista
           Día no hay "+" (pedido de Franco): ahí el turno extra se ve como cualquier otro una
           vez cargado, pero se carga solo desde la Semana. */}
+      {canceladoAvisar && (
+        <ModalTurnoCancelado
+          turno={canceladoAvisar}
+          onClose={() => setCanceladoAvisar(null)}
+        />
+      )}
+
       {extraElegido && (
         <ModalTurnoExtra
-          fecha={extraElegido.fecha}
-          cierre={extraElegido.boton.cierre}
-          tope={extraElegido.boton.tope}
-          horaSugerida={extraElegido.boton.hora}
+          opciones={extraElegido.opciones}
+          fechaInicial={extraElegido.fechaInicial}
           onClose={() => setExtraElegido(null)}
         />
       )}

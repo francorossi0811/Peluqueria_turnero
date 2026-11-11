@@ -30,7 +30,10 @@ export function huecosExtraDelDia(
   feriado: Feriado | undefined,
 ): HuecoExtra[] {
   const todas = franjasDelDia
-    .map((f) => ({ inicio: minutosDeHora(f.horaInicio), fin: minutosDeHora(f.horaFin) }))
+    .map((f) => ({
+      inicio: minutosDeHora(f.horaInicio),
+      fin: minutosDeHora(f.horaFin),
+    }))
     .sort((a, b) => a.inicio - b.inicio)
 
   const abiertas =
@@ -73,7 +76,10 @@ export function proximaHoraExtra(
 ): number | null {
   const ocupados = turnosDelDia
     .filter((t) => t.estado === 'reservado' || t.estado === 'realizado')
-    .map((t) => ({ inicio: minutosDeHora(t.hora), fin: minutosDeHora(t.horaFin) }))
+    .map((t) => ({
+      inicio: minutosDeHora(t.hora),
+      fin: minutosDeHora(t.horaFin),
+    }))
     .sort((a, b) => a.inicio - b.inicio)
 
   let desde = hueco.desde
@@ -106,6 +112,14 @@ export interface BotonExtra {
   cierre: number
   hora: number
   tope: number
+}
+
+/** HU-35 — Un día en el que se puede cargar un turno fuera de horario, con su "+". El "+"
+ * de abajo de cada día ofrece uno solo; el de la columna de horas ofrece todos los de la
+ * semana a la vista y la ventana pregunta cuál. */
+export interface OpcionExtra {
+  fecha: string
+  boton: BotonExtra
 }
 
 export function botonesExtraDelDia(

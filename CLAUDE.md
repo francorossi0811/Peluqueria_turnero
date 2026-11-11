@@ -190,10 +190,18 @@ La lista de "cuando se entregue, hacer esto" que vivía acá **ya está casi tod
     turno de 13:20 no caía en ningún tramo y no se dibujaba. Cuando estira, suma un
     renglón de 20 minutos rayado debajo, que es donde vive el "+" de cada día.
   - ⚠️ **Si la franja no tiene extras en la semana, NO se estira** (pedido de Franco el
-    mismo 10/11): el renglón rayado vacío era espacio muerto todas las semanas. Ahí el "+"
-    es **uno solo, en la celda naranja de la última hora** (columna de horas), y carga
-    **para hoy** — mirando otra semana no hay "+". Con extras vuelve el "+" por día. Lo
-    decide `TramoExtendido.conExtras`; el botón es `BotonMasExtra` en los dos lugares.
+    mismo 10/11): el renglón rayado vacío era espacio muerto todas las semanas.
+  - ⚠️ **Los "+" son de dos clases** (como quedó el 11/11/2026, después de varias vueltas):
+    - **Uno en la columna de horas**, en la celda naranja de la **última hora normal** de
+      cada franja (12:40, 19:40), **siempre**, en cualquier semana y estire o no la grilla.
+      No señala ningún día, así que la ventana **siempre** muestra el selector con los días
+      cargables de la semana a la vista, y **sin ninguno marcado**, ni siquiera hoy: Franco
+      pidió que no se cargue para hoy de entrada. El formulario aparece recién al elegir.
+    - **Uno por día, solo en los días que ya tienen un extra en esa franja**, debajo del
+      último, para seguir sumando. Ese abre la ventana directo con su día, sin selector.
+      En los días sin extra no hay "+" propio: para empezar está el de la columna.
+    - Lo deciden `TramoExtendido.cierre`/`conExtras` y `OpcionExtra[]` (con `fechaInicial`
+      en `null` para "que elija"); el botón es `BotonMasExtra` en los dos lugares.
   - ⚠️ **El "+" sigue la cadena desde el cierre, no "después del último"** (`proximaHoraExtra`
     en `utils/turnoExtra.ts`, la copia del frontend que solo dibuja). Con extras a las 13:00
     y a las 16:40, "después del último" daba 17:00 = el tope y el botón desaparecía aunque
@@ -1280,8 +1288,32 @@ con el teléfono `351 555 1234` dejó la ventana en "Turno cargado" con el botó
 te confirmo tu turno:" + el link de gestión + alias/CVU/comprobante. En el detalle de ese
 turno, el mismo botón. En un turno sin teléfono no aparece, y aparece apenas se le carga uno
 desde el detalle (`351 555 4321` → `5493515554321`). Quedaron en `desarrollo` "Prueba
-Whatsapp" (13/11 11:00) y la ficha nueva de "Prueba Extra 13:20". "Prueba Extra 20:00" y "Prueba Extra 23:39" quedaron **cancelados** a propósito, para ver la tarde de esa semana sin extras. También "Prueba Sin351" (`15 555 9876`), "Prueba Local" (`555 4433`), "Prueba Publico" (14/11 11:00, `555 7788`) y el teléfono `15-555-2211` cargado a "Prueba Extra 16:40": los cuatro con ficha `+549351…`. 🚧 Sin probar en un
+Whatsapp" (13/11 11:00) y la ficha nueva de "Prueba Extra 13:20". "Prueba Extra 20:00" y "Prueba Extra 23:39" quedaron **cancelados** a propósito, para ver la tarde de esa semana sin extras. Y "Prueba Semana Siguiente" (19/11 20:00, Barba, cancelado), cargado desde el "+" de la columna de horas eligiendo el jueves. También "Prueba Sin351" (`15 555 9876`), "Prueba Local" (`555 4433`), "Prueba Publico" (14/11 11:00, `555 7788`) y el teléfono `15-555-2211` cargado a "Prueba Extra 16:40": los cuatro con ficha `+549351…`. 🚧 Sin probar en un
 celular de verdad que la app de WhatsApp abra el chat con el texto.
+
+### Avisar por WhatsApp al cancelar a mano (11/11/2026) — HU-37 ✅ en `desarrollo`
+
+Cuando Ariel cancela desde el panel un turno **con ficha** (la fila de la vista Día o el
+detalle de la grilla), sale `ModalTurnoCancelado` ("Turno cancelado" + "Notificar por
+WhatsApp" + "Listo"). Puro frontend, sin migraciones ni endpoints.
+
+- ⚠️ **El cartel lo dibuja `AgendaPage`, no el que canceló**: en la vista Día la fila
+  desaparece apenas el turno queda cancelado, así que el cartel no tendría dónde vivir.
+  `cancelarMutation` ahora recibe el `TurnoAdmin` entero (no el id) y `ModalTurno` avisa con
+  `onCancelado`. Los dos llaman a `avisarSiTieneFicha`.
+- El mensaje es `mensajeDeArielCancelando` (voz de Ariel, "tuve que cancelar", como la
+  plantilla `turno_cancelado_negocio`). **Sin link de gestión** —un cancelado no se gestiona—
+  y con el `origin` de la web para reservar otro; sin alias. La línea "Si quieres puedes
+  sacar otro turno aquí:" la eligió Franco tal cual. Hay tests que fijan las tres cosas.
+- Mismo criterio que HU-36: número de la ficha (`cliente.telefono`, `+549…`), `<a
+  target="_blank">` por `api.whatsapp.com`, y sin ficha no se ofrece nada.
+- La cancelación en masa de CU-03 (bloquear un rango) **no** abre el cartel.
+
+**Verificado en el navegador** contra `desarrollo`, con turnos del 18/11: cancelar desde la vista Día y
+desde el detalle de la grilla abre el cartel con `phone=549351555661x` y el texto completo;
+cancelar un turno sin teléfono no abre nada y el turno se cancela igual. Quedaron cancelados
+en `desarrollo` "Prueba Cancelar 10:00", "Prueba Cancelar 10:40", "Prueba Cancelar Grilla" y
+"Prueba Sin Ficha". 🚧 Sin probar en un celular de verdad.
 
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 

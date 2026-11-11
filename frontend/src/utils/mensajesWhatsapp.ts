@@ -86,8 +86,7 @@ const LINEA_DEL_LINK =
 
 /** La variante en plural, para la reserva en grupo. La de arriba queda intacta: cada turno
  * del grupo tiene **su propio** link, porque el id de cada uno es su token de gestión. */
-const LINEA_DE_LOS_LINKS =
-  'Los links para reprogramar o cancelar cada turno 👇'
+const LINEA_DE_LOS_LINKS = 'Los links para reprogramar o cancelar cada turno 👇'
 
 /** HU-33 — Los datos para pagar por adelantado, al final del mensaje de confirmación.
  *
@@ -167,7 +166,11 @@ export function mensajeDeTurnosConfirmados(turnos: DatosDelTurno[]): string {
   for (const t of turnos) {
     // Mismo criterio que `mensajeDeTurno`: el renglón en blanco lo pone cada bloque al
     // entrar, nunca el anterior al salir.
-    lineas.push('', `${t.nombre} · ${t.servicio}`, `${fechaLegible(t.fecha)} · ${t.hora}`)
+    lineas.push(
+      '',
+      `${t.nombre} · ${t.servicio}`,
+      `${fechaLegible(t.fecha)} · ${t.hora}`,
+    )
   }
   lineas.push('', '¡Nos vemos!')
   lineas.push('', LINEA_DE_LOS_LINKS)
@@ -228,4 +231,40 @@ export function whatsappDeArielConfirmando(
   turnos: DatosDelTurno[],
 ): string {
   return whatsappAlCliente(telefonoDeLaFicha, mensajeDeArielConfirmando(turnos))
+}
+
+/** HU-37 — El aviso que manda **Ariel** cuando cancela a mano un turno con ficha: en su voz,
+ * como `mensajeDeArielConfirmando`, y con el mismo arranque que la plantilla
+ * `turno_cancelado_negocio` ("tuve que cancelar", en singular).
+ *
+ * ⚠️ **No lleva el link de gestión**: un turno cancelado ya no se gestiona (mismo motivo por
+ * el que el mensaje de cancelación del cliente tampoco lo lleva). Lleva el de la **web**,
+ * para que saque otro solo. El texto de esa línea lo eligió Franco (11/11/2026). */
+export function mensajeDeArielCancelando(
+  turno: Omit<DatosDelTurno, 'link'>,
+  linkParaReservar: string,
+): string {
+  return [
+    `Hola ${turno.nombre}, tuve que cancelar tu turno:`,
+    '',
+    turno.servicio,
+    `${fechaLegible(turno.fecha)} · ${turno.hora}`,
+    '',
+    'Disculpá las molestias. Si quieres puedes sacar otro turno aquí:',
+    linkParaReservar,
+    '',
+    'o respondeme por acá y lo arreglamos.',
+  ].join('\n')
+}
+
+/** HU-37 — El link al chat del cliente con `mensajeDeArielCancelando` ya escrito. */
+export function whatsappDeArielCancelando(
+  telefonoDeLaFicha: string,
+  turno: Omit<DatosDelTurno, 'link'>,
+  linkParaReservar: string,
+): string {
+  return whatsappAlCliente(
+    telefonoDeLaFicha,
+    mensajeDeArielCancelando(turno, linkParaReservar),
+  )
 }
