@@ -46,3 +46,6 @@ export class ImagenNoEncontradaError extends Error {}
 // medianoche), o el día está cerrado o bloqueado. Es distinto de `HorarioNoDisponibleError`
 // porque "ese horario se acaba de ocupar" sería mentira: nadie lo ocupó.
 export class FueraDeHuecoExtraError extends Error {}
+// HU-38 — Asignarle una ficha existente a un turno que ya tiene una. Es solo para los que
+// no tienen: cambiarle la ficha a un turno es otra decisión, que no se tomó.
+export class TurnoYaTieneFichaError extends Error {}

@@ -1315,6 +1315,42 @@ cancelar un turno sin teléfono no abre nada y el turno se cancela igual. Quedar
 en `desarrollo` "Prueba Cancelar 10:00", "Prueba Cancelar 10:40", "Prueba Cancelar Grilla" y
 "Prueba Sin Ficha". 🚧 Sin probar en un celular de verdad.
 
+### Asignar un cliente existente a un turno sin ficha (11/11/2026) — HU-38 ✅ en `desarrollo`
+
+En el detalle de un turno sin ficha (`SinFicha` en `ModalTurno.tsx`) hay dos caminos:
+**Buscar cliente** (`BuscarClienteParaTurno`, contra `GET /admin/clientes?buscar=`, desde 2
+caracteres, 8 resultados) y **Cargar teléfono** (`CargarTelefonoDelTurno`, el de HU-25 de
+siempre). Sin migraciones.
+
+- `PATCH /admin/turnos/:id/cliente` → `asignarClienteAlTurno`. ⚠️ **El "sin ficha" va en el
+  `where` del `updateMany`** (`clienteId: null`), no en un `if` antes: dos asignaciones a la
+  vez pasarían el `if` las dos. 0 filas → `409 TURNO_YA_TIENE_FICHA`.
+- ⚠️ **El turno toma el teléfono de la ficha** (`+` + `telefono_e164`): un turno con ficha y
+  sin teléfono es lo que HU-25 dice que no existe. Con el `+`, `aE164` lo lee de vuelta como
+  el mismo número (verificado: un `PATCH …/telefono` posterior cae en la misma ficha). El
+  nombre del turno y la ficha **no se tocan**.
+- ⚠️ Ojo con una diferencia que no es de este cambio: `PATCH …/telefono` **sí** pisa
+  `clientes.nombre` con el del turno (`vincularCliente`, "es el nombre con el que se
+  identifica hoy"); asignar no. Se vio en la prueba.
+- Cambiarle la ficha a un turno que ya tiene una **no** está: Franco eligió el alcance chico.
+- **La misma elección al cargar un turno nuevo**: `CamposClienteManual` (lo usan
+  `ModalCargarTurno` y `ModalTurnoExtra`) arranca con "Buscar cliente" / "Cliente nuevo",
+  marcado "Cliente nuevo". El buscador es uno solo, `BuscadorDeClientes.tsx`, y lo comparten
+  las dos pantallas. ⚠️ **Elegir una ficha solo completa los campos** (el `nombre` de la
+  ficha —no el apodo— y su teléfono `+549…`): el turno se engancha en el backend **por el
+  teléfono**, como cualquier carga, así que no hubo endpoint ni campo nuevo. Usar el
+  `nombre` y no el apodo importa: `vincularCliente` pisa `clientes.nombre` con el del turno.
+  La marca "✓ Ficha de …" se mira contra el teléfono: si Ariel lo cambia, desaparece.
+  Verificado: Barba el 19/11 10:00 cargada eligiendo "Prueba Cancelar Grilla" → misma ficha,
+  una sola con ese número, y el paso "Turno cargado" con el botón de WhatsApp.
+
+**Verificado** contra `desarrollo`: por API asignar → 200 con teléfono y ficha, repetir →
+409, cliente inexistente → 404, turno inexistente → 404, sin body → 400 con mensaje en
+castellano, sin token → 401. En pantalla: "Prueba Buscar" (18/11 12:20) buscado por `6611`,
+asignado, y el detalle pasó a mostrar la ficha y el botón de WhatsApp. Quedaron en
+`desarrollo` "Prueba Buscar" y "Prueba Asignar" (18/11, reservados). 🚧 Sin test unitario:
+la función es solo base de datos y el proyecto no tiene tests contra la base.
+
 ### Etapa 5 — cobro online (sin empezar, sin pedir)
 
 Seña por Mercado Pago al reservar. **No lo pidió Ariel**; queda anotado porque es la continuación natural. Traería cuenta de MP, webhooks de pago, reembolsos al cancelar y qué hacer con un pago pendiente — o sea, trámites externos como los de WhatsApp. También quedaron afuera los pagos parciales, el historial de precios y la facturación.

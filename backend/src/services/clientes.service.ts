@@ -48,6 +48,35 @@ export type TurnoConCliente = Prisma.TurnoGetPayload<{
 
 const MAX_CLIENTES = 500
 
+// Español y sin distinguir mayúsculas ni tildes: "álvarez" va junto a "Alvarez" y antes
+// que "Bruno". El orden de la base no sirve para esto — depende de la collation de Neon,
+// que puede poner las mayúsculas antes que las minúsculas y las tildes después de la z.
+const comparadorDeNombres = new Intl.Collator('es', {
+  sensitivity: 'base',
+  numeric: true,
+})
+
+/** Lo que se lee en la lista: el apodo manda sobre el nombre (HU-25). */
+function nombreVisible(cliente: {
+  apodo: string | null
+  nombre: string
+}): string {
+  return cliente.apodo || cliente.nombre
+}
+
+/**
+ * Ordena alfabéticamente por el nombre que se ve en pantalla. ⚠️ No alcanza con un
+ * `orderBy: [apodo, nombre]` en la base: Postgres deja los `null` al final, así que los
+ * clientes con apodo salían todos primero y los demás en una segunda tanda aparte.
+ */
+export function ordenarPorNombreVisible<
+  T extends { apodo: string | null; nombre: string },
+>(clientes: T[]): T[] {
+  return [...clientes].sort((a, b) =>
+    comparadorDeNombres.compare(nombreVisible(a), nombreVisible(b)),
+  )
+}
+
 /**
  * Encuentra —o crea— la ficha de quien reserva, a partir del teléfono que dejó.
  *
@@ -207,9 +236,10 @@ export async function listarClientes(
   const hoy = new Date()
   hoy.setUTCHours(0, 0, 0, 0)
 
-  return clientes.map((cliente) => {
+  return ordenarPorNombreVisible(clientes).map((cliente) => {
     const hechos = cliente.turnos.filter(
-      (t) => t.estado === 'realizado' || (t.estado === 'reservado' && t.fecha < hoy),
+      (t) =>
+        t.estado === 'realizado' || (t.estado === 'reservado' && t.fecha < hoy),
     )
     const proximos = cliente.turnos
       .filter((t) => t.estado === 'reservado' && t.fecha >= hoy)
@@ -404,7 +434,9 @@ export async function eliminarEtiqueta(id: string): Promise<void> {
   await prisma.etiqueta.delete({ where: { id } })
 }
 
-export function clienteDto(cliente: Cliente & { etiquetas?: ClienteConEtiquetas['etiquetas'] }) {
+export function clienteDto(
+  cliente: Cliente & { etiquetas?: ClienteConEtiquetas['etiquetas'] },
+) {
   return {
     id: cliente.id,
     telefono: telefonoLegible(cliente.telefonoE164),

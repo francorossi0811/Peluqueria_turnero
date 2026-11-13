@@ -162,7 +162,6 @@ export function FichaCliente({
           onChange={(e) => setNotas(e.target.value)}
           rows={3}
           maxLength={2000}
-          placeholder="Le gusta el degradé bajo. Viene con el nene."
           className="border-borde bg-superficie text-tinta rounded-md border px-3 py-2.5 text-base"
         />
       </label>

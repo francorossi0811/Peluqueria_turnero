@@ -504,6 +504,7 @@ Sobre `PATCH /api/admin/password`:
 | POST | `/api/admin/turnos/marcar-vistos` | `{ "ids": ["<uuid>", …] }` → `{ "marcados": n }`. Apaga la marca "Nuevo" (HU-17) |
 | PATCH | `/api/admin/turnos/:id/nombre` | `{ "clienteNombre": "Nico" }` — corrige el nombre de un turno ya cargado. Es la contracara de que el bloque del panel pida **un solo nombre** para los N turnos (4/9/2026). Sin la regla de "solo letras", igual que la carga manual. **No toca la ficha**: la identidad es el teléfono y en la interfaz manda el apodo |
 | PATCH | `/api/admin/turnos/:id/telefono` | `{ "clienteTelefono": "351 459 3325" }` — le carga el teléfono a un turno que se guardó sin él (HU-08) y lo engancha con su ficha (HU-25) |
+| PATCH | `/api/admin/turnos/:id/cliente` | `{ "clienteId": "<uuid>" }` — HU-38: le asigna a un turno **sin ficha** una ficha que ya existe. El turno toma el teléfono de la ficha (`+549…`); el nombre del turno no cambia. `404 CLIENTE_NO_ENCONTRADO`, `409 TURNO_YA_TIENE_FICHA` si ya tenía una |
 | PATCH | `/api/admin/turnos/:id/cobro` | `{ "medioPago": "efectivo", "montoCobrado": 9500 }` — le carga o le corrige el cobro a un turno **ya realizado** (HU-27) |
 | PATCH | `/api/admin/turnos/:id/color` | `{ "color": "#c0392b" }` o `{ "color": null }` — el color del turno en la grilla semanal (HU-34). Solo sobre un turno **pendiente** |
 | GET | `/api/admin/turnos/colores-recientes` | `{ "colores": ["#c0392b", …] }` — los últimos 6 colores distintos que usó Ariel, del más reciente al más viejo (HU-34) |
@@ -529,6 +530,13 @@ toca la paleta**.
 `turnos.color`, y así tocar "Sin color" en el único turno que tenía ese color lo borraba
 también de la paleta. Devuelve hasta 6 colores, del último usado al más viejo, y vive en la
 base para que la lista sea la misma en el celular y en la tablet del mostrador.
+
+Sobre `PATCH …/cliente` (HU-38): es el camino para el cliente que ya está fichado y Ariel
+cargó sin el número. El "sin ficha" se chequea dentro del mismo `UPDATE` (`cliente_id IS
+NULL` en el `where`), no con una lectura previa, así dos asignaciones simultáneas no pasan
+las dos. Copia el teléfono de la ficha al turno porque un turno con ficha y sin teléfono es
+lo que HU-25 dice que no existe. **Cambiarle la ficha a un turno que ya tiene una no está
+contemplado** (409): es otra decisión, que no se tomó.
 
 Sobre `PATCH …/telefono`: va en un endpoint propio y no dentro de `PATCH
 /api/admin/turnos/:id` a propósito. Aquel mueve el turno en el tiempo y tiene que

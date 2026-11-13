@@ -585,6 +585,30 @@ reprogramar o cancelar sin tener que escribirle yo. *(Pedido del 10/11/2026.)*
 tipeé ("351 555 1234") y a WhatsApp le falta el `54` y el `9` de celular. La ficha ya lo
 tiene normalizado, y que exista es la prueba de que el número sirve.
 
+**HU-38 — Asignarle un cliente que ya tengo a un turno sin ficha**
+Como Ariel, quiero que a un turno que cargué sin teléfono pueda decirle de qué cliente es,
+buscándolo entre los que ya tengo, para no tener que acordarme su número y que la visita
+quede en su ficha. *(Pedido del 11/11/2026.)*
+- En el detalle de un turno sin ficha (tocándolo en la vista Semana) hay dos caminos:
+  **"Buscar cliente"** y **"Cargar teléfono"**. Arranca en buscar; si el turno ya tiene un
+  número escrito, arranca en cargar teléfono, porque confirmarlo es lo más corto.
+- **Buscar cliente** busca por nombre, apodo o teléfono, igual que la sección Clientes, desde
+  dos letras o números. Cada resultado tiene **"Asignar"**. Si no aparece nadie, me dice que
+  le cargue el teléfono y se crea la ficha.
+- **Cargar teléfono** es lo de siempre (HU-25): engancha la ficha de ese número, y si no
+  existe la crea.
+- Al asignar, el turno **toma el teléfono de la ficha** y **conserva su nombre**; en la
+  agenda se ve el apodo, como siempre. La ficha no cambia.
+- Vale para turnos en cualquier estado: un realizado es justo donde más importa que quede
+  anotado quién vino.
+- **Solo para turnos sin ficha.** Cambiarle la ficha a un turno que ya tiene una no está.
+- **La misma elección al cargar un turno nuevo** (pedido del mismo 11/11): en "Cargar
+  turno", en el bloque y en el turno fuera de horario, los datos del cliente arrancan con
+  **"Buscar cliente"** y **"Cliente nuevo"**. Viene marcado "Cliente nuevo", que es lo de
+  siempre. Si busco y elijo a alguien, se completan su nombre y su teléfono y aparece
+  "✓ Ficha de …" con un "Quitar"; el turno queda en esa ficha al guardarlo. Si después
+  cambio el teléfono, deja de ser esa ficha.
+
 **HU-37 — Avisarle al cliente que le cancelé el turno**
 Como Ariel, quiero que cuando cancelo a mano el turno de un cliente fichado se me ofrezca
 avisarle por WhatsApp con el mensaje ya escrito, para que no venga en vano sin que yo tenga

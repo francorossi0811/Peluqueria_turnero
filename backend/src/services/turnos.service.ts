@@ -26,6 +26,8 @@ import {
   TurnoNoModificableError,
   TurnoSeSolapaConRealizadoError,
   HorarioYaOcupadoError,
+  ClienteNoEncontradoError,
+  TurnoYaTieneFichaError,
 } from './errores'
 import {
   ahoraArgentina,
@@ -283,7 +285,11 @@ async function validarLimiteSemanal(
   fechas: Date[],
   excluirTurnoId?: string,
 ): Promise<void> {
-  const cercanas = await fechasReservadasCerca(clienteId, fechas, excluirTurnoId)
+  const cercanas = await fechasReservadasCerca(
+    clienteId,
+    fechas,
+    excluirTurnoId,
+  )
   if (excedeLimiteSemanal(cercanas, fechas)) throw new LimiteSemanalError()
 }
 
@@ -342,10 +348,15 @@ export async function crearTurno(
     throw new FueraDeHorizonteError()
   }
 
-  const horariosDelDia = await obtenerHorariosDelDia(servicio, input.fecha, ahora, {
-    margenMinutos: esAdmin ? 0 : undefined,
-    permitirPasado: esAdmin,
-  })
+  const horariosDelDia = await obtenerHorariosDelDia(
+    servicio,
+    input.fecha,
+    ahora,
+    {
+      margenMinutos: esAdmin ? 0 : undefined,
+      permitirPasado: esAdmin,
+    },
+  )
   if (!horariosDelDia.includes(input.hora)) {
     throw new HorarioNoDisponibleError()
   }
@@ -444,7 +455,10 @@ export async function crearTurnoExtra(
       where: { diaSemana: input.fecha.getUTCDay() },
     }),
     prisma.bloqueoHorario.findMany({
-      where: { fechaInicio: { lte: input.fecha }, fechaFin: { gte: input.fecha } },
+      where: {
+        fechaInicio: { lte: input.fecha },
+        fechaFin: { gte: input.fecha },
+      },
     }),
   ])
 
@@ -537,7 +551,10 @@ export async function crearTurnosEnGrupo(
 
   // 1. Los servicios, en el orden en que se eligieron. Un `Map` por id porque tres hermanos
   // piden el mismo Corte: sin esto serían tres consultas idénticas a Neon.
-  const cache = new Map<string, Awaited<ReturnType<typeof obtenerServicioActivo>>>()
+  const cache = new Map<
+    string,
+    Awaited<ReturnType<typeof obtenerServicioActivo>>
+  >()
   for (const t of input.turnos) {
     if (!cache.has(t.servicioId)) {
       cache.set(t.servicioId, await obtenerServicioActivo(t.servicioId))
@@ -837,9 +854,7 @@ export async function listarTurnosEnRango(
 }
 
 /** HU-10 — Cancelar como admin, sin la ventana de 60 min (a diferencia de CU-02). */
-export async function cancelarTurnoAdmin(
-  id: string,
-): Promise<TurnoConCliente> {
+export async function cancelarTurnoAdmin(id: string): Promise<TurnoConCliente> {
   const turno = await obtenerTurno(id)
   validarEsReservado(turno)
 
@@ -1172,6 +1187,42 @@ export async function cargarTelefonoDelTurno(
     where: { id },
     include: INCLUDE_CLIENTE,
     data: { clienteTelefono: telefono, clienteId },
+  })
+}
+
+/**
+ * HU-38 — Le asigna a un turno **sin ficha** una ficha que ya existe: el cliente que Ariel
+ * cargó sin teléfono, o con otro nombre, y que en realidad ya está fichado.
+ *
+ * ⚠️ El turno **toma el teléfono de la ficha**. Sin eso quedaría un turno con ficha y sin
+ * teléfono, que es justo lo que HU-25 dice que no existe ("un turno sin teléfono no tiene
+ * ficha"), y la próxima carga de `…/telefono` lo volvería a vincular por el número. Se
+ * guarda con el `+` adelante para que `aE164` lo lea de vuelta como el mismo número.
+ * El **nombre del turno no se toca**: en la interfaz manda el apodo de la ficha igual.
+ *
+ * El "sin ficha" se chequea **en el mismo `UPDATE`** (`clienteId: null` en el `where`) y no
+ * con un `if` antes: dos asignaciones simultáneas pasarían el `if` las dos. */
+export async function asignarClienteAlTurno(
+  id: string,
+  clienteId: string,
+): Promise<TurnoConCliente> {
+  await obtenerTurno(id)
+
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: clienteId },
+    select: { telefonoE164: true },
+  })
+  if (!cliente) throw new ClienteNoEncontradoError()
+
+  const { count } = await prisma.turno.updateMany({
+    where: { id, clienteId: null },
+    data: { clienteId, clienteTelefono: `+${cliente.telefonoE164}` },
+  })
+  if (count === 0) throw new TurnoYaTieneFichaError()
+
+  return prisma.turno.findUniqueOrThrow({
+    where: { id },
+    include: INCLUDE_CLIENTE,
   })
 }
 

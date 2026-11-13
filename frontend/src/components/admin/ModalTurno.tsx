@@ -4,8 +4,10 @@ import { isAxiosError } from 'axios'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { FichaCliente } from './FichaCliente'
+import { BuscadorDeClientes } from './BuscadorDeClientes'
 import { BotonWhatsappAlCliente } from './WhatsappAlCliente'
 import {
+  asignarClienteATurno,
   cambiarColorTurno,
   cambiarNombreDeTurno,
   cancelarTurnoAdmin,
@@ -298,14 +300,106 @@ function ColorDelTurno({ turno }: { turno: TurnoAdmin }) {
 }
 
 /**
- * El turno se cargó sin teléfono (HU-08), así que no tiene ficha.
+ * El turno no tiene ficha: se cargó sin teléfono (HU-08), o con uno que no se pudo leer.
  *
- * En vez de mostrar un vacío, se ofrece completarlo acá mismo: en cuanto se guarda, el
- * backend lo engancha con la ficha —creándola si hace falta— y el turno entra a la lista
- * de clientes. Sin esto, todos los turnos que Ariel carga con la persona enfrente
- * quedarían afuera para siempre.
+ * En vez de mostrar un vacío, se ofrecen los dos caminos para ficharlo acá mismo:
+ * - **Buscar cliente** (HU-38): el cliente ya está fichado —vino otras veces— y Ariel lo
+ *   cargó sin el número o con otro nombre. Se lo busca como en la sección Clientes y se le
+ *   asigna; el turno toma el teléfono de esa ficha.
+ * - **Cargar teléfono** (HU-25): el backend lo engancha con la ficha de ese número, y si no
+ *   hay ninguna la crea.
+ * Sin esto, todos los turnos que Ariel carga con la persona enfrente quedarían afuera de
+ * las fichas para siempre.
  */
 function SinFicha({ turno }: { turno: TurnoAdmin }) {
+  // ⚠️ Que no haya ficha no quiere decir que no haya teléfono: son dos cosas distintas y
+  // el modal las trataba como una sola. Un turno puede tener el número cargado y seguir
+  // sin ficha (los que quedaron de antes de HU-25, que espera el backfill), y ahí el
+  // cartel afirmaba "este turno no tiene teléfono" con el número escrito al lado. Por eso
+  // con número arranca en "Cargar teléfono": confirmarlo es lo más corto.
+  const yaTieneTelefono = Boolean(turno.clienteTelefono)
+  const [modo, setModo] = useState<'buscar' | 'telefono'>(
+    yaTieneTelefono ? 'telefono' : 'buscar',
+  )
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-tinta font-medium">{turno.clienteNombre}</p>
+      <p className="text-tinta-suave text-sm">
+        {yaTieneTelefono
+          ? `Este turno tiene el teléfono ${turno.clienteTelefono} pero todavía no tiene ficha.`
+          : 'Este turno todavía no tiene ficha.'}{' '}
+        Asignale un cliente que ya tengas, o cargale el teléfono y se crea sola.
+      </p>
+
+      <div className="grid grid-cols-2 gap-2">
+        {(
+          [
+            ['buscar', 'Buscar cliente'],
+            ['telefono', 'Cargar teléfono'],
+          ] as const
+        ).map(([valor, etiqueta]) => (
+          <button
+            key={valor}
+            type="button"
+            aria-pressed={modo === valor}
+            onClick={() => setModo(valor)}
+            className={`rounded-md border px-3 py-2.5 text-base font-semibold transition ${
+              modo === valor
+                ? 'border-miel-fuerte bg-miel-fuerte text-sobre-acento'
+                : 'border-borde bg-superficie text-tinta hover:bg-superficie-2'
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+
+      {modo === 'buscar' ? (
+        <BuscarClienteParaTurno turno={turno} />
+      ) : (
+        <CargarTelefonoDelTurno turno={turno} />
+      )}
+    </div>
+  )
+}
+
+/** HU-38 — Buscar una ficha que ya existe y asignársela al turno. */
+function BuscarClienteParaTurno({ turno }: { turno: TurnoAdmin }) {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const mutation = useMutation({
+    mutationFn: (clienteId: string) =>
+      asignarClienteATurno(turno.id, clienteId),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      void queryClient.invalidateQueries({ queryKey: ['clientes'] })
+    },
+    onError: (err) => {
+      const mensaje = isAxiosError<ErrorApi>(err)
+        ? err.response?.data.error.mensaje
+        : null
+      setError(mensaje ?? 'No pudimos asignar el cliente.')
+    },
+  })
+
+  return (
+    <div className="flex flex-col gap-2">
+      {error && <p className="text-vino text-sm">{error}</p>}
+      <BuscadorDeClientes
+        etiquetaBoton="Asignar"
+        onElegir={(c) => mutation.mutate(c.id)}
+        ocupadoId={mutation.isPending ? (mutation.variables ?? null) : null}
+      />
+    </div>
+  )
+}
+
+/** HU-25 — Cargarle el teléfono: el backend lo engancha con la ficha de ese número, y si no
+ * existe la crea. */
+function CargarTelefonoDelTurno({ turno }: { turno: TurnoAdmin }) {
   const queryClient = useQueryClient()
   // Arranca con el número que el turno ya tenga, para que Ariel corrija en vez de volver a
   // tipear. Con el campo vacío sobre un turno que sí tiene teléfono, la pantalla lo estaba
@@ -327,21 +421,8 @@ function SinFicha({ turno }: { turno: TurnoAdmin }) {
     },
   })
 
-  // ⚠️ Que no haya ficha no quiere decir que no haya teléfono: son dos cosas distintas y
-  // el modal las trataba como una sola. Un turno puede tener el número cargado y seguir
-  // sin ficha (los que quedaron de antes de HU-25, que espera el backfill), y ahí el
-  // cartel afirmaba "este turno no tiene teléfono" con el número escrito al lado.
-  const yaTieneTelefono = Boolean(turno.clienteTelefono)
-
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-tinta font-medium">{turno.clienteNombre}</p>
-      <p className="text-tinta-suave text-sm">
-        {yaTieneTelefono
-          ? `Este turno tiene el teléfono ${turno.clienteTelefono} pero todavía no tiene ficha. Confirmá el número y se crea sola.`
-          : 'Este turno no tiene teléfono, así que todavía no tiene ficha. Cargalo y se crea sola.'}
-      </p>
-
       {error && <p className="text-vino text-sm">{error}</p>}
 
       <form
@@ -361,6 +442,7 @@ function SinFicha({ turno }: { turno: TurnoAdmin }) {
           onChange={(e) => setTelefono(e.target.value)}
           placeholder="351 459 3325"
           inputMode="tel"
+          aria-label="Teléfono del cliente"
           className="border-borde bg-superficie text-tinta min-w-[10rem] flex-1 rounded-md border px-3 py-2.5 text-base"
         />
         <Button

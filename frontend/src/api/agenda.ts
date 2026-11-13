@@ -42,7 +42,10 @@ export async function cargarTurnoManual(
 export async function cargarTurnoExtra(
   datos: NuevoTurnoManual,
 ): Promise<TurnoAdmin> {
-  const { data } = await apiClient.post<TurnoAdmin>('/admin/turnos/extra', datos)
+  const { data } = await apiClient.post<TurnoAdmin>(
+    '/admin/turnos/extra',
+    datos,
+  )
   return data
 }
 
@@ -166,6 +169,19 @@ export async function cargarTelefonoTurno(
   const { data } = await apiClient.patch<TurnoAdmin>(
     `/admin/turnos/${id}/telefono`,
     { clienteTelefono },
+  )
+  return data
+}
+
+/** HU-38 — Le asigna a un turno sin ficha una ficha que ya existe. El turno toma el
+ * teléfono de la ficha; el nombre del turno queda como estaba. */
+export async function asignarClienteATurno(
+  id: string,
+  clienteId: string,
+): Promise<TurnoAdmin> {
+  const { data } = await apiClient.patch<TurnoAdmin>(
+    `/admin/turnos/${id}/cliente`,
+    { clienteId },
   )
   return data
 }

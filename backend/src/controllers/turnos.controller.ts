@@ -22,6 +22,7 @@ import {
   MAX_TURNOS_POR_GRUPO,
   MAX_TURNOS_POR_SEMANA,
   TECHO_TECNICO_DE_BLOQUE,
+  asignarClienteAlTurno,
   obtenerTurno,
   registrarCobro,
   reprogramarTurno,
@@ -39,6 +40,8 @@ import {
   TurnoNoModificableError,
   TurnoSeSolapaConRealizadoError,
   HorarioYaOcupadoError,
+  ClienteNoEncontradoError,
+  TurnoYaTieneFichaError,
 } from '../services/errores'
 import {
   DIAS_FUTURO_PUBLICO,
@@ -1020,6 +1023,57 @@ export async function patchTelefonoTurno(req: Request, res: Response) {
     )
     res.json(turnoAdminDto(turno))
   } catch (err) {
+    if (manejarErroresComunes(err, res)) return
+    throw err
+  }
+}
+
+// HU-38 — Asignarle a un turno sin ficha una ficha que ya existe.
+const asignarClienteSchema = z.object({
+  clienteId: z.uuid({ error: 'Elegí el cliente al que pertenece este turno.' }),
+})
+
+export async function patchClienteTurno(req: Request, res: Response) {
+  const idParsed = idSchema.safeParse(req.params)
+  if (!idParsed.success) {
+    respondErrorParametrosInvalidos(res, 'Id de turno inválido.')
+    return
+  }
+
+  const bodyParsed = asignarClienteSchema.safeParse(req.body)
+  if (!bodyParsed.success) {
+    respondErrorParametrosInvalidos(
+      res,
+      bodyParsed.error.issues[0]?.message ?? 'Parámetros inválidos.',
+    )
+    return
+  }
+
+  try {
+    const turno = await asignarClienteAlTurno(
+      idParsed.data.id,
+      bodyParsed.data.clienteId,
+    )
+    res.json(turnoAdminDto(turno))
+  } catch (err) {
+    if (err instanceof ClienteNoEncontradoError) {
+      res.status(404).json({
+        error: {
+          codigo: 'CLIENTE_NO_ENCONTRADO',
+          mensaje: 'No encontramos esa ficha. Puede que la hayan borrado.',
+        },
+      })
+      return
+    }
+    if (err instanceof TurnoYaTieneFichaError) {
+      res.status(409).json({
+        error: {
+          codigo: 'TURNO_YA_TIENE_FICHA',
+          mensaje: 'Este turno ya tiene una ficha asignada.',
+        },
+      })
+      return
+    }
     if (manejarErroresComunes(err, res)) return
     throw err
   }

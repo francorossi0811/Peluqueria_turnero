@@ -9,6 +9,7 @@ import {
   patchEstadoTurno,
   patchNombreTurno,
   patchTelefonoTurno,
+  patchClienteTurno,
   patchTurno,
   postCancelarTurnoAdmin,
   postMarcarVistos,
@@ -153,6 +154,8 @@ adminRouter.patch('/admin/turnos/:id/nombre', requireAuth, patchNombreTurno)
 // HU-34 — El color del turno en la grilla. Solo sobre un turno pendiente.
 adminRouter.patch('/admin/turnos/:id/color', requireAuth, patchColorTurno)
 adminRouter.patch('/admin/turnos/:id/telefono', requireAuth, patchTelefonoTurno)
+// HU-38 — Le asigna a un turno sin ficha una ficha que ya existe.
+adminRouter.patch('/admin/turnos/:id/cliente', requireAuth, patchClienteTurno)
 // HU-27 — Le carga o le corrige el cobro a un turno ya realizado. El cobro del momento
 // va dentro del PATCH de estado de arriba, que es cuando Ariel lo hace de verdad.
 adminRouter.patch('/admin/turnos/:id/cobro', requireAuth, patchCobroTurno)
